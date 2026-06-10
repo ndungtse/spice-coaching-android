@@ -1,0 +1,25 @@
+# Copy this file to local.properties and fill in your values.
+# local.properties is gitignored — never commit real credentials.
+
+# ── Knowledge Layer backend ───────────────────────────────────────────────────
+# URL of the MicroCoaching FastAPI backend (knowledge-layer).
+# Preferred default (TLS):
+COACHING_BACKEND_URL=https://api.microcoaching.example.com
+# Android emulator local-dev option — maps to localhost on the host machine:
+# COACHING_BACKEND_URL=http://10.0.2.2:8001
+# Physical device on the same LAN — use your machine's local IP:
+# COACHING_BACKEND_URL=http://192.168.1.x:8001
+# Production / staging:
+# COACHING_BACKEND_URL=https://api.microcoaching.example.com
+
+# ── HuggingFace model download ────────────────────────────────────────────────
+# Required for downloading gated models (Gemma3-1B-IT INT4).
+# Get your token at: https://huggingface.co/settings/tokens
+# Leave blank to skip HuggingFace downloads (use adb push instead).
+HF_TOKEN=
+
+# ── OpenTelemetry / SigNoz ───────────────────────────────────────────────────
+# Leave blank to disable remote span export (Logcat logging still works).
+# SigNoz Cloud: endpoint = https://ingest.<region>.signoz.cloud:443
+OTEL_ENDPOINT=
+OTEL_TOKEN=

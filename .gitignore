@@ -1,0 +1,38 @@
+*.iml
+.gradle
+/local.properties
+# /.idea/caches
+# /.idea/libraries
+# /.idea/modules.xml
+# /.idea/workspace.xml
+# /.idea/navEditor.xml
+# /.idea/assetWizardSettings.xml
+/.idea/*
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+
+docs/*
+!docs/SDK.md
+!docs/SDK_Implementation_Realignment_v1.md
+!docs/SDK_SPICE_SETUP.md
+!docs/UseCases_v2.md
+AGENTS.md
+CLAUDE.md
+
+# Build artefacts and signing material
+*.apk
+*.aab
+*.keystore
+*.jks
+keystore.properties
+captures/
+.cxx/
+
+# Editor / agent settings (may contain local paths or credentials)
+.claude/
+.cursor/
+.qodo/

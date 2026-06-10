@@ -1,0 +1,20 @@
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="database" path="microcoaching.db" />
+        <exclude domain="database" path="androidx_work.db" />
+        <exclude domain="sharedpref" path="micro_coaching_chw_prefs.xml" />
+        <exclude domain="sharedpref" path="micro_coaching_chw_prefs_secure.xml" />
+        <exclude domain="sharedpref" path="micro_coaching_security.xml" />
+        <exclude domain="sharedpref" path="microcoaching_model_secrets.xml" />
+        <exclude domain="sharedpref" path="microcoaching_model_prefs.xml" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="database" path="microcoaching.db" />
+        <exclude domain="database" path="androidx_work.db" />
+        <exclude domain="sharedpref" path="micro_coaching_chw_prefs.xml" />
+        <exclude domain="sharedpref" path="micro_coaching_chw_prefs_secure.xml" />
+        <exclude domain="sharedpref" path="micro_coaching_security.xml" />
+        <exclude domain="sharedpref" path="microcoaching_model_secrets.xml" />
+        <exclude domain="sharedpref" path="microcoaching_model_prefs.xml" />
+    </device-transfer>
+</data-extraction-rules>

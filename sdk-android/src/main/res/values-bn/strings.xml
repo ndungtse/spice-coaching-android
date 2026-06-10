@@ -1,0 +1,370 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- ── Common ────────────────────────────────────────────────────────── -->
+    <string name="common_close">বন্ধ করুন</string>
+    <string name="common_error_title">কিছু একটা সমস্যা হয়েছে</string>
+    <string name="common_collapse">সংকুচিত করুন</string>
+    <string name="common_expand">প্রসারিত করুন</string>
+    <string name="common_back">পিছনে</string>
+    <string name="common_home">মূল পাতা</string>
+
+    <!-- ── Chat ──────────────────────────────────────────────────────────── -->
+    <string name="chat_model_not_installed">স্থানীয় AI মডেল ইনস্টল নেই</string>
+    <string name="chat_model_downloading_progress">ডাউনলোড হচ্ছে %1$d%%</string>
+    <string name="chat_model_downloading_waiting">ডাউনলোড হচ্ছে&#8230;</string>
+    <string name="chat_model_download_action">ডাউনলোড করুন</string>
+    <string name="chat_show_english">ইংরেজি দেখুন</string>
+    <string name="chat_show_bengali">বাংলা দেখুন</string>
+    <string name="chat_speak">বলুন</string>
+    <string name="chat_translate">অনুবাদ করুন</string>
+    <string name="chat_response_details">উত্তরের বিস্তারিত</string>
+    <string name="chat_risk_label">ঝুঁকি: </string>
+    <string name="chat_sources_label">উৎস:</string>
+    <!-- Source-document attribution chips (below assistant chat bubbles). -->
+    <string name="chat_source_default">সূত্র দলিল</string>
+    <string name="chat_source_offline">অফলাইন</string>
+    <string name="chat_source_unavailable">সূত্র দলিল পাওয়া যাচ্ছে না</string>
+    <!-- Rich-card media (images / videos embedded in lesson card bodies). -->
+    <string name="rich_media_unavailable">মিডিয়া পাওয়া যাচ্ছে না</string>
+    <string name="rich_image_content_description">পাঠের ছবি</string>
+    <string name="rich_video_play">ভিডিও চালান</string>
+    <string name="rich_video_title">ভিডিও</string>
+    <string name="chat_source_loading">দলিল লোড হচ্ছে&#8230;</string>
+    <string name="chat_source_indexed_suffix">%1$s — SA %2$d</string>
+    <string name="chat_ai_coaching_title">AI কোচিং</string>
+    <string name="chat_model_download_description">কোচিং শুরু করতে AI মডেল ডাউনলোড করতে হবে।</string>
+    <string name="chat_downloading_model_progress">মডেল ডাউনলোড হচ্ছে&#8230; (%1$d%%)</string>
+    <string name="chat_downloading_model_preparing">মডেল ডাউনলোড হচ্ছে&#8230; (প্রস্তুত হচ্ছে)</string>
+    <string name="chat_model_size_hint">প্রায় ৬০০ মেগাবাইট প্রয়োজন। Wi-Fi ব্যবহার করুন।</string>
+    <string name="chat_download_ai_model">AI মডেল ডাউনলোড করুন</string>
+    <string name="chat_suggested_questions">প্রস্তাবিত প্রশ্ন</string>
+    <string name="chat_next_question">পরবর্তী প্রশ্ন</string>
+    <!-- Mirror the EN order: index i in BN ↔ index i in EN, so used-tracking
+         (keyed on EN text via ChatSuggestionsRepository) stays consistent. -->
+    <string-array name="chat_seed_questions" translatable="true">
+        <item>৯০/৬০ লো বিপি সহ একজন গর্ভবতী মাকে আমি কী পরামর্শ দেব?</item>
+        <item>স্তন প্রদাহ ও ব্যথা কীভাবে সামলানো যাবে?</item>
+        <item>নবজাতকের জন্য প্রতি মিনিটে ২৫ বার শ্বাস কি স্বাভাবিক?</item>
+        <item>গর্ভবতী মহিলাকে রেফার করার জন্য বিপদ সংকেত কী কী?</item>
+        <item>মাকে কীভাবে শুধু বুকের দুধ খাওয়ানোর পরামর্শ দেব?</item>
+    </string-array>
+    <string name="chat_input_placeholder">বার্তা লিখুন&#8230;</string>
+    <string name="chat_send_message">বার্তা পাঠান</string>
+    <string name="chat_header_title">এআই কোচ</string>
+    <string name="chat_header_online">অনলাইন</string>
+    <string name="chat_today">আজ</string>
+    <string name="chat_welcome_message">আজ আমি কীভাবে সাহায্য করতে পারি? আপনি রোগী কাউন্সেলিং, ক্লিনিকাল প্রটোকল, গ্রোথ মনিটরিং, বা SPICE সম্পর্কে আমাকে জিজ্ঞাসা করতে পারেন।</string>
+    <string name="chat_close_sheet">চ্যাট বন্ধ করুন</string>
+    <string name="chat_download_pause">বিরতি দিন</string>
+    <string name="chat_download_resume">আবার শুরু করুন</string>
+    <string name="chat_download_cancel">বাতিল করুন</string>
+    <string name="chat_download_continue_in_background">ব্যাকগ্রাউন্ডে চলতে থাকুক</string>
+    <string name="chat_download_maybe_later">পরে করব</string>
+    <string name="chat_download_paused_status">%1$d%% এ বিরতি দেওয়া হয়েছে</string>
+
+    <!-- Chat header overflow + Clear history -->
+    <string name="chat_overflow_open_menu">আরও বিকল্প</string>
+    <string name="chat_overflow_clear_history">চ্যাট ইতিহাস মুছুন</string>
+    <string name="chat_overflow_download_voice_model">ভয়েস মডেল ডাউনলোড করুন</string>
+    <string name="chat_clear_history_dialog_title">চ্যাট ইতিহাস মুছবেন?</string>
+    <string name="chat_clear_history_dialog_message">এটি আপনার সমস্ত সংরক্ষিত চ্যাট বার্তা স্থায়ীভাবে মুছে ফেলবে। এই কাজটি ফিরিয়ে আনা যাবে না।</string>
+    <string name="chat_clear_history_dialog_confirm">মুছুন</string>
+    <string name="chat_clear_history_dialog_cancel">বাতিল করুন</string>
+
+    <!-- ── Coaching Card ──────────────────────────────────────────────────── -->
+    <string name="card_loading">পরামর্শ কার্ড লোড হচ্ছে&#8230;</string>
+    <string name="card_offline_badge">অফলাইন কার্ড</string>
+    <string name="card_warning_signs">সতর্কতার লক্ষণ</string>
+    <string name="card_next_step">পরবর্তী পদক্ষেপ</string>
+    <string name="card_referral_destination">রেফারেল গন্তব্য</string>
+    <string name="card_skip">বাদ দিন</string>
+    <string name="card_complete">সম্পন্ন হয়েছে</string>
+    <string name="card_no_guidance">এই মুহূর্তে কোনো পরামর্শ নেই।</string>
+
+    <!-- ── Learn ─────────────────────────────────────────────────────────── -->
+    <string name="learn_loading_modules">মডিউল লোড হচ্ছে&#8230;</string>
+    <string name="learn_module_list_title">আপনার শিক্ষামূলক মডিউলসমূহ</string>
+    <string name="learn_module_list_subtitle">ব্যাজ অর্জন করতে মডিউল সম্পন্ন করুন</string>
+    <string name="learn_module_ready_title">মডিউল প্রস্তুত</string>
+    <string name="learn_module_ready_subtitle">ব্যাজ অর্জন করতে এই মডিউলটি সম্পন্ন করুন।</string>
+    <string name="learn_start_learning">শেখা শুরু করুন</string>
+    <string name="learn_completed_cd">সম্পন্ন</string>
+    <string name="learn_reference_guide">কমিউনিটি স্বাস্থ্যকর্মীদের জন্য রেফারেন্স গাইড</string>
+    <string name="learn_warning_signs">সতর্কতার লক্ষণ</string>
+    <string name="learn_next_step">পরবর্তী পদক্ষেপ</string>
+    <string name="learn_referral_destination">রেফারেল গন্তব্য</string>
+    <string name="learn_continue_quiz">কুইজে যান</string>
+    <string name="learn_lesson_complete_title">পাঠ সম্পন্ন!</string>
+    <string name="learn_lesson_complete_body">আপনি ব্লাড প্রেশার রেফারেল রেফারেন্স টেবিলটি পড়েছেন। আপনি যেকোনো সময় পর্যালোচনার জন্য এখানে ফিরে আসতে পারবেন।</string>
+    <string name="learn_back_to_modules">মডিউলে ফিরুন</string>
+    <string name="learn_retry_sync">আবার চেষ্টা করুন</string>
+
+    <!-- ── Domain chips ───────────────────────────────────────────────────── -->
+    <string name="domain_hypertension">উচ্চ রক্তচাপ</string>
+    <string name="domain_diabetes">ডায়াবেটিস</string>
+    <string name="domain_maternal_health">মাতৃস্বাস্থ্য</string>
+    <string name="domain_emergency">জরুরি</string>
+    <string name="domain_spice_digital">SPICE ডিজিটাল</string>
+
+    <!-- ── Status chips ───────────────────────────────────────────────────── -->
+    <string name="status_completed">সম্পন্ন</string>
+    <string name="status_in_progress">চলছে</string>
+
+    <!-- ── Quiz ──────────────────────────────────────────────────────────── -->
+    <string name="quiz_question_counter">প্রশ্ন %1$d / %2$d</string>
+    <string name="quiz_select_answer">উত্তর বেছে নিন</string>
+    <string name="quiz_next_question">পরবর্তী প্রশ্ন</string>
+    <string name="quiz_case_context_label">প্রসঙ্গ</string>
+    <string name="quiz_nav_previous">আগের প্রশ্ন</string>
+    <string name="quiz_nav_next">পরবর্তী প্রশ্ন</string>
+    <string name="quiz_nav_close">কুইজ বন্ধ করুন</string>
+    <string name="quiz_complete_title">কুইজ শেষ!</string>
+    <string name="quiz_correct_count">%1$d / %2$d সঠিক</string>
+    <string name="quiz_badge_earned">ব্যাজ অর্জিত</string>
+    <string name="badge_expert">বিশেষজ্ঞ</string>
+    <string name="badge_learner">শিক্ষার্থী</string>
+    <string name="badge_practice">অনুশীলন করুন</string>
+    <string name="quiz_back_to_home">হোমে ফিরুন</string>
+    <string name="quiz_more_modules">আরও মডিউল</string>
+    <string name="quiz_back_to_refreshers">রিফ্রেশারে ফিরুন</string>
+    <string name="quiz_correct">সঠিক! 🎉</string>
+    <string name="quiz_incorrect">ভুল</string>
+    <string name="quiz_correct_answer">সঠিক উত্তর: %1$s</string>
+    <string name="quiz_points">+%1$d পয়েন্ট</string>
+    <string name="quiz_review_title">প্রশ্নের পর্যালোচনা</string>
+
+    <!-- ── FAB ───────────────────────────────────────────────────────────── -->
+    <string name="fab_open_coaching">কোচিং খুলুন</string>
+    <string name="fab_open_learn">শিখুন ও বিকশিত হোন</string>
+    <string name="fab_open_chat">এআই সহকারীকে জিজ্ঞাসা করুন</string>
+    <string name="coaching_download_started">এআই সহকারী ডাউনলোড হচ্ছে…</string>
+
+    <!-- ── Chat refusal taxonomy (chat_plan.md §B4 L1/L2/L4) ────────────────── -->
+    <string name="chat_refusal_scope">আমি শুধু উচ্চ রক্তচাপ, ডায়াবেটিস, মাতৃস্বাস্থ্য, নবজাতকের স্বাস্থ্য, ক্যান্সার স্ক্রিনিং, অপুষ্টি, সংক্রামক রোগ, পরিবার পরিকল্পনা এবং SPICE অ্যাপ সম্পর্কে সাহায্য করতে পারি। অন্য বিষয়ে দয়া করে সুপারভাইজারের সাথে পরামর্শ করুন।</string>
+    <string name="chat_refusal_no_ground">এই বিষয়টি এখনো আমার প্রশিক্ষণ উপকরণে নেই। দয়া করে সুপারভাইজারের সাথে কথা বলুন।</string>
+    <string name="chat_refusal_unsafe">নিরাপত্তার কারণে এই উত্তরটি দেখানো যাচ্ছে না। দয়া করে সুপারভাইজারের সাথে যোগাযোগ করুন।</string>
+    <string name="chat_translation_degraded">(অনুবাদ অনুপলব্ধ) %1$s</string>
+
+    <!-- ── Coaching card banner (UC-2 home banner) ───────────────────────── -->
+    <string name="banner_eyebrow">কোচিং-দ্রুত প্রতিক্রিয়া</string>
+    <string name="morning_card_eyebrow">সকালের রিফ্রেশার</string>
+    <string name="banner_subtitle">আপনার সাম্প্রতিক স্ক্রিনিংয়ের উপর ভিত্তি করে, আজকের ভিজিটের আগে ২ মিনিটের পর্যালোচনা।</string>
+    <string name="banner_meta_minutes">%1$d মিনিট</string>
+    <plurals name="banner_meta_questions">
+        <item quantity="one">%1$d প্রশ্ন</item>
+        <item quantity="other">%1$d প্রশ্ন</item>
+    </plurals>
+    <plurals name="morning_card_meta_cards">
+        <item quantity="one">%1$d কার্ড</item>
+        <item quantity="other">%1$d কার্ড</item>
+    </plurals>
+    <string name="banner_meta_language_bn">বাংলা</string>
+    <string name="banner_meta_language_en">ইংরেজি</string>
+    <string name="banner_action_start">শুরু</string>
+    <string name="banner_action_skip">আজ এড়িয়ে যান</string>
+
+    <!-- ── Coaching card bottom sheet ────────────────────────────────────── -->
+    <string name="card_sheet_pill">দ্রুত পুনরালোচনা</string>
+
+    <!-- ── Module detail screen ──────────────────────────────────────────── -->
+    <string name="module_detail_tab_about">পরিচিতি</string>
+    <string name="module_detail_tab_curriculum">পাঠ্যক্রম</string>
+    <string name="module_detail_action_start_course">কোর্স শুরু করুন</string>
+    <string name="module_detail_action_do_quiz">কুইজ দিন</string>
+    <string name="module_detail_action_read_course">কোর্স পড়ুন</string>
+    <string name="module_detail_classes">%1$d ক্লাস</string>
+    <string name="module_detail_hours">%1$d ঘণ্টা</string>
+    <string name="module_detail_minutes">%1$d মিনিট</string>
+    <!-- ── W4 course-detail + lesson player ───────────────────────────────── -->
+    <string name="module_detail_curriculum">পাঠ্যক্রম</string>
+    <string name="module_detail_learning_cards">শেখার কার্ড</string>
+    <string name="module_detail_quiz_section">কুইজ</string>
+    <string name="module_detail_knowledge_check">জ্ঞান পরীক্ষা</string>
+    <string name="module_detail_listen_bangla">বাংলায় শুনুন</string>
+    <string name="module_detail_listen_english">ইংরেজিতে শুনুন</string>
+    <string name="module_detail_listen_caption">পাঠ খুললে স্বয়ংক্রিয়ভাবে পড়া শুরু হবে</string>
+    <string name="lesson_player_auto_speak_on">স্বয়ংক্রিয় পড়া চালু আছে। বন্ধ করতে চাপুন।</string>
+    <string name="lesson_player_auto_speak_off">স্বয়ংক্রিয় পড়া বন্ধ। চালু করতে চাপুন।</string>
+    <string name="tts_language_missing">কণ্ঠ ইনস্টল নেই। ডিভাইস সেটিংস খোলা হচ্ছে।</string>
+    <string name="module_detail_cards_stat">কার্ড</string>
+    <string name="module_detail_questions_stat">প্রশ্ন</string>
+    <string name="module_detail_duration_stat">সময়কাল</string>
+    <string name="module_detail_min">%1$d মিনিট</string>
+    <string name="lesson_player_progress">শেখা %1$d / %2$d</string>
+    <string name="lesson_player_next">পরবর্তী</string>
+    <string name="lesson_player_previous">আগের</string>
+    <string name="refresher_card_done">সম্পন্ন</string>
+    <string name="lesson_player_start_quiz">কুইজ শুরু করুন</string>
+    <string name="lesson_player_back_to_modules">আরও মডিউল</string>
+    <string name="quiz_try_again">আবার চেষ্টা করুন</string>
+
+    <!-- ── Voice input + translation ─────────────────────────────────────── -->
+    <string name="chat_voice_input_hint">বলতে ট্যাপ করুন</string>
+    <string name="chat_voice_input_unavailable">কণ্ঠ ইনপুট শীঘ্রই আসছে</string>
+    <string name="chat_input_placeholder_bn">বাংলায় জিজ্ঞাসা করুন…</string>
+    <string name="chat_input_placeholder_en">ইংরেজিতে জিজ্ঞাসা করুন…</string>
+    <string name="chat_translate_to_bangla">বাংলায় দেখান</string>
+    <string name="chat_translate_to_english">ইংরেজিতে দেখান</string>
+
+    <!-- ── Coach mark ─────────────────────────────────────────────────────── -->
+    <string name="coachmark_title">আপনার কোচিং মডিউল প্রস্তুত!</string>
+    <string name="coachmark_body">আপনার মাইক্রো-লার্নিং মডিউল অ্যাক্সেস করতে এই বোতামটি ট্যাপ করুন এবং NCD কাউন্সেলিং দক্ষতা উন্নত করুন।</string>
+    <string name="coachmark_got_it">বুঝেছি</string>
+
+    <!-- ── Onboarding navigation ─────────────────────────────────────────── -->
+    <string name="onboarding_page_counter">%1$d / %2$d</string>
+    <string name="onboarding_next">পরবর্তী  →</string>
+    <string name="onboarding_get_started">শুরু করুন  →</string>
+    <string name="onboarding_skip">এড়িয়ে যান</string>
+
+    <!-- ── Chat demo metadata ─────────────────────────────────────────────── -->
+    <string name="chat_confidence">আত্মবিশ্বাস: %1$d%%</string>
+    <string name="chat_domain">বিষয়: %1$s</string>
+
+    <!-- ── Onboarding slides ──────────────────────────────────────────────── -->
+    <string name="onboarding_slide1_title">আপনার গতিতে শিখুন</string>
+    <string name="onboarding_slide1_body">ব্যস্ত কমিউনিটি স্বাস্থ্যকর্মীদের জন্য সংক্ষিপ্ত, কেন্দ্রীভূত পাঠ। ১০ মিনিটের মধ্যে একটি মডিউল শেষ করুন — যেকোনো সময়, যেকোনো জায়গায়।</string>
+    <string name="onboarding_slide2_title">প্রতিটি রোগীর সাথে আরও ভালো হন</string>
+    <string name="onboarding_slide2_body">আপনার শেখা সরাসরি রোগীর যত্ন পরিকল্পনায় প্রয়োগ করুন। বাংলাদেশে NCD ব্যবস্থাপনার জন্য প্রমাণ-ভিত্তিক নির্দেশনা।</string>
+    <string name="onboarding_slide3_title">আপনার অগ্রগতি ট্র্যাক করুন</string>
+    <string name="onboarding_slide3_body">মডিউল সম্পন্ন করে ব্যাজ অর্জন করুন। আপনার সুপারভাইজার আপনার অর্জন দেখতে পারবেন এবং আপনার বিকাশকে সমর্থন করতে পারবেন।</string>
+
+    <!-- ── Initial assessment (UC-1) ─────────────────────────────────────── -->
+    <string name="assessment_loading">মূল্যায়ন প্রস্তুত করা হচ্ছে…</string>
+    <string name="assessment_title">দ্রুত জ্ঞান যাচাই</string>
+    <string name="assessment_subtitle">কিছু প্রশ্নের উত্তর দিন যাতে আমরা আপনার শিক্ষামূলক পথ ব্যক্তিগতকৃত করতে পারি।</string>
+    <string name="assessment_complete_title">আপনার শিক্ষামূলক পথ প্রস্তুত!</string>
+    <string name="assessment_complete_body">আপনার উত্তরের ভিত্তিতে আমরা আপনার মডিউলগুলি সাজিয়েছি। যেকোনো সময় সব বিষয় দেখতে পারবেন।</string>
+    <string name="assessment_start_btn">শেখা শুরু করুন  →</string>
+    <string name="assessment_close">হোমে ফিরুন</string>
+
+    <!-- ── Edge model dialogs ────────────────────────────────────────────── -->
+    <string name="edge_model_required_title">এআই মডেল প্রয়োজন</string>
+    <string name="edge_model_required_msg">ব্যক্তিগত কোচিং কার্ড তৈরি করতে একটি স্থানীয় এআই মডেল প্রয়োজন। এখনই ডাউনলোড করবেন? (~৬০০ এমবি)</string>
+    <string name="edge_model_download_btn">ডাউনলোড করুন</string>
+    <string name="edge_model_later_btn">পরে</string>
+    <string name="edge_error_title">এআই অনুপলব্ধ</string>
+    <string name="edge_error_msg">এই মুহূর্তে এআই কোচিং কার্ড তৈরি করতে পারেনি। পরিবর্তে একটি পূর্ব-রচিত কার্ড পাওয়া যাচ্ছে।</string>
+    <string name="edge_error_dismiss">ঠিক আছে</string>
+
+    <!-- ── Learn screen error / empty states (Block G) ─────────────────── -->
+    <string name="learn_error_failed_load">মডিউল লোড করা যায়নি। অ্যাপটি পুনরায় চালু করুন।</string>
+    <string name="learn_empty_no_backend">কোনো মডিউল নেই। ব্যাকএন্ড কনফিগার করা হয়নি।</string>
+    <string name="learn_empty_no_internet">ইন্টারনেট সংযোগ নেই — ইন্টারনেটে সংযোগ দিয়ে আবার চেষ্টা করুন।</string>
+    <string name="learn_empty_no_modules">এই মুহূর্তে কোনো লার্নিং মডিউল নেই। নতুন কন্টেন্ট প্রকাশিত হলে এখানে দেখা যাবে।</string>
+    <string name="card_error_could_not_load">কার্ড লোড করা যায়নি।</string>
+    <string name="chat_error_no_response_available">কোনো উত্তর পাওয়া যায়নি — সংযোগ বা মডেল ডাউনলোড পরীক্ষা করুন।</string>
+    <string name="chat_error_no_response_generated">উত্তর তৈরি হয়নি — আবার চেষ্টা করুন।</string>
+
+    <!-- ── Translation pack state chip (Block E) ────────────────────────── -->
+    <string name="translation_pack_downloading">অনুবাদ ফাইল ডাউনলোড হচ্ছে…</string>
+    <string name="translation_pack_unavailable">অনুবাদ উপলব্ধ নয় — ইংরেজিতে দেখানো হচ্ছে।</string>
+
+    <!-- ── UC-2 client-side gap reminders (S2) ──────────────────────────── -->
+    <string name="gap_reminder_missed_hypertension_referral_threshold">যদি BP ১৬০/১০০ বা তার বেশি হয়, একই দিনে UHC-এ রেফার করুন — দেরি করবেন না।</string>
+    <string name="gap_reminder_diabetes_referral_threshold_missed">FBS ১১.১ mmol/L বা তার বেশি হলে, একই দিনে রেফার করুন।</string>
+    <string name="gap_reminder_anc_danger_signs_education_gap">তীব্র মাথাব্যথা, দৃষ্টি ঝাপসা বা রক্তক্ষরণ হলে, রোগীকে দ্রুত UHC-এ পাঠান।</string>
+    <string name="gap_reminder_missed_referral_for_danger_signs">কোনো বিপদ চিহ্ন দেখলে, দেরি না করে রেফার করুন — একই দিনে রেফারেল জীবন বাঁচায়।</string>
+    <string name="gap_reminder_generic_hypertension">BP নিয়ন্ত্রণের রুটিন মনে করিয়ে দিন — প্রতিদিন ওষুধ, কম লবণ, প্রতিদিন হাঁটা।</string>
+    <string name="gap_reminder_generic_diabetes">ডায়াবেটিসের রুটিন মনে করিয়ে দিন — নিয়মিত FBS পরীক্ষা, কম চিনি, পায়ের যত্ন।</string>
+    <string name="gap_reminder_generic_maternal_health">ANC রুটিন মনে করিয়ে দিন — ৪টি চেকআপ, আয়রন-ফলিক, বিপদ চিহ্ন সচেতনতা।</string>
+    <string name="gap_reminder_generic_default">এটি একটি পুনরায় শেখার সুযোগ — রোগীকে মূল কথাগুলো নিজের ভাষায় বলতে বলুন।</string>
+
+    <!-- ── Quick learn banner (v0.3.2 modules screen) ─────────────────────── -->
+    <string name="quick_learn_label">মাইক্রো-কোচিং</string>
+    <string name="quick_learn_tap_to_answer">উত্তর দিতে ট্যাপ করুন</string>
+    <string name="quick_learn_xp_reward">+%1$d XP</string>
+    <string name="quick_learn_meta_count">আজ %1$d জন আশা উত্তর দিয়েছেন</string>
+
+    <!-- ── Section headings ───────────────────────────────────────────────── -->
+    <string name="modules_section_refreshers">রিফ্রেশার</string>
+    <string name="modules_section_training">প্রশিক্ষণ</string>
+    <string name="modules_section_knowledge">জ্ঞান</string>
+    <string name="modules_see_all">সব দেখুন</string>
+
+    <!-- ── Refresher tile meta + categories ──────────────────────────────── -->
+    <plurals name="refresher_meta_quiz">
+        <item quantity="one">কুইজ · %1$d প্রশ্ন</item>
+        <item quantity="other">কুইজ · %1$d প্রশ্ন</item>
+    </plurals>
+    <string name="refresher_quiz_back">মডিউলে ফিরে যান</string>
+    <string name="refresher_quiz_no_questions">এই মডিউলের জন্য এখনো কোনো প্রশ্ন নেই।</string>
+    <string name="category_clinical_assessment">ক্লিনিকাল অ্যাসেসমেন্ট</string>
+    <string name="category_learning">শেখা</string>
+    <string name="category_spice_app">SPICE অ্যাপ</string>
+
+    <!-- ── Training / Knowledge metadata ─────────────────────────────────── -->
+    <string name="training_meta_minutes_questions">%1$d মিনিট · %2$d প্রশ্ন</string>
+    <string name="badge_critical">গুরুত্বপূর্ণ</string>
+    <string name="badge_gap">দুর্বলতা</string>
+    <string name="badge_read">পড়ুন</string>
+
+    <!-- ── Modules screen header ─────────────────────────────────────────────── -->
+    <string name="modules_screen_title">ব্যক্তিগত কোচিং</string>
+
+    <!-- ── Answer feedback overlay ───────────────────────────────────────────── -->
+    <string name="feedback_why_this_matters">কেন এটি গুরুত্বপূর্ণ</string>
+
+    <!-- ── Refresher quiz result ──────────────────────────────────────────────── -->
+    <string name="quiz_next_refresher">পরবর্তী রিফ্রেশার →</string>
+
+    <!-- ── Chat voice input (STT) ─────────────────────────────────────────────── -->
+    <string name="chat_voice_listening">শুনছি…</string>
+    <string name="chat_voice_tap_to_stop">থামাতে ট্যাপ করুন</string>
+    <string name="chat_voice_permission_rationale">বার্তা লিখতে মাইক্রোফোন অ্যাক্সেস প্রয়োজন।</string>
+    <string name="chat_voice_permission_denied">মাইক্রোফোন অনুমতি অস্বীকৃত। ভয়েস ব্যবহার করতে সেটিংসে এটি সক্রিয় করুন।</string>
+    <string name="chat_voice_error_no_match">বুঝতে পারিনি। আবার চেষ্টা করতে মাইক্রোফোনে ট্যাপ করুন।</string>
+    <string name="chat_voice_error_no_speech">কোনো কথা শোনা যায়নি।</string>
+    <string name="chat_voice_error_network">নেটওয়ার্ক সমস্যা। অনলাইনে থাকলে আবার চেষ্টা করুন।</string>
+    <string name="chat_voice_error_engine">এই ডিভাইসে ভয়েস ইনপুট উপলব্ধ নয়।</string>
+    <string name="chat_voice_error_generic">ভয়েস ইনপুট ব্যর্থ। আবার চেষ্টা করতে মাইক্রোফোনে ট্যাপ করুন।</string>
+    <string name="chat_voice_backend_on_device">অন-ডিভাইস (অফলাইন)</string>
+    <string name="chat_voice_backend_server">সার্ভার (ইন্টারনেট প্রয়োজন)</string>
+    <string name="chat_voice_backend_offline_model">অফলাইন ভয়েস মডেল</string>
+    <string name="chat_voice_error_offline_model_missing">আপনি অফলাইনে আছেন। ইন্টারনেট ছাড়া বলতে বাংলা ভয়েস মডেল ডাউনলোড করুন।</string>
+
+    <!-- ── STT (sherpa-onnx) Bengali model download ───────────────────────────── -->
+    <string name="notification_stt_download_channel_name">ভয়েস মডেল ডাউনলোড</string>
+    <string name="notification_stt_download_channel_desc">অফলাইন বাংলা ভয়েস মডেল ডাউনলোডের অগ্রগতি দেখায়।</string>
+    <string name="notification_stt_download_title">বাংলা ভয়েস মডেল ডাউনলোড হচ্ছে</string>
+    <string name="notification_stt_download_extracting">মডেল ফাইল আনপ্যাক হচ্ছে…</string>
+    <string name="stt_banner_downloading">বাংলা ভয়েস মডেল ডাউনলোড — %1$d MB / %2$d MB · %3$d%%</string>
+    <string name="stt_banner_downloading_preparing">বাংলা ভয়েস মডেল ডাউনলোড প্রস্তুত হচ্ছে…</string>
+    <string name="stt_banner_extracting">বাংলা ভয়েস মডেল আনপ্যাক হচ্ছে…</string>
+    <string name="stt_banner_failed">ভয়েস মডেল ডাউনলোড ব্যর্থ — পুনরায় চেষ্টা করুন</string>
+    <string name="stt_banner_retry">পুনরায় চেষ্টা</string>
+    <string name="stt_banner_cancel">বাতিল</string>
+
+    <!-- ── Download item cards on ModelNotReady screen ─────────────────────────── -->
+    <string name="download_card_ai_title">এআই মডেল</string>
+    <string name="download_card_ai_size">~৬০০ MB</string>
+    <string name="download_card_voice_title">বাংলা ভয়েস মডেল</string>
+    <string name="download_card_voice_size">~৯০ MB</string>
+    <string name="download_card_label_required">প্রয়োজনীয়</string>
+    <string name="download_card_label_optional">ঐচ্ছিক</string>
+    <string name="download_card_action_download">ডাউনলোড</string>
+    <string name="download_card_action_pause">বিরতি</string>
+    <string name="download_card_action_resume">আবার শুরু</string>
+    <string name="download_card_action_cancel">বাতিল</string>
+    <string name="download_card_status_done">ডাউনলোড হয়েছে</string>
+    <string name="download_card_status_failed">ব্যর্থ</string>
+    <string name="download_card_status_preparing">প্রস্তুতি…</string>
+    <string name="download_card_status_extracting">আনপ্যাক হচ্ছে…</string>
+    <string name="download_card_status_paused_progress">%1$d%% এ বিরতি</string>
+    <string name="download_card_progress_mb">%1$d MB / %2$d MB · %3$d%%</string>
+    <string name="download_card_progress_indeterminate">%1$d MB ডাউনলোড হয়েছে</string>
+    <string name="download_card_progress_percent">%1$d%%</string>
+    <string name="download_both">দুটোই ডাউনলোড করুন</string>
+    <string name="download_both_hint">এআই মডেল শেষ হওয়ার পর ভয়েস মডেল ডাউনলোড হবে।</string>
+
+    <!-- ── Model download foreground-service notification ─────────────────────── -->
+    <string name="notification_model_download_channel_name">এআই মডেল ডাউনলোড</string>
+    <string name="notification_model_download_channel_desc">ব্যাকগ্রাউন্ডে এআই কোচিং মডেল ডাউনলোডের অগ্রগতি দেখায়।</string>
+    <string name="notification_model_download_title">এআই কোচিং মডেল ডাউনলোড হচ্ছে</string>
+    <string name="notification_model_download_progress">%1$d MB / %2$d MB · %3$d%%</string>
+    <string name="notification_model_download_progress_indeterminate">%1$d MB ডাউনলোড হয়েছে</string>
+
+    <string name="chat_downloading_model_progress_mb">মডেল ডাউনলোড হচ্ছে… (%1$d MB / %2$d MB · %3$d%%)</string>
+
+</resources>
