@@ -2,9 +2,10 @@ package com.medtroniclabs.microcoaching.ui.learn
 
 import android.content.Context
 import com.medtroniclabs.microcoaching.MicroCoachingSDK
+import com.medtroniclabs.microcoaching.network.SourceDocumentUrlStore
 import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.data.asset.AssetKind
-import com.medtroniclabs.microcoaching.network.SourceDocumentPresignedUrlRequest
+import com.medtroniclabs.microcoaching.data.asset.InsufficientStorageException
 import com.medtroniclabs.microcoaching.ui.SdkLocaleHelper
 import com.medtroniclabs.microcoaching.ui.document.DocumentFormat
 import com.medtroniclabs.microcoaching.ui.document.formatFromExtension
@@ -17,11 +18,17 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.SharingStarted
+import com.medtroniclabs.microcoaching.sync.SyncDomain
+import com.medtroniclabs.microcoaching.ui.common.SectionState
+import com.medtroniclabs.microcoaching.ui.common.sectionStateFor
 
 /**
- * Owns the Knowledge section's document list and its download → preview flow.
- * Extracted from `LearnViewModel` so the (already large) ViewModel keeps only
- * the lesson/quiz/navigation concern.
+ * Owns the Knowledge section's document list and its download → preview flow,
+ * separate from `LearnViewModel` so that ViewModel keeps only the
+ * lesson/quiz/navigation concern.
  *
  * Scope: takes the host ViewModel's `viewModelScope`. The download/preview flow
  * is UI-lifecycle-bound — if the screen's VM is cleared mid-download, the
@@ -31,18 +38,32 @@ import kotlinx.coroutines.launch
  * The document **list** is built reactively here (not in the SDK store) because
  * it's a modules-screen-only surface and needs a [Context] for the localised
  * default title; the cross-Activity sharing that justifies the store doesn't
- * apply. Reads the `published_source_document` table — the durable mirror of
- * `GET /sync/source-documents/published` — so the Knowledge grid lists **every**
- * published source document, not only those a module happens to reference.
+ * apply. Reads the `published_source_document` table — the durable mirror of the
+ * source-document catalogue — so the Knowledge grid lists **every** published
+ * source document, not only those a module happens to reference.
  */
 internal class KnowledgeDocController(
     private val scope: CoroutineScope,
     private val context: Context,
 ) {
 
-    /** Deduped union of every module's `source_documents` — the Knowledge grid. */
+    /** The Knowledge grid's documents, as the last catalogue sync left them. */
     private val _knowledgeDocuments = MutableStateFlow<List<KnowledgeDocument>>(emptyList())
     val knowledgeDocuments: StateFlow<List<KnowledgeDocument>> = _knowledgeDocuments.asStateFlow()
+
+    /**
+     * The document list folded together with the outcome of the pull that fills
+     * `published_source_document`, so an empty grid can distinguish a failed
+     * refresh from a backend that genuinely published nothing.
+     */
+    val documentsState: StateFlow<SectionState<List<KnowledgeDocument>>> =
+        combine(
+            _knowledgeDocuments,
+            MicroCoachingSDK.getInstance().syncStatus.outcomeFor(SyncDomain.PUBLISHED_DOCS),
+            MicroCoachingSDK.getInstance().networkAvailable,
+        ) { docs, outcome, online ->
+            sectionStateFor(rows = docs, outcome = outcome, offline = !online)
+        }.stateIn(scope, SharingStarted.WhileSubscribed(5_000), SectionState.Loading)
 
     /**
      * Source-document ids already in the durable asset cache — drives the "view"
@@ -90,11 +111,11 @@ internal class KnowledgeDocController(
 
     /**
      * Resolves [doc] to a local file via the durable
-     * [com.medtroniclabs.microcoaching.data.asset.AssetCache] (fetching a presigned
-     * URL on cache miss while online), emitting [DocEvent]s so the host shows
-     * "Downloading…" then opens the preview — or reports offline-unavailable. The
-     * cached file lives under `filesDir`, so a previously-opened document opens
-     * offline. Keyed on the stable `sourceDocumentId` (dedup across modules).
+     * [com.medtroniclabs.microcoaching.data.asset.AssetCache], supplying the
+     * synced presigned URL on a cache miss, and emits [DocEvent]s so the host
+     * shows "Downloading…" then opens the preview — or reports it unavailable. The
+     * cached file lives under `filesDir`, so a once-opened document opens offline.
+     * Keyed on the stable `sourceDocumentId` (dedup across modules).
      */
     fun openKnowledgeDocument(doc: KnowledgeDocument) {
         if (doc.sourceDocumentId.isBlank()) return
@@ -114,7 +135,7 @@ internal class KnowledgeDocController(
             val label = doc.fileName ?: doc.title
             _downloadProgress.value = DownloadProgress(label, percent = null)
             val sdk = MicroCoachingSDK.getInstance()
-            val file = runCatching {
+            val file = try {
                 sdk.assetCache.localFile(
                     key = doc.sourceDocumentId,
                     kind = AssetKind.DOCUMENT,
@@ -123,9 +144,19 @@ internal class KnowledgeDocController(
                         _downloadProgress.value = DownloadProgress(label, pct, downloaded, total)
                     },
                 ) {
-                    presignedUrlFor(sdk, doc.sourceDocumentId)
+                    presignedUrlFor(doc.sourceDocumentId)
                 }
-            }.getOrNull()
+            } catch (e: InsufficientStorageException) {
+                // Out of storage — surface the storage-specific event so the host
+                // shows the right message, not the generic "unavailable offline" one.
+                _downloadProgress.value = null
+                _docEvents.emit(DocEvent.StorageFull)
+                return@launch
+            } catch (e: Exception) {
+                // Any other failure (offline miss, presign/network error) → treat as
+                // unavailable, matching the prior runCatching-getOrNull behaviour.
+                null
+            }
             _downloadProgress.value = null
             if (file != null) {
                 _docEvents.emit(DocEvent.Ready(doc.sourceDocumentId, doc.title, doc.fileName))
@@ -168,24 +199,12 @@ internal class KnowledgeDocController(
     }
 
     /**
-     * A presigned GET URL for one source document. Prefers the URL already
-     * persisted by the catalogue sync when it's still fresh (no extra round
-     * trip); otherwise resolves a fresh one via the on-demand presigned
-     * endpoint. Returns null if neither is available.
+     * The presigned GET URL the catalogue sync stored for one source document, or
+     * null when none of them is still valid — the caller then reports the document
+     * as unavailable, and the next sync re-presigns it.
      */
-    private suspend fun presignedUrlFor(sdk: MicroCoachingSDK, id: String): String? {
-        val nowSec = System.currentTimeMillis() / 1000L
-        val cached = runCatching { sdk.database.publishedSourceDocumentDao().getById(id) }.getOrNull()
-        val stillFresh = cached?.presignedUrl?.takeIf {
-            it.isNotBlank() && (cached.presignedExpiresAt ?: 0L) > nowSec
-        }
-        if (stillFresh != null) return stillFresh
-        return runCatching {
-            sdk.apiService.getSourceDocumentPresignedUrls(
-                SourceDocumentPresignedUrlRequest(listOf(id)),
-            ).body()?.urls?.firstOrNull { it.sourceDocumentId == id }?.presignedUrl
-        }.getOrNull()
-    }
+    private suspend fun presignedUrlFor(id: String): String? =
+        SourceDocumentUrlStore.presignedUrlFor(id)
 
     private fun localized(@androidx.annotation.StringRes resId: Int): String {
         val sdkLanguage = MicroCoachingSDK.getInstance().language

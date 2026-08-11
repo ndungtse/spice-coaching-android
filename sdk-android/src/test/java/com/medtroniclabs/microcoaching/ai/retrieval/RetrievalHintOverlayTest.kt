@@ -14,8 +14,8 @@ class RetrievalHintOverlayTest {
             moduleFamilyId = "fam-overlay",
             cardsJson = """
                 [
-                  {"title_en":"Overview","body_en":"Intro."},
-                  {"title_en":"Target","body_en":"Detail."}
+                  {"title_en":"Overview","body_en":"Introductory overview content for the module."},
+                  {"title_en":"Target","body_en":"Detailed target card content with specific guidance."}
                 ]
             """.trimIndent(),
         )

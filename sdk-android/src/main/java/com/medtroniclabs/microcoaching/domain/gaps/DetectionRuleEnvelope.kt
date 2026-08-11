@@ -55,10 +55,7 @@ data class DetectionRuleEnvelope(
 
         const val EVALUATOR_SPICE_REFERRAL_COMPLIANCE = "spice_referral_compliance"
 
-        private val json = Json {
-            ignoreUnknownKeys = true
-            isLenient = true
-        }
+        private val json = com.medtroniclabs.microcoaching.util.LenientJson
 
         /**
          * Parse a JSON-serialised envelope. Returns null if the input is null,

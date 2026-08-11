@@ -34,15 +34,30 @@ data class MicroCoachingConfig internal constructor(
     val language: Language = Language.BANGLA,
     /** Tenant identifier forwarded to the SDK backend for multi-tenant isolation. */
     val tenantId: String = "",
+    /**
+     * Active coaching persona for this session. Decides which home experience the
+     * SDK renders (SK vs PO) and whether morning/refresher work runs. The host
+     * resolves it from the logged-in user's role and passes it via
+     * [MicroCoachingSDK.Builder.persona]. Default [CoachingPersona.SK] preserves
+     * the original single-role behaviour.
+     */
+    val persona: CoachingPersona = CoachingPersona.SK,
 
     // ── Backend ───────────────────────────────────────────────────────────────
     /** Base URL of the MicroCoaching FastAPI backend. */
     val backendUrl: String = "",
     /**
-     * Auth token forwarded to the SDK backend as `Authorization: Bearer <token>`.
-     * Pass the SPICE JWT here — single auth source of truth.
+     * Auth token forwarded to the SDK backend as `Authorization: <token>`,
+     * verbatim. Pass the value SPICE stored from the login response's own
+     * `Authorization` header — single auth source of truth. Do not strip or add
+     * a scheme prefix: the gateway matches the login value exactly.
+     *
+     * Mutable so token rotation does NOT require rebuilding the SDK: the auth
+     * interceptor reads this per request, so a new value applies to the next
+     * call on the existing HTTP client. Update it via
+     * [MicroCoachingSDK.updateAuthToken] rather than writing here directly.
      */
-    val authToken: String = "",
+    @Volatile var authToken: String = "",
     val connectionTimeoutSeconds: Int = 30,
     val readTimeoutSeconds: Int = 60,
 
@@ -76,26 +91,18 @@ data class MicroCoachingConfig internal constructor(
     /**
      * Absolute path to a pre-provisioned model file.
      * Used when [modelDownloadStrategy] is [ModelDownloadStrategy.PROVIDED].
-     * Must be a `.task` file → MediaPipe Gemma 3 1B via [GemmaService].
+     * Must be a MediaPipe `.task` file (loaded by [GemmaService]).
      */
     val modelPath: String = "",
     /** Controls when the on-device model is downloaded. */
     val modelDownloadStrategy: ModelDownloadStrategy = ModelDownloadStrategy.ON_FIRST_USE,
     /**
-     * When `true`, the WorkManager job that downloads the on-device model
-     * runs only on unmetered networks (Wi-Fi). When `false` (default), the
-     * job runs as soon as any network is connected — including cellular data.
-     *
-     * The default is permissive because the host app is expected to surface
-     * its own metered-network confirmation dialog before calling
-     * [com.medtroniclabs.microcoaching.ai.model.ModelManager.triggerDownload]
-     * (SPICE already does — see `LandingActivity.showCoachingMeteredNetworkWarning`).
-     * Honour the user's "yes, use mobile data" choice rather than silently
-     * queueing the worker against a constraint that can't be met.
-     *
-     * Hosts that operate in pilot regions where data plans are strict can
-     * opt back into Wi-Fi-only via `.wifiOnlyModelDownload(true)` on the
-     * builder.
+     * When `true`, the model-download worker runs only on unmetered networks (Wi-Fi).
+     * When `false` (default), it runs as soon as any network is connected, including
+     * cellular. The permissive default lets a host that has already obtained the user's
+     * consent to use mobile data download immediately, instead of queueing against a
+     * constraint that can't be met. Set `.wifiOnlyModelDownload(true)` to restrict to
+     * Wi-Fi (e.g. strict-data-plan pilot regions).
      */
     val wifiOnlyModelDownload: Boolean = false,
 
@@ -112,8 +119,9 @@ data class MicroCoachingConfig internal constructor(
      */
     val modelProviders: List<ModelProvider> = ModelProvider.DEFAULT_ORDER,
     /**
-     * HuggingFace Hub access token for downloading gated models.
-     * Required for `litert-community/Gemma3-1B-IT` and similar restricted repos.
+     * HuggingFace Hub access token for downloading gated models. Only needed when the
+     * selected variant's repo is gated ([ModelVariant.requiresAccessToken]) — the catalog
+     * default is non-gated and downloads without one; the 1B variant requires it.
      *
      * Obtain from https://huggingface.co/settings/tokens
      * For the sample app, set `HUGGING_FACE_TOKEN` in `local.properties`.
@@ -140,15 +148,12 @@ data class MicroCoachingConfig internal constructor(
     val huggingFaceModelUrl: String = "",
 
     /**
-     * TOTAL token window for an inference session — **input prompt + generated
-     * output combined**, not an output cap (MediaPipe's `setMaxTokens` sizes the
-     * KV cache). The grounded chat prompt (system rules + reference cards +
-     * history) alone runs ~450–550 tokens; the previous 512 default left ~15–40
-     * tokens for the answer, which is why replies were cut off mid-sentence
-     * (`sawEndOfTurn=false` in ChatTrace). 1536 fits the full prompt budget
-     * (`ChatSession.MAX_PROMPT_CHARS`) plus a complete 2–4 sentence answer with
-     * headroom; KV-cache cost at this length is comfortably within the 3 GB-RAM
-     * device floor for Gemma 3 1B INT4.
+     * TOTAL token window for an inference session — **input prompt + generated output
+     * combined**, not an output cap (MediaPipe's `setMaxTokens` sizes the KV cache). The
+     * grounded chat prompt alone runs ~450–550 tokens, so the window must hold that plus
+     * a full answer or replies get cut off mid-sentence. 1536 fits the prompt budget
+     * (`ChatSession.MAX_PROMPT_CHARS`) plus a 2–4 sentence answer with headroom, within
+     * the KV-cache budget of a 3 GB-RAM device.
      */
     val maxInferenceTokens: Int = 1536,
     /**
@@ -237,6 +242,15 @@ data class MicroCoachingConfig internal constructor(
      */
     val enableGapDetection: Boolean = true,
 
+    /**
+     * Show the "incomplete assigned modules" reminder popup on the Coaching Home
+     * Screen (MED-1529 Req 2). When true, the home screen surfaces a once-per-
+     * window (morning / afternoon), at-most-twice-per-day popup counting the
+     * user's assigned-but-incomplete modules. When false the popup never shows —
+     * a host kill switch. Applies to both SK/CHW and PO personas.
+     */
+    val enableIncompleteModuleReminder: Boolean = true,
+
     // ── v3 Behavioural / Trigger thresholds ──────────────────────────────────
     // Defaults sourced from Implementation Plan v3.3 §W-0. All knobs are
     // overridable per-module at runtime via the `config_threshold` sync resource;
@@ -254,6 +268,19 @@ data class MicroCoachingConfig internal constructor(
     val triggerOccurrenceThreshold: Int = 2,
     /** Window over which [triggerOccurrenceThreshold] is evaluated. */
     val triggerWindowDays: Int = 14,
+
+    // ── Storage ───────────────────────────────────────────────────────────────
+    /**
+     * Minimum free device storage (in bytes) that must remain available. When the
+     * device has less than this — or a download would drop it below this — caching
+     * of documents/thumbnails is refused up-front and surfaced as an
+     * insufficient-storage error, rather than filling the disk to 0 first.
+     *
+     * Default: 512 MB (0.5 GB). Set e.g. `1_073_741_824L` (1 GB) to be more
+     * conservative. Keep in sync with
+     * [com.medtroniclabs.microcoaching.data.asset.AssetCache.DEFAULT_MIN_FREE_BYTES].
+     */
+    val minFreeStorageBytes: Long = 512L * 1024 * 1024,
 
     // ── UI ────────────────────────────────────────────────────────────────────
     /**
@@ -337,6 +364,9 @@ data class MicroCoachingConfig internal constructor(
  *           is replaced by the BM25 card content. Set equal to [groundednessFloor]
  *           for a single uniform floor; set to 0 to always show the model's answer on
  *           strong retrieval.
+ * @property minFallbackServeScore Minimum BM25 score required before the Gemma path
+ *           is allowed to serve retrieved clinician-authored text as a fallback.
+ *           Prevents weak off-topic hits from turning into confident card-body serves.
  * @property streamCapChars Hard cap on streamed response length before generation is
  *           aborted. Raised from 700 so a complete 2–4 sentence answer isn't cut
  *           mid-sentence (the verified breastfeeding-counselling truncation).
@@ -353,6 +383,7 @@ data class ChatTuning(
     val strongRetrievalScore: Float = 6.0f,
     val groundednessFloor: Float = 0.35f,
     val strongRetrievalGroundednessFloor: Float = 0.25f,
+    val minFallbackServeScore: Float = 20.0f,
     val streamCapChars: Int = 1100,
     val maxResponseWords: Int = 280,
     val enableDosageGuard: Boolean = true,
@@ -400,6 +431,20 @@ enum class Language(val bcp47: String) {
             entries.firstOrNull { it.bcp47.startsWith(code, ignoreCase = true) }
                 ?: ENGLISH
     }
+}
+
+/**
+ * Coaching persona the SDK renders for. The host resolves this from the
+ * logged-in user's role and passes it at build time; the SDK stays agnostic of
+ * host role vocabulary (e.g. "SHASTIYA_KORMI", "PO").
+ */
+enum class CoachingPersona {
+    /** Community health worker (Shastiya Kormi / CHW) — refreshers + leaderboard. */
+    SK,
+    /** Program Officer — supervises SKs; no refreshers; dashboard instead of leaderboard. */
+    PO,
+    /** Role couldn't be resolved; the SDK falls back to the SK experience. */
+    UNKNOWN,
 }
 
 /** Controls the colour scheme applied to SDK-owned UI screens. */

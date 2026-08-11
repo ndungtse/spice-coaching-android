@@ -3,6 +3,7 @@ package com.medtroniclabs.microcoaching.ui.flow
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalContext
@@ -12,6 +13,7 @@ import androidx.navigation.compose.rememberNavController
 import com.medtroniclabs.microcoaching.MicroCoachingSDK
 import com.medtroniclabs.microcoaching.domain.telemetry.EventRecorder
 import com.medtroniclabs.microcoaching.ui.SdkLocaleHelper
+import com.medtroniclabs.microcoaching.ui.common.applyCoachingStatusBar
 import com.medtroniclabs.microcoaching.ui.onboarding.OnboardingPrefs
 import com.medtroniclabs.microcoaching.ui.theme.MicroCoachingTheme
 import kotlinx.coroutines.Dispatchers
@@ -42,6 +44,21 @@ class CoachingFlowActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Restored after process death before the host initialised the SDK
+        // (hosts that build it outside Application.onCreate): getInstance()
+        // would throw and — if the host swallows the crash — leave a dead
+        // white window. Finish back to the host instead; the user re-enters
+        // coaching through a normal entry point.
+        if (!MicroCoachingSDK.isInitialized()) {
+            Log.w(TAG, "SDK not initialised on (re)create — finishing coaching flow.")
+            finish()
+            return
+        }
+
+        // Blue status bar to match the SdkScreenHeader across the whole coaching
+        // flow (scoped to this SDK-owned window; the host keeps its own styling).
+        window.applyCoachingStatusBar()
 
         val startRoute = resolveStartRoute()
         val chwId = intent.getStringExtra(EXTRA_CHW_ID)
@@ -100,6 +117,7 @@ class CoachingFlowActivity : FragmentActivity() {
     }
 
     companion object {
+        private const val TAG = "CoachingFlowActivity"
         private const val EXTRA_START_ROUTE = "extra_start_route"
         const val EXTRA_CHW_ID = "extra_chw_id"
 

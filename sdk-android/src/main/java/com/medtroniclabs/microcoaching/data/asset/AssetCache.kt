@@ -1,6 +1,7 @@
 package com.medtroniclabs.microcoaching.data.asset
 
 import android.content.Context
+import android.os.StatFs
 import android.system.ErrnoException
 import android.system.OsConstants
 import android.util.Log
@@ -30,7 +31,7 @@ enum class AssetKind { IMAGE, VIDEO, DOCUMENT }
  * to write the downloaded asset. Callers should surface a storage-specific
  * error message rather than a generic "unavailable" one.
  */
-class InsufficientStorageException(cause: IOException) : Exception("Insufficient storage to cache asset", cause)
+class InsufficientStorageException(cause: IOException? = null) : Exception("Insufficient storage to cache asset", cause)
 
 /**
  * Reusable offline cache for remote assets fetched from short-lived presigned
@@ -51,6 +52,14 @@ class AssetCache(
     private val dao: CachedAssetDao,
     private val scope: CoroutineScope,
     private val maxBytes: Long = DEFAULT_MAX_BYTES,
+    /**
+     * Minimum free device storage (bytes) that must remain AFTER a download. A
+     * download that would leave less than this is refused up-front with
+     * [InsufficientStorageException] rather than filling the disk to 0. Sourced
+     * from [com.medtroniclabs.microcoaching.MicroCoachingConfig.minFreeStorageBytes]
+     * so the SDK consumer can tune it.
+     */
+    private val minFreeBytes: Long = DEFAULT_MIN_FREE_BYTES,
 ) {
 
     /**
@@ -69,8 +78,17 @@ class AssetCache(
         File(context.filesDir, "asset_cache").apply { mkdirs() }
     }
 
-    /** Per-key locks so concurrent requests for the same asset download once. */
-    private val keyLocks = mutableMapOf<String, Mutex>()
+    /**
+     * Per-key locks so concurrent requests for the same asset download once.
+     * Bounded LRU — the map previously grew one entry per asset key ever
+     * requested and was never pruned (it outlived even the asset's eviction).
+     * Evicting a rarely-still-held lock is benign: a fresh mutex for the same
+     * key can at worst let one asset download twice.
+     */
+    private val keyLocks = object : LinkedHashMap<String, Mutex>(16, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Mutex>) =
+            size > MAX_KEY_LOCKS
+    }
     private val keyLocksGuard = Mutex()
 
     /**
@@ -143,6 +161,55 @@ class AssetCache(
         return File(row.localPath).exists()
     }
 
+    /**
+     * The local [File] for [key] if it is already cached (bumps LRU recency),
+     * else null. Read-only — never downloads. Lets a player prefer a
+     * user-downloaded file over streaming without triggering a fetch.
+     */
+    suspend fun localCachedFile(key: String): File? {
+        if (key.isBlank()) return null
+        return cachedFile(sha256(key))
+    }
+
+    /** True when [key] is cached **and** pinned (a user "keep offline" download). */
+    suspend fun isPinned(key: String): Boolean {
+        if (key.isBlank()) return false
+        return dao.get(sha256(key))?.isPinned == true
+    }
+
+    /**
+     * Download [key] to disk (if not already cached) and **pin** it so it is
+     * exempt from LRU eviction — the "download to keep offline" action. Reports
+     * throttled progress via [onProgress]. Returns the local [File], or null on
+     * an offline miss / download failure. Throws [InsufficientStorageException]
+     * when the device is below its free-space floor.
+     */
+    suspend fun download(
+        key: String,
+        kind: AssetKind = AssetKind.VIDEO,
+        onProgress: ((downloaded: Long, total: Long) -> Unit)? = null,
+        fetchUrl: suspend () -> String?,
+    ): File? {
+        val file = localFile(key, kind, onProgress, fetchUrl) ?: return null
+        runCatching { dao.setPinned(sha256(key), true) }
+            .onFailure { Log.w(TAG, "pin failed for key=$key: ${it.message}") }
+        return file
+    }
+
+    /**
+     * Remove a downloaded asset: delete the local file and its row (implicitly
+     * unpinning it). Safe to call when [key] isn't cached. Used by the
+     * "remove download" affordance.
+     */
+    suspend fun remove(key: String) {
+        if (key.isBlank()) return
+        val keyHash = sha256(key)
+        val row = dao.get(keyHash) ?: return
+        runCatching { File(row.localPath).delete() }
+        dao.delete(keyHash)
+        Log.d(TAG, "removed cached asset key=$key")
+    }
+
     /** Stable key from a URL: scheme+host+path, dropping the volatile query. */
     fun stableKeyForUrl(url: String?): String? {
         val http = url?.toHttpUrlOrNull() ?: return null
@@ -185,6 +252,17 @@ class AssetCache(
                     return@withContext null
                 }
                 val body = response.body ?: return@withContext null
+                // Proactive free-space guard: refuse the write when the device is
+                // already below the configured headroom (or would drop below it
+                // once this file lands), instead of downloading until the disk
+                // hits 0 and fails mid-write. contentLength is -1 when unknown →
+                // treated as 0 (floor-only check). Not an IOException, so the
+                // generic catch below rethrows it.
+                val incoming = body.contentLength().coerceAtLeast(0L)
+                if (!hasHeadroomFor(incoming)) {
+                    Log.w(TAG, "Refusing download key=$key — below ${minFreeBytes}B free-space floor (incoming=$incoming)")
+                    throw InsufficientStorageException()
+                }
                 if (onProgress == null) {
                     tmp.outputStream().use { out -> body.byteStream().copyTo(out) }
                 } else {
@@ -218,8 +296,11 @@ class AssetCache(
             Log.w(TAG, "download IO error for key=$key: ${e.message}", e)
             null
         } catch (e: Exception) {
-            Log.w(TAG, "download error for key=$key: ${e.message}", e)
             runCatching { tmp.delete() }
+            // Propagate the proactive free-space refusal so callers can show the
+            // storage-specific message (it isn't an IOException, so it lands here).
+            if (e is InsufficientStorageException) throw e
+            Log.w(TAG, "download error for key=$key: ${e.message}", e)
             null
         }
     }
@@ -288,6 +369,16 @@ class AssetCache(
     private fun isOnline(): Boolean =
         runCatching { MicroCoachingSDK.getInstance().isNetworkAvailable() }.getOrDefault(false)
 
+    /**
+     * True when writing [incomingBytes] would still leave at least [minFreeBytes]
+     * of device storage free. Fails open (returns true) if the filesystem can't
+     * be stat'd, so an unexpected `StatFs` error never blocks a download.
+     */
+    private fun hasHeadroomFor(incomingBytes: Long): Boolean = runCatching {
+        val available = StatFs(cacheDir.path).availableBytes
+        available - incomingBytes >= minFreeBytes
+    }.getOrDefault(true)
+
     private fun sha256(value: String): String =
         MessageDigest.getInstance("SHA-256")
             .digest(value.toByteArray())
@@ -296,7 +387,17 @@ class AssetCache(
     companion object {
         private const val TAG = "AssetCache"
         private const val DEFAULT_MAX_BYTES = 150L * 1024 * 1024 // ~150 MB
+
+        /**
+         * Default free-space floor (~500 MB) kept clear when caching assets.
+         * Overridable via
+         * [com.medtroniclabs.microcoaching.MicroCoachingConfig.minFreeStorageBytes].
+         */
+        const val DEFAULT_MIN_FREE_BYTES = 512L * 1024 * 1024
         private const val EVICTION_BATCH = 16
+
+        /** LRU bound on [keyLocks] — far above realistic concurrent asset loads. */
+        private const val MAX_KEY_LOCKS = 256
         private const val PROGRESS_EMIT_INTERVAL_MS = 200L
     }
 }

@@ -18,7 +18,7 @@ private const val TAG = "EventRecorder"
  * before merging them into the event's `payload_json`. Lenient because the
  * envelope is constructed in-process by SDK code, not received over the wire.
  */
-private val EVIDENCE_JSON = Json { ignoreUnknownKeys = true; isLenient = true }
+private val EVIDENCE_JSON = com.medtroniclabs.microcoaching.util.LenientJson
 
 /**
  * Map a backend-canonical event_type to its event_family bucket. Values match
@@ -28,14 +28,26 @@ private val EVIDENCE_JSON = Json { ignoreUnknownKeys = true; isLenient = true }
  */
 fun eventFamilyFor(eventType: String): String = when (eventType) {
     // Coaching surface events. `module_quiz_attempted` lives here per the v3
-    // E2E contract — see docs/v3/coaching-platform-e2e-backend.md.
+    // `module_requested` (Events-Modelling 1.5) is the CHW's request for a
+    // module to be added to their quota — recorded, then synced like any event.
+    // `video_progress_updated` (see docs/_events/video.md) reports CHW watch
+    // progress for an assigned training video — recorded, then synced like any event.
+    // `module_quiz_viewed` (Events-Modelling 1.7) is the "CHW opened a quiz"
+    // event — the canonical name for what was formerly `quiz_started`.
+    // `module_card_viewed` moved here from `learning` per 1.7, which lists it
+    // under the `coaching` family.
+    // `document_viewed` fires when a knowledge source document is opened. The
+    // backend's rollup keys off this exact string — renaming it empties the
+    // document-usage dashboard silently.
     "card_shown", "card_skipped", "card_accepted", "counselling_used",
-    "audio_played", "quiz_started", "module_quiz_attempted" -> "coaching"
-    "module_delivered", "module_card_viewed", "module_completed" -> "learning"
+    "audio_played", "module_quiz_viewed", "module_quiz_attempted", "module_requested",
+    "module_card_viewed", "video_progress_updated", "document_viewed" -> "coaching"
+    "module_delivered", "module_completed" -> "learning"
     "risk_flag_observed", "spice_action_observed",
     "equipment_anomaly_observed" -> "clinical_observed"
     "sync_attempt", "sync_started", "sync_completed",
-    "form_submit", "login_attempt", "digital_help_used" -> "digital"
+    "form_submit", "login_attempt", "digital_help_used",
+    "chat_feedback_positive", "chat_feedback_negative" -> "digital"
     else -> "system"  // session_start, session_end, llm_inference, unknown
 }
 
@@ -59,7 +71,7 @@ fun triggerTypeFor(source: String?): String = when (source) {
  * Append-only coaching event recorder. The single write path for all CHW interaction events.
  *
  * Replaces [TelemetryManager] for coaching-domain events. Writes directly to Room;
- * the OutboundSyncWorker (Phase B) batches pending rows to POST /telemetry/events.
+ * the OutboundSyncWorker batches pending rows to POST /telemetry/events.
  *
  * One instance per coaching session — constructed with the session ID and CHW ID
  * that remain constant for the session's lifetime.
@@ -223,21 +235,6 @@ class EventRecorder(
         Log.d(TAG, "[$sessionId] counselling_used saved — module=$moduleFamilyId fallback=$fallbackUsed validator=$validatorStatus")
     }
 
-    suspend fun recordQuizStarted(
-        moduleFamilyId: String,
-        clinicalDomain: String,
-    ) {
-        dao.insert(
-            build(
-                eventType = "quiz_started",
-                moduleFamilyId = moduleFamilyId,
-                clinicalDomain = clinicalDomain,
-                cardType = "QUIZ",
-            )
-        )
-        Log.d(TAG, "[$sessionId] quiz_started saved — module=$moduleFamilyId")
-    }
-
     /**
      * Records one row per chat response generation, per the v1.1 Events
      * Modelling spec (`event_family: "digital"`, `event_type: "digital_help_used"`,
@@ -249,7 +246,7 @@ class EventRecorder(
      * patterns without a separate event family.
      *
      * @param inferenceMode `"edge"` for on-device Gemma, `"online"` for the
-     *   backend RAG path (currently dormant), `"cached"` for pre-authored fallback.
+     *   backend RAG path, `"cached"` for pre-authored fallback.
      * @param validatorStatus `"pass"` | `"fail"` | `null` — output of the B4
      *   validator. Null when validation didn't run (e.g. L1 scope refusal).
      * @param fallbackUsed `true` when L4 fell back to a quiz `explanation_bn`
@@ -287,6 +284,60 @@ class EventRecorder(
             )
         )
         Log.d(TAG, "[$sessionId] digital_help_used saved — module=$moduleId mode=$inferenceMode validator=$validatorStatus fallback=$fallbackUsed network=$networkState")
+    }
+
+    /**
+     * Records CHW feedback on a single chat response (thumbs up / down), per
+     * Events Modelling 1.4 — `event_family: "digital"`,
+     * `event_type: "chat_feedback_positive"` | `"chat_feedback_negative"`,
+     * `trigger_type: "workflow_event"`.
+     *
+     * The rated response and the CHW's original question are mirrored into
+     * `payload_json` (`{"question": …, "response": …}`, Events-Modelling 1.7) and
+     * the response context (`moduleId`, `inferenceMode`, `validatorStatus`,
+     * `fallbackUsed`, `networkState`) is echoed from the original
+     * [recordDigitalHelpUsed] turn so analytics can segment feedback by the
+     * pipeline that produced the answer without a message-store join.
+     *
+     * Analytics-only: the rating rides the `telemetry/events` sync and is not
+     * persisted locally, so it does not survive a history reload.
+     *
+     * @param positive `true` for thumbs-up, `false` for thumbs-down.
+     * @param responseJson The rated response **object as a JSON string** (the RAG
+     *   response, or the offline-constructed equivalent), stored under
+     *   `payload_json.response`.
+     * @param feedbackText Optional free-text detail the CHW typed in the
+     *   thumbs-down sheet, mirrored into `payload_json.feedback`. Null/blank on
+     *   thumbs-up or when no detail was given.
+     * @param question The CHW's original question, mirrored into
+     *   `payload_json.question`. Null for history-loaded turns (no meta), where
+     *   it is simply omitted.
+     */
+    suspend fun recordChatFeedback(
+        positive: Boolean,
+        responseJson: String,
+        feedbackText: String? = null,
+        question: String? = null,
+        moduleId: String? = null,
+        inferenceMode: String? = null,
+        validatorStatus: String? = null,
+        fallbackUsed: Boolean? = null,
+        networkState: String? = null,
+    ) {
+        val eventType = if (positive) "chat_feedback_positive" else "chat_feedback_negative"
+        dao.insert(
+            build(
+                eventType = eventType,
+                triggerType = "workflow_event",
+                inferenceMode = inferenceMode,
+                validatorStatus = validatorStatus,
+                fallbackUsed = fallbackUsed ?: false,
+                networkState = networkState,
+                payloadJson = buildChatResponsePayload(responseJson, feedbackText, question),
+                moduleId = moduleId,
+            )
+        )
+        Log.d(TAG, "[$sessionId] $eventType saved — module=$moduleId mode=$inferenceMode network=$networkState hasFeedback=${!feedbackText.isNullOrBlank()}")
     }
 
     suspend fun recordModuleStarted(
@@ -347,6 +398,112 @@ class EventRecorder(
             )
         )
         Log.d(TAG, "[$sessionId] module_quiz_attempted saved — module=$moduleFamilyId score=$quizScorePct passed=$passed gap=$behaviouralGapId")
+    }
+
+    /**
+     * Records a `module_requested` event (Events-Modelling 1.5) — the CHW's
+     * request for a module to be added to their quota, or a free-text
+     * suggestion for a module that doesn't exist yet. Backend family: `coaching`.
+     *
+     * Exactly one of [moduleId] (an existing catalogue module) or
+     * [requestedModuleName] (a new-topic suggestion) is set; [reason] is
+     * optional. Both non-column fields ride in `payload_json` per the spec
+     * (`{"requested_module_name": …, "reason": …}`). The row is written to the
+     * outbound queue and synced by the OutboundSyncWorker like any other event —
+     * so the request survives offline and ships on the next flush.
+     */
+    suspend fun recordModuleRequested(
+        moduleId: String? = null,
+        moduleFamilyId: String? = null,
+        requestedModuleName: String? = null,
+        reason: String? = null,
+    ) {
+        val payload = buildJsonObject {
+            requestedModuleName?.takeIf { it.isNotBlank() }?.let { put("requested_module_name", it) }
+            reason?.takeIf { it.isNotBlank() }?.let { put("reason", it) }
+        }.let { if (it.isEmpty()) null else it.toString() }
+        val networkState = if (MicroCoachingSDK.getInstance().isNetworkAvailable()) "online" else "offline"
+        dao.insert(
+            build(
+                eventType = "module_requested",
+                moduleId = moduleId,
+                moduleFamilyId = moduleFamilyId,
+                networkState = networkState,
+                payloadJson = payload,
+            ),
+        )
+        Log.d(TAG, "[$sessionId] module_requested saved — moduleId=$moduleId name=$requestedModuleName")
+    }
+
+    /**
+     * Records a `video_progress_updated` event (see docs/_events/video.md) — the
+     * CHW's watch progress for an assigned training video. Backend family:
+     * `coaching`. Replaces the removed `PUT /sync/video-progress` route; the row
+     * is written to the outbound queue and shipped on the next telemetry flush,
+     * so progress survives offline and is merged **monotonically** server-side.
+     *
+     * [sourceDocumentId] is the canonical video id. Callers should emit on the
+     * throttled cadence in video.md (every 10–15 s or ≥5% delta, on pause /
+     * background / screen-exit, and a final completion event with
+     * [percentWatched] = 100 and [completed] = true).
+     */
+    suspend fun recordVideoProgress(
+        sourceDocumentId: String,
+        lastPositionMs: Long,
+        percentWatched: Double,
+        completed: Boolean,
+    ) {
+        val payload = buildJsonObject {
+            put("source_document_id", sourceDocumentId)
+            put("last_position_ms", lastPositionMs)
+            put("percent_watched", percentWatched)
+            put("completed", completed)
+        }.toString()
+        val networkState = if (MicroCoachingSDK.getInstance().isNetworkAvailable()) "online" else "offline"
+        dao.insert(
+            build(
+                eventType = "video_progress_updated",
+                triggerType = "workflow_event",
+                outcome = if (completed) "completed" else null,
+                networkState = networkState,
+                payloadJson = payload,
+            ),
+        )
+        Log.d(
+            TAG,
+            "[$sessionId] video_progress_updated saved — video=$sourceDocumentId " +
+                "pct=$percentWatched completed=$completed",
+        )
+    }
+
+    /**
+     * Records a knowledge source document being opened in the previewer. Backend
+     * family: `coaching`. Queued like any event, so a view recorded offline ships
+     * on the next flush.
+     *
+     * A knowledge document belongs to no module, so every module-, quiz-, card-
+     * and patient-scoped column stays null and only the document rides in
+     * `payload_json`. One row per view — [build] mints a fresh `event_id` each
+     * call, which is what makes a repeat open increment the count instead of
+     * deduping against the previous one. No title is sent; the server resolves it
+     * and ignores a client-supplied value.
+     *
+     * [sourceDocumentId] must be a UUID — the analytics query drops rows whose
+     * payload id doesn't parse.
+     */
+    suspend fun recordDocumentViewed(sourceDocumentId: String) {
+        val payload = buildJsonObject {
+            put("source_document_id", sourceDocumentId)
+        }.toString()
+        val networkState = if (MicroCoachingSDK.getInstance().isNetworkAvailable()) "online" else "offline"
+        dao.insert(
+            build(
+                eventType = "document_viewed",
+                networkState = networkState,
+                payloadJson = payload,
+            ),
+        )
+        Log.d(TAG, "[$sessionId] document_viewed saved — document=$sourceDocumentId network=$networkState")
     }
 
     // ── Patient-interaction events (UC-2 / clinical_observed family) ──────────
@@ -470,11 +627,13 @@ class EventRecorder(
     }
 
     /**
-     * Records the `card_shown` event when a coaching surface fires on the
-     * CHW's device. Backend family: `coaching`. Used by the UC-2 Apply
-     * post-assessment card surface. While the render path is not yet built,
-     * the SDK stub-fires this on every `onAssessmentSubmitted` so the
-     * downstream "card shown" metric is non-empty.
+     * Records the `card_shown` event when a coaching surface fires on the CHW's
+     * device. Backend family: `coaching`. Emitted from the post-assessment hook
+     * ([com.medtroniclabs.microcoaching.sdk.hooks.AssessmentSubmittedHandler]),
+     * which carries the patient context the surface was triggered from.
+     *
+     * Distinct from `module_card_viewed`, which reports a lesson card being
+     * paged through inside a module.
      */
     suspend fun recordCardShown(
         cardType: String,
@@ -583,6 +742,24 @@ class EventRecorder(
     }
 
     // ── Private builder ───────────────────────────────────────────────────────
+
+    /**
+     * `payload_json` for the `chat_feedback_*` events — the rated response object
+     * as a JSON string (`response`; the RAG response or its offline-constructed
+     * equivalent), the CHW's original [question] (Events-Modelling 1.7), plus the
+     * CHW's optional free-text detail (`feedback`) when they typed one in the
+     * thumbs-down sheet (Events Modelling 1.5, confirmed backend passthrough).
+     */
+    private fun buildChatResponsePayload(
+        response: String,
+        feedbackText: String? = null,
+        question: String? = null,
+    ): String =
+        buildJsonObject {
+            if (!question.isNullOrBlank()) put("question", question)
+            put("response", response)
+            if (!feedbackText.isNullOrBlank()) put("feedback", feedbackText)
+        }.toString()
 
     private fun build(
         eventType: String,

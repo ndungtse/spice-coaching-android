@@ -12,18 +12,17 @@ import java.io.File
  * file extension and device capability.
  *
  * Routing rules:
- *   - `.task`  → [GemmaService] (MediaPipe Gemma 3; works on all field devices)
+ *   - `.task`  → [GemmaService] (MediaPipe Gemma, any catalog variant)
  *   - No model → [isModelAvailable] = false; chat shows "download required" state
  *
  * This is the single point of truth for which LLM is active.
  *
- * Owned per [ChatViewModel]: one router is created in the VM and released in
- * `onCleared`. Inference is chat-only today, and [CoachingChatBottomSheet.show]
- * guarantees a single live chat sheet at a time, so exactly one router (and one
- * loaded engine) is resident while chat is open. If a second LLM consumer is
- * ever added (e.g. edge-coaching generation), promote this to an SDK-owned
- * instance with refcounted release rather than re-introducing per-consumer
- * routers — two routers loading the same `.task` crashes MediaPipe natively.
+ * Owned by [SharedInferenceRouter]: ChatViewModels acquire/release the single
+ * process-wide instance rather than constructing their own — two routers
+ * loading the same `.task` crashes MediaPipe natively, and an embedded chat
+ * fragment plus the chat bottom sheet can be alive at the same time. The
+ * engine stays loaded while any surface holds a reference and unloads when
+ * the last one releases.
  */
 class InferenceRouter(private val config: MicroCoachingConfig) {
 
@@ -35,6 +34,15 @@ class InferenceRouter(private val config: MicroCoachingConfig) {
 
     /** Returns true when a model file is present and loaded. */
     val isModelAvailable: Boolean get() = activeService?.isModelLoaded?.value == true
+
+    /**
+     * Why the last [initializeIfModelPresent] failed, or null if it succeeded or
+     * never ran. The load failure is otherwise only logged, leaving the setup
+     * screen unable to tell the user why entering chat bounced them back.
+     */
+    @Volatile
+    var lastLoadError: String? = null
+        private set
 
     /**
      * Detect the model file and initialize the appropriate engine.
@@ -67,16 +75,19 @@ class InferenceRouter(private val config: MicroCoachingConfig) {
                 "Selected model '${variant.id}' runtime=${variant.runtime} is not bundled — " +
                     "no engine to load it (LiteRT-LM runtime not bundled). Chat stays in download/unavailable state.",
             )
+            lastLoadError = "Selected model '${variant.id}' needs the ${variant.runtime} runtime, which isn't bundled."
             return null
         }
 
         val modelFile = resolveModelFile() ?: run {
             Log.i(TAG, "No model file found — chat will show 'download required' state")
+            lastLoadError = null   // Not an error — nothing has been downloaded yet.
             return null
         }
 
         val service = serviceForFile(modelFile) ?: run {
             Log.w(TAG, "Unrecognised model file extension: ${modelFile.extension}")
+            lastLoadError = "No bundled engine can load '${modelFile.name}'."
             return null
         }
 
@@ -99,44 +110,47 @@ class InferenceRouter(private val config: MicroCoachingConfig) {
             )
             service.loadModel(llmConfig)
             activeService = service
+            lastLoadError = null
             Log.i(TAG, "Inference engine ready: ${service::class.simpleName} — ${modelFile.name}")
         }.onFailure { cause ->
             Log.e(TAG, "Failed to load model ${modelFile.name}: ${cause.message}")
+            lastLoadError = cause.message ?: cause::class.simpleName
             activeService = null
         }
 
         return activeService
     }
 
-    /**
-     * Find the model file on the device.
-     *
-     * Priority order:
-     *   1. [MicroCoachingConfig.modelPath] if explicitly set (PROVIDED strategy)
-     *   2. The selected variant's exact [com.medtroniclabs.microcoaching.ai.model.ModelVariant.fileName]
-     *      in the external files dir (deterministic across coexisting variants —
-     *      no "first `.task`" ambiguity).
-     */
-    private fun resolveModelFile(): File? {
-        if (config.modelPath.isNotBlank()) {
-            val explicit = File(config.modelPath)
-            if (explicit.exists()) return explicit
-            Log.w(TAG, "Configured modelPath does not exist: ${config.modelPath}")
-        }
+    /** Find the model file on the device; see the companion overload for the rule. */
+    private fun resolveModelFile(): File? = resolveModelFile(
+        configuredModelPath = config.modelPath,
+        externalDir = config.context.getExternalFilesDir(null),
+        expectedFileName = config.selectedModelVariant().fileName,
+        canLoad = ::canLoad,
+    )
 
-        val externalDir = config.context.getExternalFilesDir(null) ?: return null
-        val expected = config.selectedModelVariant().fileName
-        return externalDir.listFiles()?.firstOrNull { it.name == expected }
-    }
-
-    private fun serviceForFile(file: File): LLMService? = when {
-        file.name.endsWith(GemmaService.MODEL_EXTENSION) -> gemmaService
-        else -> {
-            // A non-`.task` file (e.g. a `.litertlm`) has no bundled engine —
-            // the LiteRT-LM runtime was removed in 0.5.0 for APK size.
+    private fun serviceForFile(file: File): LLMService? =
+        if (canLoad(file)) {
+            gemmaService
+        } else {
             Log.e(TAG, "No engine for '${file.name}' — only MediaPipe `.task` is bundled (LiteRT-LM not bundled)")
             null
         }
+
+    /**
+     * True when a model file is present on disk **and** a bundled engine can load
+     * it. This is a permanent property of the current configuration, not a
+     * transient state: it's false when the selected variant's runtime isn't
+     * bundled, or when the resolved file's extension has no engine (e.g. a leftover
+     * `.litertlm` that `modelPath` points at). Callers use it to distinguish an
+     * un-retryable configuration from a transient load failure, so they can show an
+     * honest error instead of looping on "Go to chat". Does no loading — just
+     * resolution + a runtime/extension check.
+     */
+    fun canRunResolvedModel(): Boolean {
+        if (!ModelCatalog.isRunnable(config.selectedModelVariant())) return false
+        val file = resolveModelFile() ?: return false
+        return serviceForFile(file) != null
     }
 
     /** Release the inference engine. */
@@ -147,5 +161,50 @@ class InferenceRouter(private val config: MicroCoachingConfig) {
 
     companion object {
         private const val TAG = "InferenceRouter"
+
+        /**
+         * Is there a bundled engine that can load [file]? Only MediaPipe `.task`
+         * is bundled. Side-effect-free so [resolveModelFile] can probe a candidate
+         * it may be about to skip without logging an error for it.
+         */
+        internal fun canLoad(file: File): Boolean =
+            file.name.endsWith(GemmaService.MODEL_EXTENSION)
+
+        /**
+         * Pick the model file to load. Pure — takes the filesystem facts rather
+         * than reading config, so the priority rule is testable without a Context.
+         *
+         * Priority:
+         *   1. [configuredModelPath] when it exists **and** [canLoad] accepts it.
+         *   2. [expectedFileName] inside [externalDir] — matched by exact name, not
+         *      "first `.task` on disk", so coexisting variants stay deterministic.
+         *
+         * The loadability check on (1) is what makes this self-healing. A host that
+         * scans the model dir and adopts whatever it finds can pass a file no
+         * bundled engine can load; preferring it unconditionally would strand chat
+         * on the setup screen even with a loadable file sitting right beside it.
+         */
+        internal fun resolveModelFile(
+            configuredModelPath: String,
+            externalDir: File?,
+            expectedFileName: String,
+            canLoad: (File) -> Boolean = Companion::canLoad,
+        ): File? {
+            if (configuredModelPath.isNotBlank()) {
+                val explicit = File(configuredModelPath)
+                when {
+                    !explicit.exists() ->
+                        Log.w(TAG, "Configured modelPath does not exist: $configuredModelPath")
+                    !canLoad(explicit) ->
+                        Log.w(
+                            TAG,
+                            "Configured modelPath '${explicit.name}' has no bundled engine — " +
+                                "ignoring it and falling back to the selected variant's file",
+                        )
+                    else -> return explicit
+                }
+            }
+            return externalDir?.listFiles()?.firstOrNull { it.name == expectedFileName }
+        }
     }
 }

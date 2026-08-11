@@ -13,9 +13,6 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonPrimitive
 
-/** Tolerant decoder for the typed `source_documents_json` column. */
-private val moduleEntityJson = Json { ignoreUnknownKeys = true }
-
 /**
  * Local cache of a published module shipped by the v3 backend `/sync/modules`
  * endpoint (see `ModuleSyncPayload` in the deployed OpenAPI spec).
@@ -61,6 +58,15 @@ data class ModuleEntity(
 
     @ColumnInfo(name = "sub_domain")
     val subDomain: String? = null,
+
+    /**
+     * Content-domain taxonomy (`module.content_domain`): "clinical" | "digital" |
+     * "operational". Drives the SK/PO content-domain tag on Learning Library &
+     * Practice Zone cards (Med-I617). Null for legacy rows (v30→v31 migration) →
+     * rendered as "clinical", the documented default.
+     */
+    @ColumnInfo(name = "content_domain")
+    val contentDomain: String? = null,
 
     /** "refresher" | "content_update" | "digital_proficiency". */
     @ColumnInfo(name = "module_type")
@@ -142,27 +148,26 @@ data class ModuleEntity(
     @ColumnInfo(name = "behavioural_gap_ids_json")
     val behaviouralGapIdsJson: String = "[]",
 
-    /**
-     * Whether the backend has a thumbnail for this module version. Drives which
-     * `module_id`s are sent to `/sync/modules/presigned-thumbnails`. Set from the
-     * sync payload; the URL itself is populated separately by thumbnail sync.
-     */
+    /** Whether the backend has a thumbnail for this module version. */
     @ColumnInfo(name = "has_thumbnail")
     val hasThumbnail: Boolean = false,
 
     /**
-     * Presigned GET URL for the module thumbnail, or null until thumbnail sync
-     * has resolved it. Re-fetched once [thumbnailExpiresAtEpochSec] passes.
-     * Not set by the module-sync mapper (so a module REPLACE leaves it null and
-     * thumbnail sync repopulates it in the same pass).
+     * Presigned GET URL for the module thumbnail, delivered inline with the module
+     * and written by the same upsert, so it survives a module REPLACE. Null when
+     * the module has no thumbnail.
+     *
+     * Once a tile scrolls into view the image itself is cached durably by
+     * [com.medtroniclabs.microcoaching.data.asset.AssetCache], which keys on a
+     * stable identity rather than the signed URL — so an expiry here only matters
+     * for a thumbnail the CHW has never looked at.
      */
     @ColumnInfo(name = "thumbnail_url")
     val thumbnailUrl: String? = null,
 
     /**
-     * Absolute expiry (epoch seconds) of [thumbnailUrl], computed at fetch time
-     * as `now + expires_seconds - safety margin`. Null when no URL is cached.
-     * A row is considered stale (needs re-fetch) when this is null or in the past.
+     * Absolute expiry (epoch seconds) of [thumbnailUrl], derived from the payload's
+     * relative lifetime at sync time. Null when no URL is cached.
      */
     @ColumnInfo(name = "thumbnail_expires_at_epoch_sec")
     val thumbnailExpiresAtEpochSec: Long? = null,
@@ -206,12 +211,7 @@ data class ModuleEntity(
     /** Parsed view over [sourceDocumentsJson]. Empty list on malformed JSON. */
     @get:Ignore
     val sourceDocuments: List<SourceDocumentRef>
-        get() = runCatching {
-            moduleEntityJson.decodeFromString(
-                ListSerializer(SourceDocumentRef.serializer()),
-                sourceDocumentsJson,
-            ).filter { it.id.isNotBlank() }
-        }.getOrDefault(emptyList())
+        get() = decodeSourceDocumentRefs(sourceDocumentsJson)
 
     /**
      * Source-document UUIDs only. Derived from [sourceDocuments] (the rich
@@ -222,36 +222,43 @@ data class ModuleEntity(
     @get:Ignore
     val sourceDocumentIds: List<String>
         get() = sourceDocuments.map { it.id }.ifEmpty {
-            runCatching {
-                Json.parseToJsonElement(sourceDocumentIdsJson).jsonArray
-                    .map { it.jsonPrimitive.content }
-                    .filter { it.isNotBlank() }
-            }.getOrDefault(emptyList())
+            com.medtroniclabs.microcoaching.data.db.JsonCodecs.decodeStringList(sourceDocumentIdsJson)
         }
 
     /** All behavioural-gap UUIDs this module addresses, parsed from [behaviouralGapIdsJson]. */
     @get:Ignore
     val behaviouralGapIds: List<String>
-        get() = runCatching {
-            Json.parseToJsonElement(behaviouralGapIdsJson).jsonArray
-                .map { it.jsonPrimitive.content }
-                .filter { it.isNotBlank() }
-        }.getOrDefault(emptyList())
+        get() = com.medtroniclabs.microcoaching.data.db.JsonCodecs.decodeStringList(behaviouralGapIdsJson)
 }
+
+/**
+ * Tolerant decode of a `source_documents_json` value; empty list on malformed
+ * JSON. Shared by [ModuleEntity.sourceDocuments] and projection-query consumers
+ * (e.g. the thumbnail refresh) that read the column without loading the entity.
+ */
+fun decodeSourceDocumentRefs(json: String): List<SourceDocumentRef> =
+    com.medtroniclabs.microcoaching.data.db.JsonCodecs.decodeRefs(json)
 
 /**
  * Display sort: domain, then Bengali title (English fallback). Applied in Kotlin
  * because Android's bundled SQLite does not reliably expose `json_extract` for
  * ordering on `title_json`.
+ *
+ * Decorate-sort-undecorate: [ModuleEntity.titleBn] / [ModuleEntity.titleEn] are
+ * computed getters that JSON-parse `title_json` on every access, so sorting on
+ * them directly parsed each title O(n log n) times per sort — and this runs on
+ * every module-flow emission.
  */
 fun List<ModuleEntity>.sortedForDisplay(): List<ModuleEntity> =
-    sortedWith(
-        compareBy(
-            { it.domain },
-            { it.titleBn.ifBlank { it.titleEn.orEmpty() } },
-            { it.moduleId },
-        ),
-    )
+    map { entity -> entity to entity.titleBn.ifBlank { entity.titleEn.orEmpty() } }
+        .sortedWith(
+            compareBy(
+                { it.first.domain },
+                { it.second },
+                { it.first.moduleId },
+            ),
+        )
+        .map { it.first }
 
 /** Test/fixture builder — keeps bilingual fields in `title_json` / `description_json`. */
 fun moduleEntityFixture(

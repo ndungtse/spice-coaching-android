@@ -20,6 +20,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import com.medtroniclabs.microcoaching.ui.theme.SpiceGreen
+import com.medtroniclabs.microcoaching.ui.theme.SpiceGreenDark
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -49,7 +51,7 @@ fun CoachMarkScreen(
                 .align(Alignment.Center)
         ) {
             drawCircle(
-                color = Color(0xFF1B6B4A),
+                color = SpiceGreen,
                 radius = size.minDimension / 2f,
                 center = Offset(size.width / 2f, size.height / 2f),
             )
@@ -84,7 +86,7 @@ fun CoachMarkScreen(
                             fontWeight = FontWeight.Bold,
                         ),
                         textAlign = TextAlign.Center,
-                        color = Color(0xFF0A3D27),
+                        color = SpiceGreenDark,
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(

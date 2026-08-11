@@ -18,6 +18,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import com.medtroniclabs.microcoaching.ui.theme.SpiceGreen
+import com.medtroniclabs.microcoaching.ui.theme.SpiceGreenDark
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
@@ -43,7 +45,7 @@ fun CircularScoreArc(
     size: Dp = 160.dp,
     strokeWidth: Dp = 16.dp,
     trackColor: Color = Color(0xFFDDDDDD),
-    arcColor: Color = Color(0xFF1B6B4A),
+    arcColor: Color = SpiceGreen,
 ) {
     var animTarget by remember { mutableFloatStateOf(0f) }
     val animatedSweep by animateFloatAsState(
@@ -93,7 +95,7 @@ fun CircularScoreArc(
             text = "$scorePercent%",
             fontSize = 28.sp,
             fontWeight = FontWeight.Bold,
-            color = Color(0xFF0A3D27),
+            color = SpiceGreenDark,
         )
     }
 }

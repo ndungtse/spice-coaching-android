@@ -3,11 +3,8 @@ package com.medtroniclabs.microcoaching.ai.voice.stt
 import java.io.File
 
 /**
- * Lifecycle state of an offline STT model managed by [SttModelManager].
- *
- * v1 supports a single model — the Bengali sherpa-onnx streaming Zipformer
- * (`sherpa-onnx-streaming-zipformer-bn-vosk-2026-02-09`). Future languages
- * will reuse this state machine.
+ * Lifecycle state of an offline STT model managed by [SttModelManager]. Today the only
+ * model is the Bengali sherpa-onnx streaming Zipformer.
  */
 sealed class SttModelState {
 

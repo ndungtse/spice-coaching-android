@@ -19,6 +19,13 @@ interface CachedAssetDao {
     @Query("UPDATE cached_asset SET last_access_at = :now WHERE key_hash = :keyHash")
     suspend fun touch(keyHash: String, now: Long)
 
+    /**
+     * Pin/unpin a cached asset. Pinned rows are excluded from [oldestUnpinned],
+     * so a user-downloaded ("keep offline") video survives LRU eviction.
+     */
+    @Query("UPDATE cached_asset SET is_pinned = :pinned WHERE key_hash = :keyHash")
+    suspend fun setPinned(keyHash: String, pinned: Boolean)
+
     /** Total cached bytes — drives the eviction budget. Null when empty. */
     @Query("SELECT SUM(bytes) FROM cached_asset")
     suspend fun totalBytes(): Long?

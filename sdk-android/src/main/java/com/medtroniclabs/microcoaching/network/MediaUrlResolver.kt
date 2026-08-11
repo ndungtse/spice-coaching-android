@@ -11,7 +11,7 @@ import kotlinx.coroutines.sync.withLock
  * Media nodes arrive in one of two shapes:
  *  - a direct `url` (used as-is), or
  *  - an `object_name` (e.g. `media/<uuid>_<file>.png`) that must be exchanged for a
- *    short-lived presigned GET URL via [CoachingApiService.getMediaPresignedUrls].
+ *    short-lived presigned GET URL via [CoachingApiService.getMediaPresignedUrl].
  *
  * Presigned URLs are cached in-memory by object name until shortly before they
  * expire so a card with the same media repeated (or revisited cards) doesn't
@@ -66,7 +66,7 @@ object MediaUrlResolver {
             return null
         }
 
-        Log.d(TAG, "resolve: requesting presigned URL → GET admin/v3/files/presigned-url?object_name=$key")
+        Log.d(TAG, "resolve: requesting presigned URL → GET admin/files/presigned-url?object_name=$key")
         val resolved = runCatching {
             val response = sdk.apiService.getMediaPresignedUrl(objectName = key)
             if (!response.isSuccessful) {
@@ -97,6 +97,44 @@ object MediaUrlResolver {
         mutex.withLock { cache[key] = resolved }
         Log.d(TAG, "resolve: resolved object_name=$key → ${resolved.url}")
         return resolved.url
+    }
+
+    /**
+     * Resolve a source-document id (an assigned video's canonical id) to its
+     * presigned media URL, read from what the last sync stored — see
+     * [SourceDocumentUrlStore]. Unlike [resolve] this needs no network, so a
+     * previously-synced video still plays offline.
+     *
+     * Returns null when no unexpired URL is cached, which the callers surface as
+     * unavailable-media. The in-memory entry is kept in a namespace distinct from
+     * the `object_name` entries above, and spares repeat playbacks a Room read
+     * rather than a request.
+     */
+    suspend fun resolveSourceDocument(sourceDocumentId: String?): String? {
+        val id = sourceDocumentId?.takeIf { it.isNotBlank() } ?: run {
+            Log.w(TAG, "resolveSourceDocument: blank id — nothing to resolve")
+            return null
+        }
+        val key = "srcdoc:$id"
+
+        mutex.withLock { cache[key] }
+            ?.takeIf { it.expiresAtEpochSec > nowEpochSec() }
+            ?.let {
+                Log.d(TAG, "resolveSourceDocument: cache hit id=$id → ${it.url}")
+                return it.url
+            }
+
+        val ref = SourceDocumentUrlStore.resolve(id) ?: return null
+        // Shave the same safety margin off the stored expiry as the on-demand path
+        // does, so we stop serving a URL slightly before the signature lapses.
+        mutex.withLock {
+            cache[key] = CachedUrl(
+                url = ref.url,
+                expiresAtEpochSec = (ref.expiresAtEpochSec - EXPIRY_SAFETY_MARGIN_SEC).coerceAtLeast(0),
+            )
+        }
+        Log.d(TAG, "resolveSourceDocument: resolved id=$id from sync cache")
+        return ref.url
     }
 
     private fun nowEpochSec(): Long = System.currentTimeMillis() / 1000L

@@ -1,62 +1,96 @@
 package com.medtroniclabs.microcoaching.ui.document
 
+import android.graphics.Bitmap
+import android.graphics.Color as AndroidColor
+import android.graphics.pdf.PdfRenderer
+import android.os.ParcelFileDescriptor
 import android.util.Log
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
-import com.github.barteksc.pdfviewer.PDFView
-import com.github.barteksc.pdfviewer.listener.OnErrorListener
-import com.github.barteksc.pdfviewer.listener.OnLoadCompleteListener
-import com.github.barteksc.pdfviewer.listener.OnPageChangeListener
 import com.medtroniclabs.microcoaching.R
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
- * In-app PDF preview backed by DImuthuUpe/AndroidPdfViewer (`PDFView`).
+ * In-app PDF preview backed by the platform [android.graphics.pdf.PdfRenderer]
+ * (API 21+, zero bundled native libraries).
  *
- * The wrapped library handles the hard parts — vertical scroll, pinch-zoom,
- * double-tap zoom, fling, and page-jump — natively over `pdfium-android`.
+ * Previously backed by the pdfium-based `android-pdf-viewer` fork, which shipped
+ * ~7.7 MB/ABI of native `.so` files (libpdfium, libicuuc, chromium libc++/zlib).
+ * `PdfRenderer` is part of the OS, so removing that dependency drops those libs
+ * from the SDK with no runtime download.
  *
  * The PDF is supplied as an already-downloaded local [file] (resolved by
- * [DocumentPreviewActivity] via the durable `AssetCache`, so it works offline);
- * `PDFView` mmaps it directly. We add:
- *  - Initial page jump from [startPage] via `.defaultPage(startPage - 1)`.
- *  - Floating bottom-right control overlay: page indicator + up / down
- *    page navigation. Pinch + double-tap give the user zoom for free, so
- *    no zoom buttons in v1.
- *  - Failure path: surfaces "Could not open document" + an "Open in browser"
- *    CTA that fires [externalFallback].
+ * [DocumentPreviewActivity] via the durable `AssetCache`, so it works offline).
+ * `PdfRenderer` gives us per-page [Bitmap]s only — scroll, zoom and page-jump are
+ * built here in Compose:
+ *  - Vertical page scroll via [LazyColumn]; each page rendered fit-width, lazily,
+ *    as it enters the viewport (bounded memory — see [PdfDocumentSession]).
+ *  - Pinch + double-tap zoom via a `graphicsLayer` transform over the list.
+ *    (`PdfRenderer` cannot re-rasterise on zoom the way pdfium did, so pages are
+ *    rendered at container width and the transform upscales — mild softening at
+ *    high zoom is the accepted trade-off for dropping the native dependency.)
+ *  - Initial page jump from [startPage] (1-indexed) via the list's initial index.
+ *  - Single-page mode: when [selectedPage] (1-indexed) is supplied, ONLY that page
+ *    is rendered — the rest of the document is neither shown nor reachable (no page
+ *    nav, no scroll target). [startPage] is ignored in this mode; pinch / double-tap
+ *    zoom still applies, and a page taller than the viewport scrolls vertically.
+ *  - Floating bottom-right control overlay: page indicator + up / down nav.
+ *  - Failure path (corrupt / password-protected PDF — `PdfRenderer` is stricter
+ *    than pdfium): "Could not open document" + an "Open in browser" CTA that fires
+ *    [externalFallback].
  */
 @Composable
 internal fun PdfPagerScreen(
@@ -64,104 +98,292 @@ internal fun PdfPagerScreen(
     startPage: Int?,
     externalFallback: () -> Unit,
     modifier: Modifier = Modifier,
+    selectedPage: Int? = null,
 ) {
-    var loadFailed by remember(file) { mutableStateOf(false) }
+    // Open the document off the main thread; PdfRenderer's constructor parses the
+    // file structure and can throw on a corrupt / protected PDF.
+    val openState by produceState<PdfOpenState>(PdfOpenState.Loading, file) {
+        value = withContext(Dispatchers.IO) {
+            runCatching { PdfDocumentSession(file) }
+                .fold(
+                    onSuccess = { PdfOpenState.Ready(it) },
+                    onFailure = {
+                        Log.w(TAG, "PdfRenderer open failed: ${it.message}")
+                        PdfOpenState.Failed
+                    },
+                )
+        }
+    }
+
+    val current = openState
+
+    // Close the renderer + file descriptor when this session leaves composition
+    // (or is replaced because [file] changed). Capture the session for THIS effect
+    // instance — do NOT re-read `openState` inside onDispose: on the Loading→Ready
+    // transition the old (Loading-keyed) effect disposes, and re-reading would see
+    // the new Ready value and close the just-opened session (IllegalStateException:
+    // Already closed on the next getPageCount).
+    DisposableEffect(current) {
+        val session = (current as? PdfOpenState.Ready)?.session
+        onDispose { session?.close() }
+    }
 
     Box(modifier = modifier.fillMaxSize().background(Color(0xFFEEEEEE))) {
-        if (loadFailed) {
-            PdfFailure(externalFallback, Modifier.align(Alignment.Center))
-        } else {
-            PdfBodyWithOverlay(
-                file = file,
-                startPage = startPage,
-                onLoadError = { reason ->
-                    Log.w(TAG, "PDFView load failed: $reason")
-                    loadFailed = true
-                },
-            )
+        when {
+            // "Unavailable" is reserved for a genuine OPEN failure (corrupt /
+            // protected PDF, missing file). Per-page render hiccups degrade to a
+            // blank page slot — they must NOT tear down the whole viewer.
+            current is PdfOpenState.Failed ->
+                PdfFailure(externalFallback, Modifier.align(Alignment.Center))
+
+            current is PdfOpenState.Ready ->
+                if (selectedPage != null) {
+                    PdfSinglePage(session = current.session, selectedPage = selectedPage)
+                } else {
+                    PdfBodyWithOverlay(session = current.session, startPage = startPage)
+                }
+
+            else -> CircularProgressIndicator(Modifier.align(Alignment.Center))
+        }
+    }
+}
+
+/** Async open outcome for the document session. */
+private sealed interface PdfOpenState {
+    object Loading : PdfOpenState
+    object Failed : PdfOpenState
+    data class Ready(val session: PdfDocumentSession) : PdfOpenState
+}
+
+/**
+ * Owns a [PdfRenderer] over a local file. `PdfRenderer` is **not** thread-safe and
+ * permits only one open page at a time, so every access is serialised behind a
+ * single monitor and run on [Dispatchers.IO]. Callers must [close] when done.
+ */
+private class PdfDocumentSession(file: File) {
+    private val pfd = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
+    private val renderer = PdfRenderer(pfd)
+
+    // PdfRenderer is not thread-safe and allows only one open page at a time. A
+    // single monitor serialises every render AND close(), so close() (invoked on
+    // the main thread at dispose — e.g. the user backs out of a large doc mid-
+    // render) can never race a render in flight on IO and crash the native
+    // renderer with a page still open.
+    private val lock = Any()
+    private var closed = false
+
+    val pageCount: Int get() = renderer.pageCount
+
+    /**
+     * Renders page [index] to a white-backed ARGB bitmap [targetWidthPx] wide,
+     * height derived from the page's aspect ratio. Returns null if the session
+     * was already closed. White fill is required — `PdfRenderer` renders onto a
+     * transparent surface, so an un-filled bitmap shows page text over the grey
+     * backdrop.
+     */
+    suspend fun renderPage(index: Int, targetWidthPx: Int): Bitmap? =
+        withContext(Dispatchers.IO) {
+            synchronized(lock) {
+                if (closed) return@withContext null
+                renderer.openPage(index).use { page ->
+                    val width = targetWidthPx.coerceAtLeast(1)
+                    val ratio = page.height.toFloat() / page.width.toFloat()
+                    val height = (width * ratio).toInt().coerceAtLeast(1)
+                    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                    bitmap.eraseColor(AndroidColor.WHITE)
+                    page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                    bitmap
+                }
+            }
+        }
+
+    fun close() {
+        synchronized(lock) {
+            if (closed) return
+            closed = true
+            runCatching { renderer.close() }.onFailure { Log.w(TAG, "renderer.close threw: ${it.message}") }
+            runCatching { pfd.close() }.onFailure { Log.w(TAG, "pfd.close threw: ${it.message}") }
         }
     }
 }
 
 /**
- * Hosts the `PDFView` + the floating page-nav overlay. Page state is hoisted
- * here so both the AndroidView's `OnPageChangeListener` and the overlay
- * buttons can talk to it.
+ * Hosts the scrolling page list + the floating page-nav overlay. Page/zoom state is
+ * hoisted here so the overlay buttons and the gesture handlers can share it.
  */
 @Composable
 private fun PdfBodyWithOverlay(
-    file: File,
+    session: PdfDocumentSession,
     startPage: Int?,
-    onLoadError: (Throwable) -> Unit,
 ) {
-    // `pdfView` is captured into the overlay's `onClick` handlers so the
-    // jump buttons can call `pdfView.jumpTo(...)`. Using a MutableState rather
-    // than `remember { mutableStateOf(...) }` directly so the AndroidView's
-    // factory hook can write into it.
-    val pdfViewRef: MutableState<PDFView?> = remember { mutableStateOf(null) }
-    var currentPage by remember { mutableStateOf(0) }
-    var pageCount by remember { mutableStateOf(0) }
+    val pageCount = session.pageCount
+    val lastIndex = (pageCount - 1).coerceAtLeast(0)
+    val initialIndex = ((startPage ?: 1) - 1).coerceIn(0, lastIndex)
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = initialIndex)
+    val scope = rememberCoroutineScope()
+    val currentPage by remember { derivedStateOf { listState.firstVisibleItemIndex } }
+
+    // Deep-link to the cited page. `initialFirstVisibleItemIndex` sets it up-front, but
+    // pages are declared with placeholder heights and render asynchronously; snapping
+    // once via scrollToItem after the list is laid out reliably lands on the target
+    // (scrollToItem anchors by index, independent of not-yet-resolved page heights).
+    LaunchedEffect(session, initialIndex) {
+        Log.i(TAG, "PDF viewer: startPage=$startPage pageCount=$pageCount initialIndex=$initialIndex")
+        if (initialIndex > 0) listState.scrollToItem(initialIndex)
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        AndroidView(
-            modifier = Modifier.fillMaxSize(),
-            factory = { ctx ->
-                PDFView(ctx, null).also { pdfViewRef.value = it }
-            },
-            update = { view ->
-                // Re-issuing .load() on every recomposition would thrash
-                // pdfium. Only load once — when the file or startPage changes,
-                // the parent re-creates this composable via produceState.
-                if (view.tag == file.absolutePath) return@AndroidView
-                view.tag = file.absolutePath
-
-                view.fromFile(file)
-                    .defaultPage(((startPage ?: 1) - 1).coerceAtLeast(0))
-                    .enableSwipe(true)
-                    .swipeHorizontal(false)
-                    .enableDoubletap(true)
-                    .spacing(8)
-                    .enableAntialiasing(true)
-                    .pageFitPolicy(com.github.barteksc.pdfviewer.util.FitPolicy.WIDTH)
-                    // petretiandrea's listeners are *Kotlin* `interface` (not
-                    // `fun interface`), so SAM lambdas don't compile — anonymous
-                    // object literals are the explicit form.
-                    .onLoad(object : OnLoadCompleteListener {
-                        override fun loadComplete(totalPages: Int) {
-                            pageCount = totalPages
-                            Log.i(TAG, "PDFView loaded — pageCount=$totalPages startPage=$startPage")
-                        }
-                    })
-                    .onPageChange(object : OnPageChangeListener {
-                        override fun onPageChanged(page: Int, pageCount2: Int) {
-                            currentPage = page
-                            pageCount = pageCount2
-                        }
-                    })
-                    .onError(object : OnErrorListener {
-                        override fun onError(t: Throwable?) {
-                            if (t != null) onLoadError(t)
-                        }
-                    })
-                    .load()
-            },
-        )
+        LazyColumn(
+            state = listState,
+            modifier = Modifier
+                .fillMaxSize()
+                .pdfZoom(),
+            contentPadding = PaddingValues(vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            items(pageCount) { index ->
+                PdfPageItem(session = session, index = index)
+            }
+        }
 
         if (pageCount > 0) {
             PageNavOverlay(
                 currentPage = currentPage,
                 pageCount = pageCount,
                 onPrev = {
-                    val target = (currentPage - 1).coerceAtLeast(0)
-                    pdfViewRef.value?.jumpTo(target, true)
+                    scope.launch { listState.animateScrollToItem((currentPage - 1).coerceAtLeast(0)) }
                 },
                 onNext = {
-                    val target = (currentPage + 1).coerceAtMost(pageCount - 1)
-                    pdfViewRef.value?.jumpTo(target, true)
+                    scope.launch { listState.animateScrollToItem((currentPage + 1).coerceAtMost(lastIndex)) }
                 },
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(16.dp),
+            )
+        }
+    }
+}
+
+/**
+ * Single-page mode: renders ONLY [selectedPage] (1-indexed) and nothing else — no
+ * page-nav overlay and no scroll target for the rest of the document, so the picked
+ * page is the only thing the user can see or reach. The full document stays
+ * accessible only via the caller's external ("Open in browser") fallback.
+ *
+ * A single-item [LazyColumn] is reused (rather than a bare Box) so a page taller than
+ * the viewport scrolls vertically and the async render / bounded-memory behaviour of
+ * [PdfPageItem] carries over unchanged.
+ */
+@Composable
+private fun PdfSinglePage(
+    session: PdfDocumentSession,
+    selectedPage: Int,
+) {
+    val lastIndex = (session.pageCount - 1).coerceAtLeast(0)
+    val index = (selectedPage - 1).coerceIn(0, lastIndex)
+
+    LaunchedEffect(session, index) {
+        Log.i(TAG, "PDF viewer (single page): selectedPage=$selectedPage pageCount=${session.pageCount} index=$index")
+    }
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .pdfZoom(),
+        contentPadding = PaddingValues(vertical = 8.dp),
+    ) {
+        if (session.pageCount > 0) {
+            item { PdfPageItem(session = session, index = index) }
+        }
+    }
+}
+
+/**
+ * Interactive zoom/pan shared by the full-document and single-page bodies. At 1× the
+ * list scrolls normally; zoomed, the pan offset shifts the content. Bitmaps are
+ * rasterised at container width, so the transform upscales beyond 1× (accepted
+ * softening — see class KDoc). Double-tap toggles 1×↔2×; pinch spans 1×–3×.
+ */
+@Composable
+private fun Modifier.pdfZoom(): Modifier {
+    var zoom by remember { mutableStateOf(1f) }
+    var offset by remember { mutableStateOf(Offset.Zero) }
+    return this
+        .pointerInput(Unit) {
+            detectTapGestures(
+                onDoubleTap = {
+                    zoom = if (zoom > 1f) 1f else 2f
+                    offset = Offset.Zero
+                },
+            )
+        }
+        .pointerInput(Unit) {
+            detectTransformGestures { _, pan, gestureZoom, _ ->
+                zoom = (zoom * gestureZoom).coerceIn(1f, 3f)
+                offset = if (zoom > 1f) offset + pan else Offset.Zero
+            }
+        }
+        .graphicsLayer {
+            scaleX = zoom
+            scaleY = zoom
+            translationX = offset.x
+            translationY = offset.y
+        }
+}
+
+/**
+ * Renders a single page fit-width. The bitmap is produced lazily once the item's
+ * width is known and dropped when the item leaves the list (LazyColumn disposes
+ * off-screen items), so peak memory is bounded to the visible window rather than
+ * the whole document (source PDFs can run to ~168 pages).
+ */
+@Composable
+private fun PdfPageItem(
+    session: PdfDocumentSession,
+    index: Int,
+) {
+    var widthPx by remember { mutableStateOf(0) }
+
+    // The placeholder (A4 aspect) is rendered UNCONDITIONALLY so every item has a
+    // real height from the very first layout pass. Gating content behind
+    // `widthPx > 0` made all items 0-height until measured, which defeated the
+    // initial page-jump: scrollToItem / initialFirstVisibleItemIndex had no extent
+    // to scroll within, so once heights materialised the list snapped back to page 1.
+    // `widthPx` is needed only to rasterise the bitmap at the right pixel width —
+    // the placeholder's height comes from fillMaxWidth + aspectRatio, which layout
+    // resolves without it.
+    Box(modifier = Modifier.fillMaxWidth().onSizeChanged { widthPx = it.width }) {
+        val bitmap by produceState<Bitmap?>(initialValue = null, index, widthPx) {
+            if (widthPx <= 0) return@produceState
+            // CancellationException (incl. Compose's "coroutine scope left the
+            // composition" when the item recomposes or scrolls off) MUST propagate
+            // — it is normal, not a render failure. Only a genuine render error
+            // degrades this one page to a blank slot.
+            value = try {
+                session.renderPage(index, widthPx)
+            } catch (c: CancellationException) {
+                throw c
+            } catch (e: Exception) {
+                Log.w(TAG, "page $index render failed: ${e.message}")
+                null
+            }
+        }
+
+        val bmp = bitmap
+        if (bmp != null) {
+            val imageBitmap = remember(bmp) { bmp.asImageBitmap() }
+            Image(
+                bitmap = imageBitmap,
+                contentDescription = null,
+                contentScale = ContentScale.FillWidth,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1f / 1.414f)
+                    .background(Color.White),
             )
         }
     }

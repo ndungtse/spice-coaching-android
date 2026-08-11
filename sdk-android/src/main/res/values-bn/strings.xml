@@ -17,6 +17,12 @@
     <string name="chat_show_english">ইংরেজি দেখুন</string>
     <string name="chat_show_bengali">বাংলা দেখুন</string>
     <string name="chat_speak">বলুন</string>
+    <string name="chat_feedback_helpful">সহায়ক উত্তর</string>
+    <string name="chat_feedback_not_helpful">সহায়ক উত্তর নয়</string>
+    <string name="chat_feedback_sheet_title">আরও বলুন</string>
+    <string name="chat_feedback_sheet_prompt">এই উত্তরে কী সমস্যা ছিল? আপনার মতামত আমাদের উন্নতি করতে সাহায্য করে।</string>
+    <string name="chat_feedback_sheet_placeholder">বিস্তারিত লিখুন (ঐচ্ছিক)</string>
+    <string name="chat_feedback_sheet_submit">জমা দিন</string>
     <string name="chat_translate">অনুবাদ করুন</string>
     <string name="chat_response_details">উত্তরের বিস্তারিত</string>
     <string name="chat_risk_label">ঝুঁকি: </string>
@@ -48,8 +54,17 @@
     <string name="chat_header_title">এআই কোচ</string>
     <string name="chat_header_online">অনলাইন</string>
     <string name="chat_header_offline">অফলাইন</string>
+    <!-- Manual on-device/online chat mode chip in the header -->
+    <string name="chat_mode_online">অনলাইন</string>
+    <string name="chat_mode_on_device">ডিভাইসে</string>
+    <string name="chat_mode_online_unavailable">· ইন্টারনেট নেই</string>
+    <string name="chat_mode_tap_to_change">· পরিবর্তন করতে ট্যাপ করুন</string>
+    <string name="chat_mode_switch_to_online">অনলাইন এআই ব্যবহার করুন</string>
+    <string name="chat_mode_switch_to_on_device">ডিভাইসের এআই ব্যবহার করুন</string>
+    <string name="chat_model_unsupported">ডাউনলোড করা এআই মডেলটি এই অ্যাপ সংস্করণে চালানো যাচ্ছে না। অনুগ্রহ করে সহায়তায় যোগাযোগ করুন বা অনলাইন চ্যাটে যান।</string>
+    <string name="chat_model_load_failed_retry">এআই মডেল চালু করা যায়নি: %1$s। আবার চেষ্টা করতে “চ্যাটে যান”-এ ট্যাপ করুন।</string>
     <string name="chat_today">আজ</string>
-    <string name="chat_welcome_message">আজ আমি কীভাবে সাহায্য করতে পারি? আপনি রোগী কাউন্সেলিং, ক্লিনিকাল প্রটোকল, গ্রোথ মনিটরিং, বা SPICE সম্পর্কে আমাকে জিজ্ঞাসা করতে পারেন।</string>
+    <string name="chat_welcome_message">আজ আমি কীভাবে সাহায্য করতে পারি? আপনি রোগী কাউন্সেলিং, ক্লিনিকাল প্রটোকল, বা SPICE সম্পর্কে আমাকে জিজ্ঞাসা করতে পারেন।</string>
     <string name="chat_close_sheet">চ্যাট বন্ধ করুন</string>
     <string name="chat_download_pause">বিরতি দিন</string>
     <string name="chat_download_resume">আবার শুরু করুন</string>
@@ -93,7 +108,7 @@
     <string name="learn_lesson_complete_title">পাঠ সম্পন্ন!</string>
     <string name="learn_lesson_complete_body">আপনি ব্লাড প্রেশার রেফারেল রেফারেন্স টেবিলটি পড়েছেন। আপনি যেকোনো সময় পর্যালোচনার জন্য এখানে ফিরে আসতে পারবেন।</string>
     <string name="learn_back_to_modules">মডিউলে ফিরুন</string>
-    <string name="learn_retry_sync">আবার চেষ্টা করুন</string>
+    <string name="learn_retry_sync">@string/common_retry</string>
 
     <!-- ── Domain chips ───────────────────────────────────────────────────── -->
     <string name="domain_hypertension">উচ্চ রক্তচাপ</string>
@@ -101,6 +116,11 @@
     <string name="domain_maternal_health">মাতৃস্বাস্থ্য</string>
     <string name="domain_emergency">জরুরি</string>
     <string name="domain_spice_digital">SPICE ডিজিটাল</string>
+
+    <!-- ── Content-domain tags (Med-I617) ─────────────────────────────────── -->
+    <string name="content_domain_clinical">ক্লিনিক্যাল</string>
+    <string name="content_domain_digital">ডিজিটাল</string>
+    <string name="content_domain_operational">অপারেশনাল</string>
 
     <!-- ── Status chips ───────────────────────────────────────────────────── -->
     <string name="status_completed">সম্পন্ন</string>
@@ -177,6 +197,7 @@
     <string name="module_detail_minutes">%1$d মিনিট</string>
     <!-- ── W4 course-detail + lesson player ───────────────────────────────── -->
     <string name="module_detail_curriculum">পাঠ্যক্রম</string>
+    <string name="module_detail_assigned_on">অ্যাসাইন করা হয়েছে %1$s</string>
     <string name="module_detail_learning_cards">শেখার কার্ড</string>
     <string name="module_detail_quiz_section">কুইজ</string>
     <string name="module_detail_knowledge_check">জ্ঞান পরীক্ষা</string>
@@ -198,6 +219,16 @@
     <string name="refresher_back">ফিরে যান</string>
     <string name="lesson_player_start_quiz">কুইজ শুরু করুন</string>
     <string name="lesson_player_back_to_modules">আরও মডিউল</string>
+    <string name="lesson_player_finish">সম্পন্ন করুন</string>
+
+    <!-- ── Cards-completion screen (modules with no quiz) ─────────────────── -->
+    <string name="cards_complete_title">মডিউল সম্পন্ন হয়েছে</string>
+    <string name="cards_complete_headline">দারুণ কাজ!</string>
+    <string name="cards_complete_body">আপনি এই মডিউলের সব শেখার কার্ড সফলভাবে পড়েছেন।</string>
+    <string name="cards_complete_whats_next_title">এরপর কী?</string>
+    <string name="cards_complete_whats_next_body">আরও জ্ঞান অর্জনে পরবর্তী মডিউলে যান।</string>
+    <string name="cards_complete_continue">চালিয়ে যান</string>
+    <string name="cards_complete_back_to_modules">মডিউলে ফিরে যান</string>
     <string name="quiz_try_again">আবার চেষ্টা করুন</string>
 
     <!-- ── Voice input + translation ─────────────────────────────────────── -->
@@ -257,6 +288,8 @@
     <string name="card_error_could_not_load">কার্ড লোড করা যায়নি।</string>
     <string name="chat_error_no_response_available">এই মুহূর্তে উত্তর পাওয়া গেল না। আবার চেষ্টা করুন।</string>
     <string name="chat_error_no_response_generated">উত্তর তৈরি হয়নি — আবার চেষ্টা করুন।</string>
+    <!-- Shown when the on-device language pack needed for translation couldn't be loaded/downloaded. -->
+    <string name="chat_error_language_pack">উত্তর দিতে প্রয়োজনীয় ভাষা প্যাকটি লোড করা যায়নি। ইন্টারনেটে সংযুক্ত হয়ে এটি ডাউনলোড সম্পূর্ণ করুন, তারপর আবার চেষ্টা করুন।</string>
 
     <!-- ── Translation pack state chip (Block E) ────────────────────────── -->
     <string name="translation_pack_downloading">অনুবাদ ফাইল ডাউনলোড হচ্ছে…</string>
@@ -291,6 +324,7 @@
     <string name="knowledge_doc_unavailable_offline">ডকুমেন্ট অফলাইনে উপলব্ধ নয়</string>
     <string name="knowledge_view_cd">দেখুন</string>
     <string name="doc_error_storage_full">এই ডকুমেন্ট ডাউনলোড করার জন্য পর্যাপ্ত স্টোরেজ নেই</string>
+    <string name="doc_error_offline_not_downloaded">এই ডকুমেন্টটি এখনও ডাউনলোড করা হয়নি। ডাউনলোড করে দেখতে ইন্টারনেটে সংযুক্ত হন।</string>
     <string name="doc_type_pdf">পিডিএফ</string>
     <string name="doc_type_presentation">স্লাইড</string>
     <string name="doc_type_spreadsheet">স্প্রেডশিট</string>
@@ -299,7 +333,8 @@
     <string name="doc_type_file">ফাইল</string>
     <!-- Host coaching grid tile (CoachingGridTile). -->
     <string name="coaching_tile_label">কোচিং</string>
-    <string name="coaching_tile_badge_cd">%1$d এড়িয়ে যাওয়া রিফ্রেশার</string>
+    <string name="coaching_tile_new_videos">নতুন ভিডিও বরাদ্দ করা হয়েছে</string>
+    <string name="coaching_tile_new_modules">নতুন মডিউল বরাদ্দ করা হয়েছে</string>
     <string name="doc_cannot_preview">এই ফাইলটি অ্যাপের মধ্যে প্রিভিউ করা যাচ্ছে না</string>
     <string name="doc_open_with">অন্য অ্যাপ দিয়ে খুলুন</string>
 
@@ -352,6 +387,11 @@
     <string name="chat_voice_error_network">নেটওয়ার্ক সমস্যা। অনলাইনে থাকলে আবার চেষ্টা করুন।</string>
     <string name="chat_voice_error_engine">এই ডিভাইসে ভয়েস ইনপুট উপলব্ধ নয়।</string>
     <string name="chat_voice_error_generic">ভয়েস ইনপুট ব্যর্থ। আবার চেষ্টা করতে মাইক্রোফোনে ট্যাপ করুন।</string>
+    <string name="chat_voice_error_language">এই ডিভাইসে এই ভাষার জন্য ভয়েস শনাক্তকরণ উপলব্ধ নয়।</string>
+    <string name="chat_voice_error_offline_pack_missing">আপনি অফলাইনে আছেন এবং এই ভাষার ভয়েস প্যাক এখনও ডাউনলোড হয়নি। একবার ইন্টারনেটে সংযুক্ত হোন — অফলাইন ব্যবহারের জন্য এটি স্বয়ংক্রিয়ভাবে ডাউনলোড হবে।</string>
+    <string name="chat_voice_error_busy">ভয়েস শনাক্তকারী ব্যস্ত। একটু পরে আবার মাইক্রোফোনে ট্যাপ করুন।</string>
+    <string name="chat_voice_error_audio">মাইক্রোফোন ব্যবহার করা গেল না। অন্য কিছু এটি ব্যবহার করছে কিনা দেখে আবার চেষ্টা করুন।</string>
+    <string name="chat_voice_error_service">ভয়েস শনাক্তকরণ সেবা এই মুহূর্তে উপলব্ধ নয়। আবার চেষ্টা করুন।</string>
     <string name="chat_voice_backend_on_device">অন-ডিভাইস (অফলাইন)</string>
     <string name="chat_voice_backend_server">সার্ভার (ইন্টারনেট প্রয়োজন)</string>
     <string name="chat_voice_backend_offline_model">অফলাইন ভয়েস মডেল</string>
@@ -366,10 +406,15 @@
     <string name="stt_banner_downloading_preparing">বাংলা ভয়েস মডেল ডাউনলোড প্রস্তুত হচ্ছে…</string>
     <string name="stt_banner_extracting">বাংলা ভয়েস মডেল আনপ্যাক হচ্ছে…</string>
     <string name="stt_banner_failed">ভয়েস মডেল ডাউনলোড ব্যর্থ — পুনরায় চেষ্টা করুন</string>
-    <string name="stt_banner_retry">পুনরায় চেষ্টা</string>
+    <string name="stt_banner_retry">@string/common_retry</string>
     <string name="stt_banner_cancel">বাতিল</string>
 
-    <!-- ── Download item cards on ModelNotReady screen ─────────────────────────── -->
+    <!-- ── Coaching setup screen ───────────────────────────────────────────────── -->
+    <string name="coaching_setup_title">কোচিং সেটআপ</string>
+    <string name="coaching_setup_description">কোচিং অফলাইনে কাজ করতে যা দরকার তা ডাউনলোড হবে। এটি ব্যাকগ্রাউন্ডে চলবে — আপনি অ্যাপ ব্যবহার চালিয়ে যেতে পারেন।</string>
+    <string name="coaching_setup_go_to_chat">চ্যাটে যান</string>
+
+    <!-- ── Download item cards on the coaching setup screen ─────────────────────── -->
     <string name="download_card_ai_title">এআই মডেল</string>
     <string name="download_card_ai_size">~%1$s</string>
     <string name="download_card_voice_title">বাংলা ভয়েস মডেল</string>
@@ -388,8 +433,9 @@
     <string name="download_card_progress_mb">%1$d MB / %2$d MB · %3$d%%</string>
     <string name="download_card_progress_indeterminate">%1$d MB ডাউনলোড হয়েছে</string>
     <string name="download_card_progress_percent">%1$d%%</string>
-    <string name="download_both">দুটোই ডাউনলোড করুন</string>
-    <string name="download_both_hint">এআই মডেল শেষ হওয়ার পর ভয়েস মডেল ডাউনলোড হবে।</string>
+    <string name="download_card_tts_title">পড়ে শোনানোর কণ্ঠ</string>
+    <string name="download_card_tts_hint">উত্তর পড়ে শোনানোর জন্য</string>
+    <string name="download_card_tts_install">ইনস্টল</string>
 
     <!-- ── Model download foreground-service notification ─────────────────────── -->
     <string name="notification_model_download_channel_name">এআই মডেল ডাউনলোড</string>
@@ -399,5 +445,160 @@
     <string name="notification_model_download_progress_indeterminate">%1$d MB ডাউনলোড হয়েছে</string>
 
     <string name="chat_downloading_model_progress_mb">মডেল ডাউনলোড হচ্ছে… (%1$d MB / %2$d MB · %3$d%%)</string>
+
+    <!-- ── Role-aware coaching (SK leaderboard / PO dashboard) ─────────────────── -->
+    <string name="coaching_tab_coaching">কোচিং</string>
+    <string name="coaching_tab_leaderboard">লিডারবোর্ড</string>
+    <string name="coaching_tab_dashboard">ড্যাশবোর্ড</string>
+    <string name="coaching_po_header_title">এক নজরে</string>
+    <string name="coaching_leaderboard_coming_soon">লিডারবোর্ড শীঘ্রই আসছে</string>
+    <string name="coaching_dashboard_coming_soon">ড্যাশবোর্ড শীঘ্রই আসছে</string>
+    <string name="leaderboard_period_all_time">সর্বকালের</string>
+    <string name="leaderboard_period_this_month">এই মাস</string>
+    <string name="leaderboard_period_this_week">এই সপ্তাহ</string>
+    <string name="leaderboard_you">আপনি</string>
+    <string name="leaderboard_group_meta">%1$s · %2$d জন SK</string>
+    <string name="leaderboard_updated">আপডেট %1$s</string>
+    <string name="leaderboard_achievement_leading">আপনি #১! আপনি %1$s-এ এগিয়ে আছেন। চালিয়ে যান!</string>
+    <string name="leaderboard_xp_value">%1$s XP</string>
+    <string name="coaching_streak_banner">%1$d দিনের স্ট্রিক! চালিয়ে যান — আপনি দারুণ করছেন</string>
+
+    <!-- ── Coaching sub-tabs restructure (Training/Refresher/Knowledge/Badges) ─── -->
+    <!-- TODO(bn): translation review -->
+    <string name="coaching_tab_badges">ব্যাজ</string>
+    <string name="coaching_subtab_training">প্রশিক্ষণ</string>
+    <string name="coaching_subtab_refresher">রিফ্রেশার</string>
+    <string name="coaching_subtab_knowledge">জ্ঞান</string>
+    <string name="coaching_section_practice_zone">অনুশীলন এলাকা</string>
+    <string name="coaching_section_learning_library">শিক্ষা লাইব্রেরি</string>
+    <string name="refresher_hero_start_module">মডিউল শুরু করুন</string>
+    <string name="practice_zone_tag_learning">শেখা</string>
+    <string name="badge_new">নতুন</string>
+    <string name="training_videos_more">আরও ভিডিও</string>
+    <string name="training_videos_meta">%1$s · %2$d মিনিট</string>
+    <string name="training_videos_meta_duration">%1$d মিনিট</string>
+    <string name="training_videos_coming_soon">ভিডিও প্লেব্যাক শীঘ্রই আসছে</string>
+    <string name="training_videos_empty">এখনও কোনো প্রশিক্ষণ ভিডিও নেই</string>
+    <string name="training_videos_download">ডাউনলোড</string>
+    <string name="training_videos_remove_download">ডাউনলোড সরান</string>
+    <string name="training_videos_storage_full">এই ভিডিওটি ডাউনলোড করার জন্য পর্যাপ্ত জায়গা নেই।</string>
+    <string name="training_videos_download_failed">এই ভিডিওটি ডাউনলোড করা যায়নি। আবার চেষ্টা করুন।</string>
+    <string name="badges_earned_count">%2$d-এর মধ্যে %1$d অর্জিত</string>
+    <string name="badges_journey_title">আপনার যাত্রা</string>
+    <string name="badges_journey_subtitle">শেখার সময় আপনি যেসব মাইলফলক অর্জন করেন তা ট্র্যাক করুন</string>
+    <string name="badges_journey_see_path">আপনার শেখার পথ দেখুন</string>
+    <string name="badges_milestones_count">%2$d-এর মধ্যে %1$d মাইলফলক</string>
+    <string name="badge_now">এখন</string>
+    <string name="journey_start_lesson">পাঠ শুরু করুন</string>
+    <string name="knowledge_empty_none">এখনও কোনো জ্ঞান ডকুমেন্ট নেই</string>
+
+    <!-- ── PO dashboard ───────────────────────────────────────────────────────── -->
+    <string name="po_showing_data_for">ডেটা দেখানো হচ্ছে</string>
+    <string name="po_stale_notice">@string/common_couldnt_refresh</string>
+    <string name="po_offline_message">@string/common_error_offline</string>
+    <string name="po_error_generic">@string/common_error_generic</string>
+    <string name="po_retry">@string/common_retry</string>
+    <string name="po_date_from">থেকে</string>
+    <string name="po_date_to">পর্যন্ত</string>
+    <string name="common_ok">ঠিক আছে</string>
+    <string name="common_cancel">বাতিল</string>
+    <string name="po_metric_active_now">সাড়াদানকারী SK</string>
+    <string name="po_metric_inactive">সাড়াহীন SK</string>
+    <string name="po_metric_finished_modules">সম্পন্ন মডিউল</string>
+    <string name="po_metric_chatbot_engaged">চ্যাটবট ব্যবহার</string>
+    <string name="po_section_my_sks">আমার SK</string>
+    <string name="po_section_module_completion">মডিউল সম্পূর্ণতা</string>
+    <string name="po_section_top_searched_existing_modules">সর্বাধিক অনুসন্ধানকৃত বিদ্যমান মডিউল</string>
+    <string name="po_section_top_searched_suggested_modules">সর্বাধিক অনুসন্ধানকৃত প্রস্তাবিত মডিউল</string>
+    <!-- Knowledge-document usage -->
+    <string name="po_section_document_usage">নলেজ ডকুমেন্ট ব্যবহার</string>
+    <string name="po_document_total_opens">মোট ওপেন</string>
+    <string name="po_document_unique_documents">ডকুমেন্ট</string>
+    <string name="po_document_unique_readers">পাঠক</string>
+    <string name="po_document_opens_and_readers">%1$d বার ওপেন · %2$d জন পাঠক</string>
+    <string name="po_document_last_opened">সর্বশেষ ওপেন %1$s</string>
+    <string name="po_document_last_opened_by">সর্বশেষ ওপেন %1$s, %2$s দ্বারা</string>
+    <string name="po_document_opens_list">ওপেন তালিকা</string>
+    <string name="po_document_empty_opens">এই সময়ে কোনো ডকুমেন্ট ওপেন করা হয়নি</string>
+    <string name="po_document_reader_with_role">%1$s (%2$s)</string>
+    <string name="po_search_hint_documents">ডকুমেন্ট খুঁজুন…</string>
+    <string name="po_section_refreshers_completed">রিফ্রেশার সম্পন্ন</string>
+    <string name="po_search_hint">SK খুঁজুন…</string>
+    <string name="po_status_active">সাড়াদানকারী</string>
+    <string name="po_status_needs_attention">মনোযোগ প্রয়োজন</string>
+    <string name="po_status_inactive">সাড়াহীন</string>
+    <string name="po_modules_fraction">%1$d/%2$d মডিউল</string>
+    <string name="po_drilldown_active">সাড়াদানকারী SK</string>
+    <string name="po_drilldown_chatbot">চ্যাটবট ব্যবহার</string>
+    <string name="po_drilldown_modules">সম্পন্ন মডিউল</string>
+    <string name="po_drilldown_sk">আমার SK</string>
+    <string name="po_group_active">সাড়াদানকারী (%1$d)</string>
+    <string name="po_group_needs_attention">মনোযোগ প্রয়োজন (%1$d)</string>
+    <string name="po_group_inactive">সাড়াহীন (%1$d)</string>
+    <string name="po_group_using_chatbot">চ্যাটবট ব্যবহারকারী (%1$d)</string>
+    <string name="po_group_not_using_chatbot">চ্যাটবট ব্যবহার করছে না (%1$d)</string>
+    <string name="po_filter_all">সব</string>
+    <string name="po_filter_active">সাড়াদানকারী</string>
+    <string name="po_filter_inactive">সাড়াহীন</string>
+    <string name="po_filter_chatbot">চ্যাটবট</string>
+    <string name="po_queries_count">%1$d প্রশ্ন</string>
+    <string name="po_modules_subtitle">%1$d মডিউল · %2$d SK</string>
+    <string name="po_sk_summary_modules">মডিউল</string>
+    <string name="po_sk_summary_queries">প্রশ্ন</string>
+    <string name="po_sk_summary_streak">স্ট্রিক</string>
+    <string name="po_sk_section_activity">কার্যকলাপ</string>
+    <string name="po_sk_section_top_queries">শীর্ষ প্রশ্ন</string>
+    <string name="po_sk_last_chatbot">শেষ চ্যাটবট ব্যবহার</string>
+    <string name="po_sk_last_module">শেষ মডিউল</string>
+    <string name="po_sk_module_done">সম্পন্ন</string>
+    <string name="po_sk_module_pending">বাকি</string>
+    <string name="po_fraction">%1$d/%2$d</string>
+    <string name="training_empty_no_assigned">এখনও কোনো মডিউল বরাদ্দ করা হয়নি</string>
+
+    <!-- Training requests (CHW) — TODO: verify with translator -->
+    <string name="training_requests_entry_title">প্রশিক্ষণের অনুরোধ</string>
+    <string name="training_requests_entry_subtitle">প্রশিক্ষণের অনুরোধ করুন বা নতুন মডিউলের বিষয় প্রস্তাব করুন</string>
+    <string name="training_requests_entry_view">দেখুন</string>
+    <string name="training_requests_title">প্রশিক্ষণের অনুরোধ</string>
+    <string name="training_requests_empty">এখনও কোনো প্রশিক্ষণের অনুরোধ নেই</string>
+    <string name="training_requests_empty_hint">কোনো মডিউলে প্রশিক্ষণের অনুরোধ করুন বা নতুন বিষয় প্রস্তাব করুন — আপনার অনুরোধ অ্যাডমিনদের নতুন মডিউল পরিকল্পনায় সাহায্য করে।</string>
+    <string name="training_request_new">নতুন অনুরোধ</string>
+    <string name="training_request_submitted_on">অনুরোধ করা হয়েছে %1$s</string>
+    <string name="training_request_form_title">প্রশিক্ষণের অনুরোধ করুন</string>
+    <string name="training_request_form_description">বিদ্যমান কোনো মডিউলে প্রশিক্ষণের অনুরোধ করুন, বা আপনার প্রয়োজনীয় নতুন বিষয় প্রস্তাব করুন। অ্যাডমিনরা নতুন প্রশিক্ষণ মডিউল পরিকল্পনার সময় এই অনুরোধগুলো ব্যবহার করেন।</string>
+    <string name="training_request_requested_by">অনুরোধকারী</string>
+    <string name="training_request_module_label">মডিউল</string>
+    <string name="training_request_module_placeholder">একটি মডিউল নির্বাচন করুন</string>
+    <string name="training_request_picker_title">একটি মডিউল নির্বাচন করুন</string>
+    <string name="training_request_picker_search_hint">মডিউল খুঁজুন</string>
+    <string name="training_request_picker_empty">কোনো মডিউল পাওয়া যায়নি</string>
+    <string name="training_request_picker_suggest_new">নতুন মডিউল প্রস্তাব করুন</string>
+    <string name="training_request_picker_suggest_query">\"%1$s\" নতুন মডিউল হিসেবে প্রস্তাব করুন</string>
+    <string name="training_request_custom_hint">যেমন: গর্ভাবস্থায় ডায়াবেটিস ব্যবস্থাপনা</string>
+    <string name="training_request_custom_supporting">নতুন প্রশিক্ষণ মডিউলের প্রস্তাব হিসেবে পাঠানো হবে</string>
+    <string name="training_request_custom_clear">মডিউল তালিকায় ফিরুন</string>
+    <string name="training_request_reason_label">কারণ</string>
+    <string name="training_request_reason_hint">কেন এই প্রশিক্ষণ প্রয়োজন?</string>
+    <string name="training_request_submit">অনুরোধ পাঠান</string>
+    <string name="training_request_submitted">আপনার প্রশিক্ষণের অনুরোধ পাঠানো হয়েছে।</string>
+    <string name="training_request_error_duplicate">এই মডিউলের জন্য আপনি ইতিমধ্যে একটি অনুরোধ করেছেন।</string>
+    <string name="training_request_error_generic">অনুরোধ পাঠানো যায়নি। আবার চেষ্টা করুন।</string>
+    <string name="training_request_load_error">আপনার প্রশিক্ষণের অনুরোধগুলি লোড করা যায়নি।</string>
+    <string name="training_request_cta">প্রশিক্ষণের অনুরোধ করুন</string>
+
+    <!-- ── Incomplete-module reminder popup (MED-1529 Req 2) ──────────────── -->
+    <string name="reminder_incomplete_title">অসম্পূর্ণ মডিউল</string>
+    <string name="reminder_incomplete_body">আপনার %1$d টি মডিউল সম্পূর্ণ করা বাকি আছে।</string>
+    <string name="reminder_incomplete_ok">ঠিক আছে</string>
+
+    <!-- ── Shared status/error copy (CoachingError taxonomy + StatusView) ──────── -->
+    <string name="common_retry">আবার চেষ্টা করুন</string>
+    <string name="common_error_offline">আপনি অফলাইন আছেন। সংযোগ করে আবার চেষ্টা করুন।</string>
+    <string name="common_error_server">সার্ভারে সমস্যা হচ্ছে। কিছুক্ষণ পর আবার চেষ্টা করুন।</string>
+    <string name="common_error_not_allowed">এটি লোড করা যায়নি। অনুগ্রহ করে আপনার সুপারভাইজারের সাথে যোগাযোগ করুন।</string>
+    <string name="common_error_no_backend">কোনো মডিউল উপলব্ধ নেই। ব্যাকএন্ড কনফিগার করা হয়নি।</string>
+    <string name="common_error_generic">কিছু একটা সমস্যা হয়েছে।</string>
+    <string name="common_couldnt_refresh">রিফ্রেশ করা যায়নি — সংরক্ষিত কনটেন্ট দেখানো হচ্ছে।</string>
+    <string name="coaching_sync_partial_notice">কিছু কনটেন্ট আপডেট করা যায়নি। আবার চেষ্টা করতে নিচে টানুন।</string>
 
 </resources>

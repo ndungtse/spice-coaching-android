@@ -69,6 +69,13 @@ internal class AndroidSpeechRecognizerEngine(
     /** Cache the on-device-pack support per bcp47 code so we don't query every tap. */
     private val onDeviceCache = mutableMapOf<String, Boolean>()
 
+    /**
+     * Languages we've already asked the platform to download an on-device pack
+     * for (API 33+ [SpeechRecognizer.triggerModelDownload]) — once per process
+     * so repeated taps don't spam the Google download queue.
+     */
+    private val packDownloadRequested = mutableSetOf<String>()
+
     // ── Continuous-dictation session state (reset per startListening call) ────
     @Volatile private var userInitiatedStop = false
     @Volatile private var accumulatedText: String = ""
@@ -84,12 +91,26 @@ internal class AndroidSpeechRecognizerEngine(
      */
     @Volatile private var retryWithoutPreferOffline: Boolean = false
 
+    /**
+     * One-shot retry flag for `ERROR_SERVER_DISCONNECTED` — a transient drop of the
+     * recognition service binding that commonly fires on the FIRST tap after a
+     * connectivity change (e.g. offline→online), then succeeds on a fresh
+     * recognizer. We recreate + retry once per session instead of making the CHW
+     * tap again. Reset on every fresh session.
+     */
+    @Volatile private var retriedAfterDisconnect: Boolean = false
+
     override fun isAvailable(): Boolean = SpeechRecognizer.isRecognitionAvailable(appContext)
 
     override fun startListening(listener: VoiceInputController.TranscriptionListener) {
         if (!isAvailable()) {
             Log.w(TAG, "startListening: SpeechRecognizer.isRecognitionAvailable=false — aborting")
-            listener.onError(localized(R.string.chat_voice_error_engine))
+            listener.onError(
+                withDebugDetail(
+                    localized(R.string.chat_voice_error_engine),
+                    "STT unavailable: SpeechRecognizer.isRecognitionAvailable=false",
+                ),
+            )
             return
         }
         runOnMain {
@@ -99,6 +120,7 @@ internal class AndroidSpeechRecognizerEngine(
             sessionStartMs = SystemClock.elapsedRealtime()
             restartCount = 0
             retryWithoutPreferOffline = false
+            retriedAfterDisconnect = false
 
             // Recreate the SpeechRecognizer on every session. Reusing a cached
             // instance is supported in theory but on low-end devices the
@@ -115,12 +137,19 @@ internal class AndroidSpeechRecognizerEngine(
             val sdkLang = currentSdkLanguage()
             val language = sdkLang.bcp47
             val cached = onDeviceCache[language]
-            val intent = buildIntent(language, preferOffline = cached == true)
+            // When offline, force the on-device pack even before the async support
+            // probe has cached a result. Otherwise the FIRST offline tap (cached ==
+            // null → preferOffline=false) builds a cloud-capable intent that fails
+            // with ERROR_NETWORK, and only the SECOND tap (probe cached true) works.
+            // If no on-device pack is actually installed, the LANGUAGE_UNAVAILABLE
+            // recovery below drops the hint — so this is safe either way.
+            val online = isOnline()
+            val intent = buildIntent(language, preferOffline = cached == true || !online)
             lastIntent = intent
 
             Log.i(
                 TAG,
-                "startListening: sdkLang=$sdkLang bcp47=$language " +
+                "startListening: sdkLang=$sdkLang bcp47=$language online=$online " +
                     "onDeviceCache[$language]=$cached " +
                     "preferOffline=${intent.getBooleanExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, false)} " +
                     "apiLevel=${Build.VERSION.SDK_INT}",
@@ -129,6 +158,12 @@ internal class AndroidSpeechRecognizerEngine(
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && cached == null) {
                 Log.d(TAG, "startListening: queueing async probeOnDeviceSupport for $language")
                 probeOnDeviceSupport(language)
+            }
+            // Pack known-missing and we're online now (e.g. the first probe ran
+            // while offline, so its download trigger was skipped) — make sure a
+            // platform pack download is queued. Deduped per process; no-op < API 33.
+            if (cached == false && online) {
+                maybeTriggerPlatformPackDownload(language)
             }
 
             runCatching { sr.startListening(intent) }
@@ -140,7 +175,16 @@ internal class AndroidSpeechRecognizerEngine(
                     Log.w(TAG, "startListening threw: ${it.message}", it)
                     isListening.set(false)
                     currentListener = null
-                    listener.onError(localized(R.string.chat_voice_error_generic))
+                    // Couldn't even dispatch to the cloud recognizer — treat as
+                    // recoverable so the orchestrator can fall back to offline.
+                    surfaceError(
+                        listener,
+                        withDebugDetail(
+                            localized(R.string.chat_voice_error_generic),
+                            "STT start failed: ${it.javaClass.simpleName}: ${it.message}",
+                        ),
+                        recoverableViaOffline = true,
+                    )
                 }
         }
     }
@@ -177,6 +221,8 @@ internal class AndroidSpeechRecognizerEngine(
         supportExecutor.shutdownNow()
     }
 
+    override fun release() = destroy()
+
     /**
      * Returns `true` if the current SDK language has an on-device pack installed.
      * `null` while the async check is still pending. API < 33: always `null`.
@@ -192,6 +238,12 @@ internal class AndroidSpeechRecognizerEngine(
                 RecognizerIntent.LANGUAGE_MODEL_FREE_FORM,
             )
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, language)
+            // Belt-and-suspenders: some Google recognizer builds ignore
+            // EXTRA_LANGUAGE and recognise in the *device's* default speech
+            // language (often Bengali on these handsets), so an English app's
+            // mic returns Bengali. Setting EXTRA_LANGUAGE_PREFERENCE too pins the
+            // recognition language to the SDK language across those builds.
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, language)
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
             // Loosen the silence timeouts so brief pauses inside a sentence
@@ -232,35 +284,110 @@ internal class AndroidSpeechRecognizerEngine(
                 supportExecutor,
                 object : RecognitionSupportCallback {
                     override fun onSupportResult(support: RecognitionSupport) {
-                        val installedLowered = support.installedOnDeviceLanguages.map { it.lowercase() }
                         val lang2 = language.take(2).lowercase()
-                        val installed = installedLowered.any { it.startsWith(lang2) }
+                        fun List<String>.hasLang() = any { it.lowercase().startsWith(lang2) }
+                        val installed = support.installedOnDeviceLanguages.hasLang()
+                        val downloadable = support.supportedOnDeviceLanguages.hasLang()
+                        val pending = support.pendingOnDeviceLanguages.hasLang()
                         onDeviceCache[language] = installed
                         Log.i(
                             TAG,
-                            "probeOnDeviceSupport[$language]: installedOnDeviceLanguages=" +
-                                "${support.installedOnDeviceLanguages} → matched=$installed",
+                            "probeOnDeviceSupport[$language]: installed=" +
+                                "${support.installedOnDeviceLanguages} downloadable=" +
+                                "${support.supportedOnDeviceLanguages} pending=" +
+                                "${support.pendingOnDeviceLanguages} → matched=$installed",
                         )
+                        // The pack isn't installed but the platform CAN download it —
+                        // ask it to, so offline dictation works from the next session
+                        // without the user visiting Google-app settings.
+                        if (!installed && !pending && downloadable) {
+                            maybeTriggerPlatformPackDownload(language)
+                        }
                     }
 
                     override fun onError(error: Int) {
                         onDeviceCache[language] = false
-                        Log.w(TAG, "probeOnDeviceSupport[$language] error=$error (${errorName(error)})")
+                        Log.w(TAG, "probeOnDeviceSupport[$language] error=$error (${SpeechRecognizerErrorMapper.errorName(error)})")
                     }
                 },
             )
         }.onFailure { Log.w(TAG, "checkRecognitionSupport failed for $language: ${it.message}") }
     }
 
+    /**
+     * Ask the platform to download its on-device speech pack for [language]
+     * (API 33+ [SpeechRecognizer.triggerModelDownload]). This is the missing
+     * half of "make sure the language is downloaded before going offline": the
+     * SDK manages its own sherpa Bengali model, but Google's platform packs were
+     * never requested — only probed. Fire-and-forget (progress callbacks exist
+     * only on API 34+); once per language per process, online only (the download
+     * itself needs network). If it lands, the next offline tap recognises
+     * on-device instead of failing with LANGUAGE_UNAVAILABLE.
+     */
+    private fun maybeTriggerPlatformPackDownload(language: String) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        if (!isOnline()) return
+        runOnMain {
+            if (language in packDownloadRequested) return@runOnMain
+            val sr = recognizer ?: return@runOnMain
+            packDownloadRequested += language
+            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE, language)
+                putExtra(
+                    RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                    RecognizerIntent.LANGUAGE_MODEL_FREE_FORM,
+                )
+            }
+            runCatching { sr.triggerModelDownload(intent) }
+                .onSuccess { Log.i(TAG, "triggerModelDownload($language) dispatched — platform pack queued") }
+                .onFailure {
+                    // Allow a later retry (e.g. next app open) if dispatch itself failed.
+                    packDownloadRequested -= language
+                    Log.w(TAG, "triggerModelDownload($language) failed: ${it.message}")
+                }
+        }
+    }
+
     private fun currentSdkLanguage(): Language = runCatching {
         MicroCoachingSDK.getInstance().language
     }.getOrDefault(Language.ENGLISH)
+
+    /** Best-effort connectivity snapshot; assumes online if the SDK isn't reachable. */
+    private fun isOnline(): Boolean = runCatching {
+        MicroCoachingSDK.getInstance().isNetworkAvailable()
+    }.getOrDefault(true)
 
     private fun localized(resId: Int): String {
         val sdkLang = currentSdkLanguage()
         val ctx = SdkLocaleHelper.wrap(appContext, sdkLang)
         return ctx.getString(resId)
     }
+
+    /**
+     * Surface an error to [listener], passing the [recoverableViaOffline] hint when
+     * the listener is an [SttErrorListener] (the orchestrator's wrapper). Plain
+     * public listeners just get the 1-arg [VoiceInputController.TranscriptionListener.onError].
+     */
+    private fun surfaceError(
+        listener: VoiceInputController.TranscriptionListener?,
+        message: String,
+        recoverableViaOffline: Boolean,
+    ) {
+        when (listener) {
+            is SttErrorListener -> listener.onError(message, recoverableViaOffline)
+            else -> listener?.onError(message)
+        }
+    }
+
+    /**
+     * TEMPORARY (QA field diagnostics): appends the raw STT error [detail] below
+     * the localized [message] so a field screenshot reveals the true cause on
+     * devices we can't debug directly. The localized message stays the primary
+     * line; the detail is a small technical addendum. Set [DEBUG_STT_ERRORS] to
+     * false to remove the addendum once the field issue is understood.
+     */
+    private fun withDebugDetail(message: String, detail: String): String =
+        if (DEBUG_STT_ERRORS) "$message\n\n$detail" else message
 
     private fun runOnMain(block: () -> Unit) {
         if (Looper.myLooper() == Looper.getMainLooper()) block()
@@ -376,7 +503,7 @@ internal class AndroidSpeechRecognizerEngine(
             val sessionMs = SystemClock.elapsedRealtime() - sessionStartMs
             Log.w(
                 TAG,
-                "SpeechRecognizer.onError code=$error (${errorName(error)}) " +
+                "SpeechRecognizer.onError code=$error (${SpeechRecognizerErrorMapper.errorName(error)}) " +
                     "sessionMs=$sessionMs restarts=$restartCount " +
                     "userInitiatedStop=$userInitiatedStop",
             )
@@ -385,7 +512,7 @@ internal class AndroidSpeechRecognizerEngine(
             // clear the cache entry so future taps don't repeat the bad request,
             // and one-shot retry without EXTRA_PREFER_OFFLINE so the cloud
             // recognizer gets a chance.
-            if ((error == LANGUAGE_UNAVAILABLE || error == LANGUAGE_NOT_SUPPORTED) &&
+            if (SpeechRecognizerErrorMapper.isLanguageError(error) &&
                 !retryWithoutPreferOffline &&
                 !userInitiatedStop
             ) {
@@ -393,7 +520,7 @@ internal class AndroidSpeechRecognizerEngine(
                 val wasOffline = lastIntent?.getBooleanExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, false) == true
                 Log.i(
                     TAG,
-                    "Recovery: ${errorName(error)} for $lang — clearing onDeviceCache[$lang] " +
+                    "Recovery: ${SpeechRecognizerErrorMapper.errorName(error)} for $lang — clearing onDeviceCache[$lang] " +
                         "(was=${onDeviceCache[lang]}); retryWithoutPreferOffline=$wasOffline",
                 )
                 onDeviceCache[lang] = false
@@ -412,11 +539,26 @@ internal class AndroidSpeechRecognizerEngine(
             if (error == SpeechRecognizer.ERROR_CLIENT ||
                 error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY ||
                 error == SpeechRecognizer.ERROR_AUDIO ||
-                error == SERVER_DISCONNECTED ||
-                error == TOO_MANY_REQUESTS
+                error == SpeechRecognizerErrorMapper.SERVER_DISCONNECTED ||
+                error == SpeechRecognizerErrorMapper.TOO_MANY_REQUESTS
             ) {
                 runCatching { recognizer?.destroy() }
                 recognizer = null
+            }
+
+            // ERROR_SERVER_DISCONNECTED is a transient drop of the recognition
+            // service binding — it commonly fires on the FIRST tap after a
+            // connectivity change (offline→online) even on a freshly-created
+            // recognizer, then succeeds on the next attempt. The recognizer was
+            // just destroyed above; recreate it and retry the session ONCE rather
+            // than surfacing chat_voice_error_generic and forcing the CHW to tap
+            // again. One-shot per session (guarded by [retriedAfterDisconnect]) so
+            // a persistent disconnect still surfaces the error instead of looping.
+            if (error == SpeechRecognizerErrorMapper.SERVER_DISCONNECTED && !retriedAfterDisconnect && !userInitiatedStop) {
+                retriedAfterDisconnect = true
+                Log.i(TAG, "ERROR_SERVER_DISCONNECTED — recreating recognizer and retrying once")
+                maybeRestart()
+                return
             }
 
             // Silence-class errors during continuous dictation are NOT fatal —
@@ -430,67 +572,61 @@ internal class AndroidSpeechRecognizerEngine(
                 return
             }
 
-            // Anything else is session-fatal. Surface a localised string and clear.
-            val resId = when (error) {
-                SpeechRecognizer.ERROR_NO_MATCH,
-                SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> R.string.chat_voice_error_no_match
-                SpeechRecognizer.ERROR_NETWORK,
-                SpeechRecognizer.ERROR_NETWORK_TIMEOUT,
-                SpeechRecognizer.ERROR_SERVER -> R.string.chat_voice_error_network
-                SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS ->
-                    R.string.chat_voice_permission_denied
-                SpeechRecognizer.ERROR_RECOGNIZER_BUSY,
-                SpeechRecognizer.ERROR_AUDIO,
-                SpeechRecognizer.ERROR_CLIENT -> R.string.chat_voice_error_generic
-                else -> R.string.chat_voice_error_generic
+            // A terminal language error means the platform has no usable engine for
+            // this locale right now. Two very different causes:
+            //  - OFFLINE: the on-device pack simply isn't installed → tell the CHW
+            //    the truthful, actionable thing (connect to internet; the pack
+            //    auto-downloads), and queue the pack download for when network is
+            //    back (no-op while offline; the probe path retries when online).
+            //  - ONLINE: the recognizer genuinely doesn't support the locale
+            //    (old/missing Google app, OEM recognizer) → say that. Still queue
+            //    the pack download in case a newer Google app can fetch it.
+            val isLanguageError = SpeechRecognizerErrorMapper.isLanguageError(error)
+            if (isLanguageError) {
+                maybeTriggerPlatformPackDownload(currentSdkLanguage().bcp47)
             }
+
+            // Anything else is session-fatal. Map to the most specific true cause
+            // we can — the generic "Voice input failed" is the LAST resort, only
+            // for codes we can't attribute.
+            val resId = SpeechRecognizerErrorMapper.resIdFor(error, isLanguageError) { isOnline() }
+            // Network-class failures (no network / timeout / server / the generic
+            // client error the cloud recognizer throws when it can't reach the
+            // backend) are recoverable on the offline engine — flag them so the
+            // orchestrator can retry offline instead of surfacing the error. This is
+            // the authoritative "we're actually offline" signal that the racy
+            // connectivity check missed on the first tap.
+            // Language errors are recoverable too: the sherpa engine has its own
+            // Bengali model and doesn't care that the PLATFORM lacks the locale —
+            // for Bengali with the model on disk this turns "language unavailable"
+            // into a working dictation. (English has no offline engine; the
+            // orchestrator's offlineViable() check keeps it surfacing the message.)
+            val recoverableViaOffline = SpeechRecognizerErrorMapper.recoverableViaOffline(error)
             // If we accumulated transcript before the error, prefer surfacing
             // it as a final result rather than throwing away the user's input.
             if (accumulatedText.isNotBlank() && userInitiatedStop) {
                 finaliseAccumulated()
             } else {
-                currentListener?.onError(localized(resId))
+                surfaceError(
+                    currentListener,
+                    withDebugDetail(localized(resId), "STT error: ${SpeechRecognizerErrorMapper.errorName(error)} (code $error)"),
+                    recoverableViaOffline,
+                )
                 currentListener = null
             }
         }
     }
 
-    /**
-     * Stringify a SpeechRecognizer error code for logging. Covers codes added
-     * in API 31+ that aren't yet exposed as compile-time constants for
-     * `minSdk` 23 builds.
-     */
-    private fun errorName(code: Int): String = when (code) {
-        SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "NETWORK_TIMEOUT"
-        SpeechRecognizer.ERROR_NETWORK -> "NETWORK"
-        SpeechRecognizer.ERROR_AUDIO -> "AUDIO"
-        SpeechRecognizer.ERROR_SERVER -> "SERVER"
-        SpeechRecognizer.ERROR_CLIENT -> "CLIENT"
-        SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "SPEECH_TIMEOUT"
-        SpeechRecognizer.ERROR_NO_MATCH -> "NO_MATCH"
-        SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "RECOGNIZER_BUSY"
-        SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "INSUFFICIENT_PERMISSIONS"
-        TOO_MANY_REQUESTS -> "TOO_MANY_REQUESTS"
-        SERVER_DISCONNECTED -> "SERVER_DISCONNECTED"
-        LANGUAGE_NOT_SUPPORTED -> "LANGUAGE_NOT_SUPPORTED"
-        LANGUAGE_UNAVAILABLE -> "LANGUAGE_UNAVAILABLE"
-        CANNOT_CHECK_SUPPORT -> "CANNOT_CHECK_SUPPORT"
-        CANNOT_LISTEN_TO_DOWNLOAD_EVENTS -> "CANNOT_LISTEN_TO_DOWNLOAD_EVENTS"
-        else -> "UNKNOWN"
-    }
-
     companion object {
         private const val TAG = "AndroidSpeechRecognizer"
 
-        // SpeechRecognizer error codes added in API 31+ / API 33. Hard-coded as
-        // ints so the engine compiles on minSdk 23 (the constants only exist on
-        // newer platforms but the runtime can still surface the codes).
-        private const val TOO_MANY_REQUESTS = 9
-        private const val SERVER_DISCONNECTED = 10
-        private const val LANGUAGE_NOT_SUPPORTED = 12
-        private const val LANGUAGE_UNAVAILABLE = 13
-        private const val CANNOT_CHECK_SUPPORT = 14
-        private const val CANNOT_LISTEN_TO_DOWNLOAD_EVENTS = 15
+        /**
+         * TEMPORARY: when true, the raw STT error (code name + number, or thrown
+         * exception) is appended below the user-facing message so QA can screenshot
+         * the true cause on devices we can't debug locally. Flip to false to hide
+         * the technical addendum once the field issue is diagnosed.
+         */
+        private const val DEBUG_STT_ERRORS = true
 
         /** Hard cap on the wall-clock duration of a single continuous dictation session. */
         private const val MAX_SESSION_MS = 90_000L

@@ -3,6 +3,7 @@ package com.medtroniclabs.microcoaching.ui.learn.modules.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -28,6 +29,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.ui.document.DocumentFileType
@@ -81,23 +83,7 @@ fun KnowledgeCard(
                 fallback = {
                     // Gradient background + centred file-type icon — shown when
                     // the thumbnail is null, still loading, or fails to load.
-                    Box(
-                        modifier = Modifier
-                            .matchParentSize()
-                            .background(
-                                Brush.linearGradient(
-                                    colors = listOf(SpiceBlueContainer, Color(0xFFFBEFEA)),
-                                ),
-                            ),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            imageVector = fileType.icon,
-                            contentDescription = null,
-                            tint = SpiceBlueDark.copy(alpha = 0.5f),
-                            modifier = Modifier.size(36.dp),
-                        )
-                    }
+                    KnowledgeThumbnailFallback(fileType)
                 },
             )
             Column(
@@ -133,5 +119,39 @@ fun KnowledgeCard(
                 }
             }
         }
+    }
+}
+
+/**
+ * Shared thumbnail fallback for Knowledge document surfaces: gradient background
+ * with a centred, half-opacity file-type icon. Used by [KnowledgeCard] and the
+ * KNOWLEDGE variant of [ModuleTile] so a document without a thumbnail looks the
+ * same in the home row and the "See all" grid.
+ *
+ * A [BoxScope] extension because it fills the parent [ModuleThumbnail] box via
+ * `matchParentSize`. [iconSize] scales the icon to the host tile (36.dp for the
+ * card's 96.dp header, smaller for the 56.dp list-tile thumbnail).
+ */
+@Composable
+internal fun BoxScope.KnowledgeThumbnailFallback(
+    fileType: DocumentFileType,
+    iconSize: Dp = 36.dp,
+) {
+    Box(
+        modifier = Modifier
+            .matchParentSize()
+            .background(
+                Brush.linearGradient(
+                    colors = listOf(SpiceBlueContainer, Color(0xFFFBEFEA)),
+                ),
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = fileType.icon,
+            contentDescription = null,
+            tint = SpiceBlueDark.copy(alpha = 0.5f),
+            modifier = Modifier.size(iconSize),
+        )
     }
 }

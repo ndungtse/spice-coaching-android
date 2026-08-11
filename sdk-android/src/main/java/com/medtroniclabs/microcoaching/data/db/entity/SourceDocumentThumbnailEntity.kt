@@ -5,16 +5,13 @@ import androidx.room.Entity
 import androidx.room.PrimaryKey
 
 /**
- * Persists presigned thumbnail URLs for source documents (PDFs, slides, etc.)
- * referenced by modules.
+ * Holds presigned thumbnail URLs for source documents, one row per
+ * `source_document_id`.
  *
- * Mirrors how [ModuleEntity] stores module thumbnails, but as a separate table
- * because source-document IDs are stored in `module_cache.source_documents_json`
- * (not as individual rows). One row per unique `source_document_id`.
- *
- * [thumbnailUrl] is null until fetched from `/sync/source-documents/presigned-thumbnails`.
- * [thumbnailExpiresAt] is the absolute epoch-second expiry; rows with expired or
- * missing URLs are re-fetched on the next inbound sync pass.
+ * Nothing reads or writes it: the source-document catalogue returns
+ * `thumbnail_presigned_url` inline, so thumbnails are stored alongside the
+ * documents themselves in `published_source_document` and `assigned_video`. The
+ * entity stays declared so the table survives without a migration.
  */
 @Entity(tableName = "source_document_thumbnail")
 data class SourceDocumentThumbnailEntity(

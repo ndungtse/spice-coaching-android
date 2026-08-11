@@ -39,7 +39,7 @@ object RetrievalHintOverlay {
     private const val TAG = "RetrievalHintOverlay"
     private const val OVERLAY_DIR = "retrieval/overlays"
 
-    private val json = Json { ignoreUnknownKeys = true; isLenient = true }
+    private val json = com.medtroniclabs.microcoaching.util.LenientJson
 
     @Serializable
     internal data class OverlayFile(

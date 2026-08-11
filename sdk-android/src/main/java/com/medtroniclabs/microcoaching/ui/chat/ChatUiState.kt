@@ -18,8 +18,15 @@ sealed class ChatUiState {
     object Loading : ChatUiState()
 
     /**
-     * No model file found on device.
-     * [ChatScreen] should show a download prompt.
+     * On-device setup is still needed before chat can open. [ChatScreen] shows
+     * the [com.medtroniclabs.microcoaching.ui.screens.components.CoachingSetupContent]
+     * surface — the AI model card (capable devices), the Bengali voice pack card
+     * (auto-downloading), and the TTS read-aloud card when its pack is missing.
+     *
+     * Reached both on capable devices whose Gemma model isn't on disk yet AND on
+     * low-end devices (which never download the AI model but may still need the
+     * voice/TTS packs). The old behavior — low-end short-circuiting straight to
+     * [Ready] and the model auto-jumping into chat — is replaced by this gate.
      *
      * @param downloadProgress -1 when no download has started; 0–100 when in
      *   flight or paused. Held across pause/resume so the UI keeps showing the
@@ -32,13 +39,30 @@ sealed class ChatUiState {
      * @param downloadTotalBytes total expected bytes. 0 when the server hasn't reported
      *   Content-Length (chunked transfer). UI should fall back to a percent-only display
      *   when this is 0.
+     * @param aiRequired false on low-end devices — they run in retrieval-only mode, so
+     *   no AI model card is shown and no AI download is attempted. The setup screen then
+     *   only surfaces the voice/TTS packs.
+     * @param aiReady true once the Gemma model has finished downloading and is present on
+     *   disk. Drives the AI card's "Done" state and enables the manual "Go to chat" button
+     *   (the automatic transition into chat waits for the voice pack too — see
+     *   [ChatViewModel.maybeAutoEnterChat]).
+     * @param aiSizeBytes real download size for the selected model, resolved from the
+     *   server. Null until that lands (or when the server is unreachable), in which
+     *   case the card falls back to the catalog's approximate constant.
+     * @param loadError why the engine failed to load a model that IS on disk. Set only
+     *   on the bounce-back path — the user tapped "Go to chat", the load failed, and
+     *   they were returned here; without it the screen looks inert.
      */
-    data class ModelNotReady(
+    data class SetupRequired(
         val downloadProgress: Int = -1,
         val isDownloading: Boolean = false,
         val isPaused: Boolean = false,
         val downloadBytesDownloaded: Long = 0L,
         val downloadTotalBytes: Long = 0L,
+        val aiRequired: Boolean = true,
+        val aiReady: Boolean = false,
+        val aiSizeBytes: Long? = null,
+        val loadError: String? = null,
     ) : ChatUiState()
 
     /**
@@ -48,6 +72,16 @@ sealed class ChatUiState {
      * @param streamingText Partial text being accumulated during streaming.
      * @param error Non-null if the last inference failed.
      * @param suggestedQuestions Quick-start chips from morning card cache.
+     * @param feedback Per-message thumbs state, keyed by [ChatMessage.id]:
+     *   `true` = thumbs-up, `false` = thumbs-down, absent = no rating. In-memory
+     *   only — not persisted, so it resets on history reload. Thumbs-up
+     *   emits a `chat_feedback_positive` event immediately; thumbs-down emits
+     *   `chat_feedback_negative` when the detail sheet closes (so the note rides
+     *   along).
+     * @param feedbackNotes Free-text detail a CHW typed in the thumbs-down sheet,
+     *   keyed by [ChatMessage.id]. Held in memory (resets on history reload) AND
+     *   sent to the backend inside the `chat_feedback_negative` event's
+     *   `payload_json.feedback` (Events Modelling 1.5).
      */
     data class Ready(
         val messages: List<ChatMessage> = emptyList(),
@@ -60,6 +94,8 @@ sealed class ChatUiState {
         val modelDownloadBytesDownloaded: Long = 0L,
         val modelDownloadTotalBytes: Long = 0L,
         val suggestedQuestions: List<SuggestedQuestion> = emptyList(),
+        val feedback: Map<Long, Boolean> = emptyMap(),
+        val feedbackNotes: Map<Long, String> = emptyMap(),
     ) : ChatUiState()
 
     /** Unrecoverable error (e.g. model load failed, DB error). */

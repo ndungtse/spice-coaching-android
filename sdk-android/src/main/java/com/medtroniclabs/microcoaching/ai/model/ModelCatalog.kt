@@ -3,31 +3,27 @@ package com.medtroniclabs.microcoaching.ai.model
 /**
  * On-device engine a [ModelVariant] runs on.
  *
- * Only [MEDIAPIPE] is runnable today — it's the single inference engine bundled
- * in the SDK ( `libllm_inference_engine_jni.so`, see `docs/apk-size-analysis.md`).
- * [LITERT_LM] variants are *listed* so the catalog can describe them, but they
- * can't load until the LiteRT-LM runtime is re-added (see
- * `docs/small-llm-allowlist-plan.md`). [LLAMA_CPP] is not planned.
+ * Only [MEDIAPIPE] is runnable today — it's the single inference engine bundled in the
+ * SDK (`libllm_inference_engine_jni.so`, see `docs/apk-size-analysis.md`). [LITERT_LM]
+ * variants are listed for description only and can't load until the LiteRT-LM runtime is
+ * re-added. [LLAMA_CPP] is not planned.
  */
 enum class ModelRuntime { MEDIAPIPE, LITERT_LM, LLAMA_CPP }
 
 /**
- * One downloadable on-device model. The catalog is the **single source of truth**
- * for a model's URL, on-disk filename, expected size, runtime, and RAM class —
- * replacing the scattered `ModelProvider.HF_TASK_MODEL_URL` / `*_FILENAME`
- * constants and the global 750 MB size floor that were hard-wired to the 1B.
+ * One downloadable on-device model. The catalog is the **single source of truth** for a
+ * model's URL, on-disk filename, expected size, runtime, and RAM class.
  *
  * @property id              Stable key used by [MicroCoachingConfig.selectedModelId].
- * @property fileName        On-disk name — drives file resolution (so multiple
- *                           variants can coexist for A/B testing without the old
- *                           "first `.task` on disk" ambiguity).
+ * @property fileName        On-disk name — drives file resolution, so variants can
+ *                           coexist and resolution stays deterministic (matched by
+ *                           exact name, not "first `.task` on disk").
  * @property sizeInBytes     Approximate download size. Drives the per-variant
- *                           "is this download complete?" floor. **Verify against
- *                           the HF repo before trusting** — see the allowlist plan.
- * @property minDeviceMemoryGb RAM class for this variant. Stored now but NOT yet
- *                           enforced below the global 3 GB gate (the existing
- *                           [com.medtroniclabs.microcoaching.domain.system.DeviceCapability]
- *                           cut-off still applies). Lowering the gate is future work.
+ *                           "is this download complete?" floor. Verify against the HF
+ *                           repo before trusting the value.
+ * @property minDeviceMemoryGb RAM class for this variant. Stored but NOT yet enforced
+ *                           below the global 3 GB gate
+ *                           ([com.medtroniclabs.microcoaching.domain.system.DeviceCapability]).
  * @property maxTokens/temperature/topK  Optional per-model sampling overrides;
  *                           when null the [MicroCoachingConfig] defaults apply.
  */
@@ -109,7 +105,7 @@ object ModelCatalog {
             displayName = "Gemma 3 1B-IT (INT4, MediaPipe)",
             fileName = "gemma3-1b-it-int4.task",
             downloadUrl = ModelProvider.HF_TASK_MODEL_URL,
-            sizeInBytes = 555_000_000L,           // ~the previous default model
+            sizeInBytes = 555_000_000L,           // ~529 MiB — verify against repo
             runtime = ModelRuntime.MEDIAPIPE,
             minDeviceMemoryGb = 3,
             requiresAccessToken = true,           // litert-community/Gemma3-1B-IT is gated

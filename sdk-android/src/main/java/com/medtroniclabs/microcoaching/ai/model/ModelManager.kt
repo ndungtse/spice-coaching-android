@@ -17,6 +17,7 @@ import com.medtroniclabs.microcoaching.ModelDownloadStrategy
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -25,21 +26,20 @@ import java.io.File
 import java.security.MessageDigest
 
 /**
- * Manages the on-device model lifecycle: detection, download scheduling, and integrity verification.
+ * Manages the on-device model lifecycle: detection, download scheduling, and state.
  *
  * Download is performed by [ModelDownloadWorker] via WorkManager — survives process death
- * and respects [MicroCoachingConfig.wifiOnlyModelDownload].
+ * and respects [MicroCoachingConfig.wifiOnlyModelDownload]. Provider fallback order is
+ * driven by [MicroCoachingConfig.modelProviders].
  *
- * Provider fallback order is driven by [MicroCoachingConfig.modelProviders].
- * Default: Backend → HuggingFace → Kaggle (stub).
+ * A completed download is detected by a size floor ([ModelCatalog.minValidSizeBytes]);
+ * there is no automatic hash check. [verifyIntegrity] offers opt-in SHA-256 but nothing
+ * calls it today.
  *
- * SHA-256 verification is run after every download to detect corrupted files.
- *
- * Readiness is persisted to [PREFS_NAME] so the state survives process death without
- * depending on WorkInfo replay: once a download finishes successfully and the file
- * is on disk, the [KEY_MODEL_READY] flag is set. On construction the manager
- * reconciles this flag against the file system and emits [ModelState.Ready] up-front
- * if both agree.
+ * Readiness is persisted to [PREFS_NAME] so it survives process death without depending
+ * on WorkInfo replay: the [KEY_MODEL_READY] flag is set once the file is on disk. On
+ * construction the manager reconciles the flag against the file system and emits
+ * [ModelState.Ready] when both agree.
  */
 class ModelManager(private val config: MicroCoachingConfig) {
 
@@ -66,8 +66,25 @@ class ModelManager(private val config: MicroCoachingConfig) {
     private var lastKnownProgress: Int = 0
 
     init {
-        reconcileReadyState()
+        // Reconcile probes getExternalFilesDir + File.exists() — run it off the
+        // constructing thread (the SDK can force this manager on the main
+        // thread during Application.onCreate). Guarded on Idle so a WorkInfo
+        // emission that lands first (a live download) is not overwritten.
+        scope.launch(Dispatchers.IO) {
+            if (_state.value is ModelState.Idle) reconcileReadyState()
+        }
         observeUniqueWork()
+    }
+
+    /**
+     * Cancels the WorkManager observation scope. Called by
+     * [com.medtroniclabs.microcoaching.MicroCoachingSDK.shutdown] when the SDK
+     * instance is replaced — WorkManager's flow listener is a GC root, so a
+     * never-cancelled observer keeps this manager (and its config) reachable
+     * for the process lifetime. The manager is unusable afterwards.
+     */
+    fun close() {
+        scope.cancel()
     }
 
     /**
@@ -139,10 +156,21 @@ class ModelManager(private val config: MicroCoachingConfig) {
         return dir.listFiles()?.firstOrNull { it.name == expected }
     }
 
-    /** Per-variant lower bound for "this download is complete" — replaces the old
-     *  global 750 MB floor that was tuned only for the 1B. */
+    /** Per-variant lower bound for "this download is complete". */
     private fun minValidModelSizeBytes(): Long =
-        ModelCatalog.minValidSizeBytes(config.selectedModelVariant())
+        ModelSizeProbe.minValidSizeBytes(config.context, config.selectedModelVariant())
+
+    /**
+     * The selected variant's real download size — network on the first call,
+     * cached thereafter. Null when it can't be determined, leaving callers to
+     * show the catalog's approximate value.
+     */
+    suspend fun resolveModelSizeBytes(): Long? =
+        ModelSizeProbe.resolveSize(config.context, config.selectedModelVariant(), config.huggingFaceToken)
+
+    /** Previously resolved size for the selected variant, without touching the network. */
+    fun cachedModelSizeBytes(): Long? =
+        ModelSizeProbe.cachedSize(config.context, config.selectedModelVariant())
 
     /** Returns true if a model file is present on device (regardless of integrity). */
     fun isModelPresent(): Boolean = findLocalModel() != null
@@ -174,18 +202,12 @@ class ModelManager(private val config: MicroCoachingConfig) {
      * Safe to call multiple times — WorkManager deduplicates by unique work name.
      *
      * State-aware behaviour:
-     *   - [ModelState.LoadFailed]: the engine couldn't use the file on disk, so a
-     *     user-initiated re-tap is an explicit "wipe and retry" request. Delete
-     *     the file, clear the ready flag, and schedule a fresh download. This is
-     *     the escape hatch for genuinely corrupt-but-size-passing files that
-     *     [onModelLoadFailed] intentionally keeps around (it can't distinguish a
-     *     transient I/O failure from real corruption — the user's explicit retry
-     *     resolves the ambiguity).
-     *   - Otherwise, if the model is already present AND the persisted ready
-     *     flag is set, no-op and re-emit [ModelState.Ready] (prevents the
-     *     "tap Download again on an already downloaded model" footgun that
-     *     would re-fetch ~900 MB unnecessarily).
-     *   - Otherwise, schedule a new download.
+     *   - [ModelState.LoadFailed]: treat a user re-tap as "wipe and retry" — delete the
+     *     file, clear the ready flag, and re-download. This is the escape hatch for the
+     *     size-passing-but-unloadable files [onModelLoadFailed] deliberately keeps.
+     *   - Model present AND ready flag set: no-op, re-emit [ModelState.Ready] so a re-tap
+     *     doesn't re-fetch an already-downloaded model.
+     *   - Otherwise: schedule a new download.
      */
     fun triggerDownload() {
         Log.i(TAG, "triggerDownload entry — currentState=${_state.value::class.simpleName}")
@@ -305,28 +327,19 @@ class ModelManager(private val config: MicroCoachingConfig) {
                 "wifiOnly=${config.wifiOnlyModelDownload}, requiredNetworkType=$networkType",
         )
         logNetworkSnapshot("scheduleDownload")
-        // No per-schedule observer here anymore — observation runs for the
-        // lifetime of the manager (see [observeUniqueWork] called from init).
-        // That fixes the "download running in background but UI shows Idle"
-        // case where a fresh process or chat re-open lands on a manager that
-        // never started observing because no one called scheduleDownload()
-        // this session.
+        // Observation runs for the manager's lifetime (see [observeUniqueWork] from init),
+        // so no per-schedule observer is attached here.
     }
 
     /**
-     * Long-lived collector for the unique download work's [WorkInfo] flow.
-     * Started once from [init] so the manager sees in-flight work regardless of
-     * whether [scheduleDownload] has been called this process — critical for
-     * the "screen timed out, came back, chat showed Download button" symptom
-     * the user observed: WorkManager kept downloading correctly across the
-     * screen-off / process-restart, but the manager wasn't watching, so the UI
-     * defaulted to Idle until the user tapped Download (which would REPLACE the
-     * running worker and re-attach an observer).
+     * Long-lived collector for the unique download work's [WorkInfo] flow. Started once
+     * from [init] so the manager reflects in-flight work even when no one called
+     * [scheduleDownload] this process (e.g. a download that continued across a
+     * screen-off / process restart).
      *
-     * Guards against demoting terminal states ([ModelState.Ready] and
-     * [ModelState.LoadFailed]) so a stale `WorkInfo` from a previous successful
-     * download — which `getWorkInfosForUniqueWorkFlow` can still return for a
-     * short retention window — can't overwrite a freshly-reconciled Ready.
+     * Guards against demoting terminal states ([ModelState.Ready] / [ModelState.LoadFailed]):
+     * `getWorkInfosForUniqueWorkFlow` can replay a stale SUCCEEDED for a short retention
+     * window, which must not overwrite a freshly-reconciled Ready.
      */
     private fun observeUniqueWork() {
         scope.launch {
@@ -401,35 +414,22 @@ class ModelManager(private val config: MicroCoachingConfig) {
     }
 
     /**
-     * Called when the inference engine fails to load the model file.
+     * Called when the inference engine fails to load the model file. The keep-or-delete
+     * decision is gated on the size floor so a transient load failure (file still
+     * flushing, momentary I/O denial, fresh-download race) doesn't wipe a complete file:
      *
-     * Used to delete the file unconditionally, which destroyed the "asks to download
-     * again after finishing" UX whenever the engine returned null transiently
-     * (file still flushing, momentary I/O denial, fresh download race). Now the
-     * decision is gated on a size heuristic:
+     *   - size < variant floor → definitely truncated: delete, clear the flag, and
+     *     surface [ModelState.LoadFailed] so the UI re-prompts for a download.
+     *   - size ≥ variant floor → structurally complete: keep it, surface
+     *     [ModelState.LoadFailed] with a retry CTA, leave the flag so next-launch
+     *     reconciliation can retry the engine.
      *
-     *   - file size < the variant size floor → the file is definitely truncated;
-     *     delete it, clear the prefs flag, and surface [ModelState.LoadFailed] so the
-     *     UI re-prompts for a download.
-     *   - file size ≥ the variant size floor → the file looks structurally complete;
-     *     keep it on disk and surface [ModelState.LoadFailed] with a retry CTA. The
-     *     prefs flag is left untouched so reconciliation on next launch can still
-     *     try the engine again.
-     *
-     * Genuine SHA-256 corruption is caught by [verifyIntegrity] in the load path,
-     * which uses [deleteModelAndReset] directly — no need to second-guess it here.
+     * For a positively-confirmed bad file, callers use [deleteModelAndReset] instead.
      */
     fun onModelLoadFailed(reason: String = "Model file failed to load") {
-        // Guard against the "chat reopened mid-download" footgun. When a worker
-        // is actively writing the .task file, a fresh ChatViewModel tries to
-        // load it, the engine fails (file is partial), and the chat layer calls
-        // onModelLoadFailed(). Without this guard we would:
-        //   - flip state to LoadFailed (which observeUniqueWork then locks in,
-        //     refusing any further WorkInfo updates), and
-        //   - delete the in-flight file if it is below the size threshold,
-        //     destroying the user's progress.
-        // The right interpretation of "load failed while downloading" is "the
-        // engine raced the worker" — not a real failure. Ignore it.
+        // A load failure while a download is in flight means the engine raced the
+        // worker on a partial file — not a real failure. Ignoring it avoids locking in
+        // LoadFailed (which observeUniqueWork then respects) and deleting in-flight bytes.
         val currentState = _state.value
         if (currentState is ModelState.Downloading || currentState is ModelState.Paused) {
             Log.w(
@@ -456,8 +456,8 @@ class ModelManager(private val config: MicroCoachingConfig) {
 
     /**
      * Explicit teardown for a confirmed-bad model: deletes the file, clears the
-     * persisted ready flag, and surfaces [ModelState.LoadFailed]. Use this only
-     * when corruption is positively confirmed (e.g. SHA-256 mismatch) or when
+     * persisted ready flag, and surfaces [ModelState.LoadFailed]. Use this only when
+     * corruption is positively confirmed (e.g. a failed [verifyIntegrity] check) or when
      * the user explicitly chooses "re-download" from the LoadFailed CTA.
      */
     fun deleteModelAndReset(reason: String = "Model file deleted by user action") {
@@ -471,7 +471,8 @@ class ModelManager(private val config: MicroCoachingConfig) {
     }
 
     /**
-     * Verify SHA-256 integrity of the given model file.
+     * Opt-in SHA-256 integrity check for a model file. Not called automatically — the
+     * download path uses only the size floor; wire this in where a hash is available.
      * @param expectedHash Expected hex digest, or null to skip verification.
      */
     fun verifyIntegrity(file: File, expectedHash: String?): Boolean {
@@ -494,58 +495,18 @@ class ModelManager(private val config: MicroCoachingConfig) {
         return digest.digest().joinToString("") { "%02x".format(it) }
     }
 
-    /**
-     * Emit a single line describing the current `ConnectivityManager` state to
-     * logcat. Called at every trigger / schedule boundary so QA can correlate
-     * "download didn't start" reports with the active network type, transport
-     * flags, and metering status at the moment the SDK saw the request.
-     */
-    private fun logNetworkSnapshot(stage: String) {
-        val cm = config.context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
-        if (cm == null) {
-            Log.w(TAG, "Network snapshot[$stage]: ConnectivityManager unavailable")
-            return
-        }
-        val net = cm.activeNetwork
-        if (net == null) {
-            Log.w(TAG, "Network snapshot[$stage]: activeNetwork=null (no active connection)")
-            return
-        }
-        val caps = cm.getNetworkCapabilities(net)
-        if (caps == null) {
-            Log.w(TAG, "Network snapshot[$stage]: capabilities=null for activeNetwork=${net.networkHandle}")
-            return
-        }
-        Log.i(
-            TAG,
-            "Network snapshot[$stage]: activeNetwork=${net.networkHandle}, " +
-                "transports=${transportSummary(caps)}, " +
-                "notMetered=${caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)}, " +
-                "internet=${caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)}, " +
-                "validated=${caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)}",
-        )
-    }
-
-    private fun transportSummary(caps: NetworkCapabilities): String {
-        val flags = mutableListOf<String>()
-        if (caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) flags += "CELLULAR"
-        if (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) flags += "WIFI"
-        if (caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) flags += "ETHERNET"
-        if (caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) flags += "VPN"
-        if (caps.hasTransport(NetworkCapabilities.TRANSPORT_BLUETOOTH)) flags += "BLUETOOTH"
-        return if (flags.isEmpty()) "[]" else flags.joinToString(prefix = "[", postfix = "]")
-    }
+    /** @see NetworkDiagnostics.logSnapshot */
+    private fun logNetworkSnapshot(stage: String) =
+        com.medtroniclabs.microcoaching.util.NetworkDiagnostics.logSnapshot(config.context, TAG, stage)
 
     companion object {
         private const val TAG = "ModelManager"
         const val DOWNLOAD_TAG = "microcoaching_model_download"
         const val UNIQUE_WORK_NAME = "microcoaching_model_download"
 
-        // Per-variant completeness floor now lives in ModelCatalog.minValidSizeBytes()
-        // (see minValidModelSizeBytes()) — the old global 750 MB constant was tuned
-        // for the 1B and wrongly rejected the ~250–300 MB 270M variants.
+        // Completeness floor is per-variant — see ModelCatalog.minValidSizeBytes().
 
-        private const val PREFS_NAME = "microcoaching_model_prefs"
+        private const val PREFS_NAME = com.medtroniclabs.microcoaching.util.PrefsNames.MODEL
         private const val KEY_MODEL_READY = "model_ready"
         private const val KEY_MODEL_PATH = "model_path"
     }

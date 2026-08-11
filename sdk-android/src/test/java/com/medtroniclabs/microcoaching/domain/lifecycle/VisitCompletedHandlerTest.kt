@@ -84,6 +84,7 @@ class VisitCompletedHandlerTest {
 
         // ── Unused by the handler/recorder paths under test ───────────────────
         override suspend fun getPending(): List<CoachingEventEntity> = emptyList()
+        override suspend fun getPending(limit: Int): List<CoachingEventEntity> = emptyList()
         override suspend fun getLatestCorrectQuestionIds(chwId: String, moduleFamilyId: String): List<String> =
             emptyList()
         override suspend fun getLatestWrongQuestionIds(chwId: String, moduleFamilyId: String): List<String> =
@@ -96,6 +97,8 @@ class VisitCompletedHandlerTest {
         override suspend fun getReplayableForGapState(chwId: String): List<CoachingEventEntity> = emptyList()
         override suspend fun getUnsyncedQuizAttempts(chwId: String): List<CoachingEventEntity> = emptyList()
         override fun getEventCountFlow(): Flow<Int> = flowOf(0)
+        override fun observeModuleRequested(chwId: String): Flow<List<CoachingEventEntity>> = flowOf(emptyList())
+        override suspend fun getModuleRequested(chwId: String): List<CoachingEventEntity> = emptyList()
         override suspend fun markSynced(eventIds: List<String>, syncedAt: Long) = Unit
         override suspend fun markFailed(eventIds: List<String>) = Unit
         override suspend fun incrementRetryCount(eventIds: List<String>) = Unit

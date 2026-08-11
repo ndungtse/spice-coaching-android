@@ -15,7 +15,7 @@ import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 
-private val payloadParser = Json { ignoreUnknownKeys = true; isLenient = true }
+private val payloadParser = com.medtroniclabs.microcoaching.util.LenientJson
 
 /** Parse a stored payload string back to a JSON object, or null if it isn't one. */
 private fun parsePayloadObject(raw: String?): JsonObject? =

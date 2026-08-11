@@ -6,7 +6,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
-private val visitPredicateJson = Json { ignoreUnknownKeys = true; isLenient = true }
+private val visitPredicateJson = com.medtroniclabs.microcoaching.util.LenientJson
 
 /**
  * Pure match of an `assessment_due` visit trigger predicate against a today's-visit.

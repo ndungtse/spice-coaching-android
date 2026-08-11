@@ -6,7 +6,7 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
-private val workflowPredicateJson = Json { ignoreUnknownKeys = true; isLenient = true }
+private val workflowPredicateJson = com.medtroniclabs.microcoaching.util.LenientJson
 
 /**
  * Pure match of a `workflow_event` trigger predicate against a SPICE signal.

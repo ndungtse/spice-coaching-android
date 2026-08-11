@@ -31,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import com.medtroniclabs.microcoaching.ui.theme.SpiceGreen
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -111,7 +112,7 @@ fun XpRewardBurst(
             Spacer(Modifier.size(8.dp))
             Text(
                 text = "+$pointValue XP",
-                color = Color(0xFF1B6B4A), // forest green — matches the existing "correct" palette
+                color = SpiceGreen, // forest green — the shared "correct/complete" accent
                 fontWeight = FontWeight.Bold,
                 fontSize = 24.sp,
             )

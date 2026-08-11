@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.WarningAmber
@@ -46,12 +47,12 @@ private const val BYTES_PER_MB: Long = 1_048_576L
  * Predefined card icons. Keeps the call site to a single enum instead of
  * threading raw `ImageVector`s through the public API.
  */
-enum class DownloadItemIcon { AiSparkle, Microphone }
+enum class DownloadItemIcon { AiSparkle, Microphone, ReadAloud }
 
 /**
  * Compact card showing a single downloadable asset (AI model or voice model)
  * with inline status + actions. Designed for the redesigned
- * [ModelNotReadyContent] but reusable for any "list of pending downloads" UX.
+ * [CoachingSetupContent] but reusable for any "list of pending downloads" UX.
  *
  * Action buttons reflect [state]:
  *   - [DownloadItemUiState.Idle] / [DownloadItemUiState.Failed] → Download / Retry
@@ -72,6 +73,10 @@ fun DownloadItemCard(
     onPause: () -> Unit = {},
     onResume: () -> Unit = {},
     onCancel: () -> Unit = {},
+    // Overrides the Idle/Failed button label. Used by the TTS card, whose action
+    // opens the system TTS-data installer ("Install") rather than starting an
+    // in-app download.
+    actionLabel: String? = null,
 ) {
     Surface(
         modifier = modifier
@@ -103,6 +108,7 @@ fun DownloadItemCard(
                     onDownload = onDownload,
                     onResume = onResume,
                     onPause = onPause,
+                    actionLabel = actionLabel,
                 )
             }
 
@@ -140,6 +146,7 @@ private fun LeadingIcon(icon: DownloadItemIcon, state: DownloadItemUiState) {
             state is DownloadItemUiState.Done -> Icons.Filled.Check
             state is DownloadItemUiState.Failed -> Icons.Filled.WarningAmber
             icon == DownloadItemIcon.AiSparkle -> Icons.Filled.AutoAwesome
+            icon == DownloadItemIcon.ReadAloud -> Icons.AutoMirrored.Filled.VolumeUp
             else -> Icons.Filled.Mic
         }
         Icon(
@@ -186,11 +193,12 @@ private fun TrailingAction(
     onDownload: () -> Unit,
     onResume: () -> Unit,
     onPause: () -> Unit,
+    actionLabel: String? = null,
 ) {
     when (state) {
         is DownloadItemUiState.Idle, is DownloadItemUiState.Failed -> {
             FilledTonalButton(onClick = onDownload) {
-                Text(stringResource(R.string.download_card_action_download))
+                Text(actionLabel ?: stringResource(R.string.download_card_action_download))
             }
         }
         is DownloadItemUiState.Paused -> {

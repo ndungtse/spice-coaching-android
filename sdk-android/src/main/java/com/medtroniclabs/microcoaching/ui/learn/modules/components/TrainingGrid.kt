@@ -31,6 +31,12 @@ fun TrainingGrid(
     onSeeAll: (() -> Unit)? = null,
     maxItems: Int = 6,
     modifier: Modifier = Modifier,
+    // Null keeps the default "Training" section title; set to give the grid a
+    // caller-specific heading (e.g. a sub-tab title) without duplicating this composable.
+    title: String? = null,
+    // moduleFamilyId of the single card that should render the NEW pill (see
+    // TrainingCard.showNewBadge); null (the default) renders no NEW pill anywhere.
+    newModuleFamilyId: String? = null,
 ) {
     if (modules.isEmpty()) return
 
@@ -38,7 +44,7 @@ fun TrainingGrid(
 
     Column(modifier = modifier) {
         SectionHeader(
-            title = stringResource(R.string.modules_section_training),
+            title = title ?: stringResource(R.string.modules_section_training),
             seeAllLabel = if (showSeeAll) stringResource(R.string.modules_see_all) else null,
             onSeeAllClick = if (showSeeAll) onSeeAll else null,
         )
@@ -56,10 +62,12 @@ fun TrainingGrid(
                     meta = stringResource(
                         R.string.training_meta_minutes_questions,
                         module.estimatedMinutes ?: 5,
-                        module.inlineQuestions?.size ?: 0,
+                        module.questionCount,
                     ),
                     progressFraction = progressFractionFor(module),
                     thumbnailUrl = module.thumbnailUrl,
+                    showNewBadge = module.moduleFamilyId == newModuleFamilyId,
+                    contentDomain = module.contentDomain,
                     onClick = { onSelect(module) },
                 )
             }
@@ -86,18 +94,18 @@ fun TrainingGrid(
  * ```
  */
 internal fun progressFractionFor(module: LearnModule): Float {
-    // log module.title, module.quizScorePct, module.inlineQuestions?.size, module.status and attemptedQuestionCount
-    Log.d("TrainingGrid", "module.title: ${module.title}, module.quizScorePct: ${module.quizScorePct}, module.inlineQuestions?.size: ${module.inlineQuestions?.size}, module.status: ${module.status}, module.attemptedQuestionCount: ${module.attemptedQuestionCount}")
+    Log.d("TrainingGrid", "module.title: ${module.title}, module.quizScorePct: ${module.quizScorePct}, module.questionCount: ${module.questionCount}, module.status: ${module.status}, module.attemptedQuestionCount: ${module.attemptedQuestionCount}")
 
-    // Completed wins, regardless of local attempt counts. Backfilled-from-backend
-    // completions carry status="completed" but may have zero local
-    // module_quiz_attempted rows on a fresh device / after a Room wipe /
-    // after a destructive sync — so attemptedQuestionCount can legitimately
-    // be 0 here. Honour the cached authoritative completion before applying
-    // the attempted/total formula, otherwise the bar reads 0% for a passed module.
-    if (module.status == "completed") return 1f
+    // Full ring (100%) exactly when the module counts as complete — passed, or
+    // every question attempted. Shared with the reminder count via
+    // [LearnModule.isProgressComplete] so the ring and the "incomplete modules"
+    // reminder can never disagree (MED-1940 Req 2). Behaviour is unchanged from
+    // the previous status=="completed"-then-attempted/total formula: when
+    // status != "completed" but attempted >= total, the old else-branch already
+    // coerced to 1f.
+    if (module.isProgressComplete) return 1f
 
-    val total = module.inlineQuestions?.size ?: 0
+    val total = module.questionCount
     if (total == 0) return 0f
     val attempted = module.attemptedQuestionCount ?: 0
     return (attempted.toFloat() / total).coerceIn(0f, 1f)

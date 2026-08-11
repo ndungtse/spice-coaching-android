@@ -144,16 +144,6 @@ internal class OnDeviceGapStateEngine(
         }
     }
 
-    /** Prefer the per-question `is_correct`, then the explicit outcome string. */
-    private fun outcomeOf(event: CoachingEventEntity): GapOutcome {
-        event.isCorrect?.let { return if (it) GapOutcome.CORRECT else GapOutcome.INCORRECT }
-        return when (event.outcome?.lowercase()) {
-            "correct" -> GapOutcome.CORRECT
-            "wrong", "incorrect" -> GapOutcome.INCORRECT
-            else -> GapOutcome.UNKNOWN
-        }
-    }
-
     private fun ChwGapProfileEntity.toBaselineState() = GapState(
         behaviouralGapId = behaviouralGapId,
         failedAttemptsCount = failedAttemptsCount,

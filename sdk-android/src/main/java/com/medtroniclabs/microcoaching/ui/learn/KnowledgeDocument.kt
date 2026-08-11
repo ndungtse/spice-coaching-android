@@ -35,6 +35,15 @@ sealed interface DocEvent {
 
     /** Offline and not cached (or fetch failed) — show "not available offline". */
     data object Unavailable : DocEvent
+
+    /**
+     * The document couldn't be cached because the device is out of storage
+     * (the download raised
+     * [com.medtroniclabs.microcoaching.data.asset.InsufficientStorageException]).
+     * Distinct from [Unavailable] so the host shows the storage-specific message
+     * instead of the misleading "not available offline" one.
+     */
+    data object StorageFull : DocEvent
 }
 
 /**

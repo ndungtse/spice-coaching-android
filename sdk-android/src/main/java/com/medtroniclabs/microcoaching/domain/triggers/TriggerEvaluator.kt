@@ -44,7 +44,7 @@ class TriggerEvaluator(
     private val config: MicroCoachingConfig,
 ) {
 
-    private val json = Json { ignoreUnknownKeys = true; isLenient = true }
+    private val json = com.medtroniclabs.microcoaching.util.LenientJson
 
     /** Trigger signal coming from SPICE or the SDK's own lifecycle hooks. */
     sealed class Signal {
@@ -137,39 +137,3 @@ class TriggerEvaluator(
     }.getOrNull()
 }
 
-/**
- * Update [ChwModuleCompletionEntity] after a quiz attempt.
- * Returns the new row that the caller is expected to upsert.
- */
-fun buildModuleCompletion(
-    previous: ChwModuleCompletionEntity?,
-    chwId: String,
-    moduleFamilyId: String,
-    moduleId: String?,
-    scoreFraction: Float,
-    passed: Boolean,
-    reinforcementDays: Int,
-    nowMillis: Long = System.currentTimeMillis(),
-): ChwModuleCompletionEntity {
-    val attemptsSincePass = when {
-        passed -> 0
-        previous == null -> 1
-        else -> previous.attemptsSinceLastPass + 1
-    }
-    val completedAt = if (passed) nowMillis else previous?.completedAt
-    val latestCompletedModuleId = if (passed) moduleId else previous?.latestCompletedModuleId
-    val dueAt = if (passed) nowMillis + reinforcementDays.toLong() * 24L * 60L * 60L * 1000L
-    else previous?.reinforcementDueAt
-    return ChwModuleCompletionEntity(
-        chwId = chwId,
-        moduleFamilyId = moduleFamilyId,
-        latestCompletedModuleId = latestCompletedModuleId,
-        latestAttemptModuleId = moduleId,
-        completedAt = completedAt,
-        latestAttemptAt = nowMillis,
-        latestQuizScore = scoreFraction,
-        latestAttemptPassed = passed,
-        attemptsSinceLastPass = attemptsSincePass,
-        reinforcementDueAt = dueAt,
-    )
-}

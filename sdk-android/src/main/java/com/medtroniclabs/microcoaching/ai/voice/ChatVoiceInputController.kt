@@ -135,17 +135,49 @@ class ChatVoiceInputController internal constructor(
     private fun wrapListener(
         delegate: VoiceInputController.TranscriptionListener,
     ): VoiceInputController.TranscriptionListener =
-        object : VoiceInputController.TranscriptionListener {
+        object : SttErrorListener {
             override fun onPartial(transcript: String) = delegate.onPartial(transcript)
             override fun onResult(transcript: String) {
                 activeEngine = null
                 delegate.onResult(transcript)
             }
-            override fun onError(message: String) {
+
+            override fun onError(message: String, recoverableViaOffline: Boolean) {
                 activeEngine = null
-                delegate.onError(message)
+                // The platform (cloud) engine failed with a network-class error.
+                // The connectivity check that routed us here lags the actual
+                // disconnect, so the FAILURE is the authoritative "we're offline"
+                // signal — retry once on the offline engine instead of surfacing
+                // the error. Fixes "first tap after going offline errors, second
+                // works". Guarded so we never loop back from an offline failure.
+                if (recoverableViaOffline &&
+                    _activeBackend.value != Backend.OfflineSherpa &&
+                    offlineViable()
+                ) {
+                    Log.i(
+                        TAG,
+                        "Platform STT failed with a recoverable network error — " +
+                            "falling back to the offline engine.",
+                    )
+                    startOffline(delegate)
+                } else {
+                    delegate.onError(message)
+                }
             }
         }
+
+    /**
+     * Whether an offline retry is possible right now: Bengali, the sherpa engine
+     * factory is wired, and the Bengali model is on disk. (English has no offline
+     * path — a network failure there is terminal, which is correct.)
+     */
+    private fun offlineViable(): Boolean {
+        val language = runCatching { MicroCoachingSDK.getInstance().language }
+            .getOrDefault(Language.ENGLISH)
+        return language == Language.BANGLA &&
+            offlineEngineFactory != null &&
+            sttModelManager.isBengaliModelPresent()
+    }
 
     private fun localized(resId: Int): String {
         val language = runCatching { MicroCoachingSDK.getInstance().language }
@@ -156,9 +188,13 @@ class ChatVoiceInputController internal constructor(
     /** Observable lifecycle handle for downloads. Exposed to the chat UI. */
     val sttModelState: StateFlow<SttModelState> = sttModelManager.state
 
-    fun release() {
+    override fun release() {
         runCatching { androidEngine.destroy() }
             .onFailure { Log.w(TAG, "androidEngine.destroy threw: ${it.message}") }
+        // Tear down the offline engine (frees the loaded sherpa recognizer's
+        // native memory) — nulling the reference alone kept it reachable.
+        runCatching { offlineEngine?.release() }
+            .onFailure { Log.w(TAG, "offlineEngine.release threw: ${it.message}") }
         offlineEngine = null
         activeEngine = null
     }

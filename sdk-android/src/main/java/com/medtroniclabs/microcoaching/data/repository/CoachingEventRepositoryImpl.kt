@@ -78,7 +78,11 @@ open class CoachingEventRepositoryImpl(
         dao.insert(entity)
 
         config.dataCallback?.let { cb ->
-            val pending = dao.getPending().map { it.toMap() }
+            // Page the callback payload: the unbounded getPending() re-materialised
+            // the ENTIRE backlog as maps on every single insert — O(N²) allocation
+            // over an offline session. The oldest page still surfaces first; the
+            // rest follows on subsequent inserts / sync cycles.
+            val pending = dao.getPending(DATA_CALLBACK_PAGE_SIZE).map { it.toMap() }
             if (pending.isNotEmpty()) cb.onCoachingEventsReady(pending)
         }
     }
@@ -116,5 +120,10 @@ open class CoachingEventRepositoryImpl(
         timestampUtc?.let { put("timestamp_utc", it) }
         syncedAt?.let { put("synced_at", it) }
         put("retry_count", retryCount)
+    }
+
+    private companion object {
+        /** Max pending rows delivered per [MicroCoachingDataCallback.onCoachingEventsReady] call. */
+        const val DATA_CALLBACK_PAGE_SIZE = 500
     }
 }

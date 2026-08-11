@@ -40,7 +40,11 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.foundation.layout.PaddingValues
 import com.medtroniclabs.microcoaching.R
+import com.medtroniclabs.microcoaching.ui.theme.ErrorRedContainer
+import com.medtroniclabs.microcoaching.ui.theme.ErrorRedDark
 import com.medtroniclabs.microcoaching.ui.theme.SpiceBlue
+import com.medtroniclabs.microcoaching.ui.theme.SpiceGreenContainer
+import com.medtroniclabs.microcoaching.ui.theme.SpiceGreenDark
 
 /**
  * Overlay shown after the CHW selects an answer.
@@ -71,8 +75,8 @@ fun AnswerFeedbackOverlay(
     explanation: String = "",
     onNext: (() -> Unit)? = null,
 ) {
-    val backgroundColor = if (isCorrect) Color(0xFFD7F0E5) else Color(0xFFFFEBEE)
-    val textColor = if (isCorrect) Color(0xFF0A3D27) else Color(0xFF7F0014)
+    val backgroundColor = if (isCorrect) SpiceGreenContainer else ErrorRedContainer
+    val textColor = if (isCorrect) SpiceGreenDark else ErrorRedDark
     val headline = if (isCorrect) stringResource(R.string.quiz_correct) else stringResource(R.string.quiz_incorrect)
 
     // Floating "+N pts" animation (starts immediately on render)
@@ -158,33 +162,4 @@ fun AnswerFeedbackOverlay(
     }
 }
 
-@Composable
-private fun WhyThisMattersBox(explanation: String) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(Color(0xFFDCEEFF), shape = RoundedCornerShape(10.dp))
-            .padding(12.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                imageVector = Icons.Outlined.Lightbulb,
-                contentDescription = null,
-                tint = Color(0xFF004B87),
-                modifier = Modifier.size(16.dp),
-            )
-            Spacer(modifier = Modifier.size(6.dp))
-            Text(
-                text = stringResource(R.string.feedback_why_this_matters),
-                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                color = Color(0xFF004B87),
-            )
-        }
-        Spacer(Modifier.height(6.dp))
-        Text(
-            text = explanation,
-            style = MaterialTheme.typography.bodySmall,
-            color = Color(0xFF1A3A5C),
-        )
-    }
-}
+// WhyThisMattersBox moved to a shared ui/common component (was byte-identical here + in InlineAnswerFeedback).

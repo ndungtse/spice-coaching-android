@@ -24,7 +24,7 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles("consumer-rules.pro")
 
-        buildConfigField("String", "SDK_VERSION", "\"0.5.0-SNAPSHOT\"")
+        buildConfigField("String", "SDK_VERSION", "\"0.5.2-SNAPSHOT\"")
         // HF_TOKEN intentionally NOT baked into the SDK. The published .aar must
         // not ship a HuggingFace token; host apps that need one pass it at runtime
         // via MicroCoachingSDK.Builder.huggingFaceToken(). Models in the public
@@ -88,7 +88,7 @@ afterEvaluate {
                 from(components["release"])
                 groupId = "com.medtroniclabs.microcoaching"
                 artifactId = "sdk-android"
-                version = "0.5.0-SNAPSHOT"
+                version = "0.5.2-SNAPSHOT"
             }
         }
     }
@@ -116,21 +116,10 @@ dependencies {
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.ui)
 
-    // android-pdf-viewer (petretiandrea fork) — pdfium-android backed PDF
-    // viewer with built-in scroll, pinch-zoom, and page-jump. Powers the
-    // in-app source-document viewer at
-    // com.medtroniclabs.microcoaching.ui.document.PdfPagerScreen.
-    //
-    // Why this fork over DImuthuUpe's original: the original AAR was built
-    // pre-AndroidX and references `android.support.v4.util.ArrayMap` at
-    // runtime in pdfium-android's `PdfDocument.<init>`. Excluding the legacy
-    // support deps to dodge "Duplicate class" errors at d8 left the runtime
-    // reference unresolved on hosts without Jetifier (NoClassDefFoundError).
-    // The petretiandrea fork is AndroidX-native (`androidx.core:core-ktx`
-    // etc.), Maven-Central-hosted (no JitPack required), keeps the same
-    // `com.github.barteksc.pdfviewer.PDFView` API surface, and bundles its
-    // own AndroidX-migrated pdfium fork. ~2 MB AAR (pdfium .so for all ABIs).
-    implementation("io.github.petretiandrea:android-pdf-viewer:4.0.0")
+    // PDF viewing uses the platform android.graphics.pdf.PdfRenderer (API 21+)
+    // in ui.document.PdfPagerScreen — no third-party PDF library. This drops the
+    // former pdfium-based android-pdf-viewer dependency, which bundled ~7.7 MB/ABI
+    // of native .so files (libpdfium, libicuuc, chromium libc++/zlib).
 
     // Compose
     implementation(platform(libs.androidx.compose.bom))

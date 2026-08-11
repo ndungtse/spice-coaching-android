@@ -15,6 +15,10 @@ interface DigitalProficiencyEventDao {
     @Query("SELECT * FROM digital_proficiency_event WHERE sync_status = 'pending' ORDER BY timestamp_local ASC")
     suspend fun getPending(): List<DigitalProficiencyEventEntity>
 
+    /** Oldest pending events, capped at [limit] — see [CoachingEventDao.getPending]. */
+    @Query("SELECT * FROM digital_proficiency_event WHERE sync_status = 'pending' ORDER BY timestamp_local ASC LIMIT :limit")
+    suspend fun getPending(limit: Int): List<DigitalProficiencyEventEntity>
+
     @Query("UPDATE digital_proficiency_event SET sync_status = 'synced', synced_at = :syncedAt WHERE id IN (:ids)")
     suspend fun markSynced(ids: List<String>, syncedAt: Long = System.currentTimeMillis())
 
@@ -43,6 +47,13 @@ interface DigitalProficiencyEventDao {
 
     @Query("DELETE FROM digital_proficiency_event WHERE sync_status = 'synced'")
     suspend fun deleteSynced()
+
+    /**
+     * Age-guarded retention cleanup — see [LlmTraceDao.deleteSyncedOlderThan].
+     * Returns the number of rows deleted.
+     */
+    @Query("DELETE FROM digital_proficiency_event WHERE sync_status = 'synced' AND synced_at IS NOT NULL AND synced_at < :cutoffMs")
+    suspend fun deleteSyncedOlderThan(cutoffMs: Long): Int
 
     @Query("DELETE FROM digital_proficiency_event")
     suspend fun deleteAll()

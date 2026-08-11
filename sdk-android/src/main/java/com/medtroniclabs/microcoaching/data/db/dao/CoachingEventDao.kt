@@ -25,6 +25,14 @@ interface CoachingEventDao {
     suspend fun getPending(): List<CoachingEventEntity>
 
     /**
+     * Oldest pending events, capped at [limit]. Outbound sync pages through
+     * these instead of materialising a potentially weeks-old backlog in one
+     * in-memory batch.
+     */
+    @Query("SELECT * FROM coaching_event WHERE sync_status = 'pending' ORDER BY timestamp_local ASC LIMIT :limit")
+    suspend fun getPending(limit: Int): List<CoachingEventEntity>
+
+    /**
      * Distinct question IDs whose **latest** `module_quiz_attempted` attempt was
      * correct for the given CHW + module family. Used by the refresher
      * reinforcement loop to EXCLUDE already-mastered questions — anything not in
@@ -222,6 +230,31 @@ interface CoachingEventDao {
     /** All events, most recent first. */
     @Query("SELECT * FROM coaching_event ORDER BY timestamp_local DESC")
     suspend fun getAll(): List<CoachingEventEntity>
+
+    /**
+     * The CHW's `module_requested` events, newest first — the durable local
+     * source for the training-request hub list. `coaching_event` rows are never
+     * pruned (see [com.medtroniclabs.microcoaching.sync.pruneSyncedTelemetry]),
+     * so a request stays listed after it syncs. Reactive so a freshly-recorded
+     * request appears on the hub without a manual refresh.
+     */
+    @Query(
+        "SELECT * FROM coaching_event " +
+            "WHERE event_type = 'module_requested' AND chw_id = :chwId " +
+            "ORDER BY timestamp_local DESC",
+    )
+    fun observeModuleRequested(chwId: String): Flow<List<CoachingEventEntity>>
+
+    /**
+     * One-shot read of the CHW's `module_requested` events — feeds the form's
+     * client-side duplicate guard (a CHW shouldn't raise two requests for the
+     * same module). Includes synced rows, since a past request still counts.
+     */
+    @Query(
+        "SELECT * FROM coaching_event " +
+            "WHERE event_type = 'module_requested' AND chw_id = :chwId",
+    )
+    suspend fun getModuleRequested(chwId: String): List<CoachingEventEntity>
 
     /** Delete all events that have been successfully synced (30-day retention cleanup). */
     @Query("DELETE FROM coaching_event WHERE sync_status = 'synced'")

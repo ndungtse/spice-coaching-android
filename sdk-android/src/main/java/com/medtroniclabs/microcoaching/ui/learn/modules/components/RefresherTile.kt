@@ -91,13 +91,13 @@ fun RefresherTile(
                             letterSpacing = 0.4.sp,
                         ),
                     )
-                    /* if (isGap) {
-                        GapBadge()
-                    } else if  */
+                    // Hide severity chip and critical badge for now
+                    /* 
                     if (isCritical) {
                         CriticalBadge()
                     }
                     SeverityChip(severity)
+                     */
                 }
                 Text(
                     text = title,
@@ -145,7 +145,7 @@ private fun RefresherIconBlock(category: String, thumbnailUrl: String? = null) {
 }
 
 @Composable
-private fun CriticalBadge() {
+internal fun CriticalBadge() {
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(4.dp))
@@ -169,7 +169,7 @@ private fun CriticalBadge() {
  * fallback (non-gap) refresher.
  */
 @Composable
-private fun SeverityChip(severity: String?) {
+internal fun SeverityChip(severity: String?) {
     val (color, labelRes) = when (severity?.lowercase()) {
         "high" -> Color(0xFFB91C1C) to R.string.severity_high
         "moderate" -> Color(0xFFD97706) to R.string.severity_moderate

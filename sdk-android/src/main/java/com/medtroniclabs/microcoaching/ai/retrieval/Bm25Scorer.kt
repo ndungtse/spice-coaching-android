@@ -12,23 +12,28 @@ import kotlin.math.ln
  * Okapi defaults and sane for the ≤ 200-chunk pilot corpus.
  */
 class Bm25Scorer(
-    private val documents: List<List<String>>,
+    documents: List<List<String>>,
     private val k1: Float = 1.5f,
     private val b: Float = 0.75f,
 ) {
 
+    // Only the count and per-doc lengths are needed after construction — the
+    // raw token lists otherwise duplicate every term already stored as
+    // inverted-index keys, roughly doubling each scorer's retained heap
+    // (×8 scorers per ModuleKnowledgeIndex: 4 fields × 2 languages).
+    private val docCount: Int = documents.size
     private val docLengths: IntArray = IntArray(documents.size) { documents[it].size }
     private val avgDocLen: Float = if (documents.isEmpty()) 0f else docLengths.average().toFloat()
 
     /** term → list of (docId, termFrequency). */
-    private val invertedIndex: Map<String, List<Posting>> = buildIndex()
+    private val invertedIndex: Map<String, List<Posting>> = buildIndex(documents)
 
     /** term → idf (precomputed). */
     private val idf: Map<String, Float> = buildIdf()
 
     private data class Posting(val docId: Int, val tf: Int)
 
-    private fun buildIndex(): Map<String, List<Posting>> {
+    private fun buildIndex(documents: List<List<String>>): Map<String, List<Posting>> {
         val tmp = HashMap<String, MutableList<Posting>>()
         documents.forEachIndexed { docId, tokens ->
             val tfMap = HashMap<String, Int>()
@@ -41,7 +46,7 @@ class Bm25Scorer(
     }
 
     private fun buildIdf(): Map<String, Float> {
-        val n = documents.size.toFloat()
+        val n = docCount.toFloat()
         val out = HashMap<String, Float>(invertedIndex.size)
         for ((term, postings) in invertedIndex) {
             val df = postings.size.toFloat()
@@ -98,8 +103,8 @@ class Bm25Scorer(
 
     /** Weighted [topK] — see [scoreWeighted]. */
     fun topKWeighted(termWeights: Map<String, Float>, k: Int): List<ScoredDoc> {
-        if (k <= 0 || documents.isEmpty()) return emptyList()
-        return documents.indices
+        if (k <= 0 || docCount == 0) return emptyList()
+        return (0 until docCount)
             .map { ScoredDoc(it, scoreWeighted(termWeights, it)) }
             .filter { it.score > 0f }
             .sortedByDescending { it.score }

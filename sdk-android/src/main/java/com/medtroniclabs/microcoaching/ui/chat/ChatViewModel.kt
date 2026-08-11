@@ -13,14 +13,17 @@ import com.medtroniclabs.microcoaching.ui.chat.ChatRole
 import com.medtroniclabs.microcoaching.ui.chat.MessageSource
 import com.medtroniclabs.microcoaching.data.repository.ChatRepositoryImpl
 import com.medtroniclabs.microcoaching.ai.model.ModelState
-import com.medtroniclabs.microcoaching.ai.inference.InferenceRouter
+import com.medtroniclabs.microcoaching.ai.inference.SharedInferenceRouter
 import com.medtroniclabs.microcoaching.ai.retrieval.ChatRefusal
 import com.medtroniclabs.microcoaching.ai.retrieval.GroundingChunk
+import com.medtroniclabs.microcoaching.ai.retrieval.GroundingSelector
 import com.medtroniclabs.microcoaching.ai.retrieval.ModuleKnowledgeIndex
 import com.medtroniclabs.microcoaching.ai.retrieval.OffTopicGuard
 import com.medtroniclabs.microcoaching.ai.retrieval.ScopeClassifier
 import com.medtroniclabs.microcoaching.ai.voice.CoachingTtsHelper
+import com.medtroniclabs.microcoaching.ai.voice.stt.SttModelState
 import com.medtroniclabs.microcoaching.network.RagQueryRequest
+import com.medtroniclabs.microcoaching.network.RagQueryResponse
 import com.medtroniclabs.microcoaching.network.SourceDocumentRef
 import com.medtroniclabs.microcoaching.ui.document.DocumentPreviewActivity
 import com.medtroniclabs.microcoaching.domain.telemetry.EventRecorder
@@ -29,7 +32,9 @@ import com.medtroniclabs.microcoaching.ui.SdkLocaleHelper
 import com.medtroniclabs.microcoaching.R
 import java.util.Locale
 import android.util.Log
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -57,37 +62,78 @@ import kotlinx.coroutines.launch
  */
 class ChatViewModel(
     application: Application,
-    private val patientId: String,
-    private val systemContext: String,
+    internal val patientId: String,
+    internal val systemContext: String,
 ) : AndroidViewModel(application) {
 
-    private val sdk = MicroCoachingSDK.getInstance()
-    private val config = sdk.config
-    private val telemetry = sdk.telemetry
-    private val db = sdk.database
-    private val chatRepo = ChatRepositoryImpl(db.chatMessageDao())
-    private val inferenceRouter = InferenceRouter(config)
-    private val tts = CoachingTtsHelper(application.applicationContext, Locale("bn", "BD"))
+    internal val sdk = MicroCoachingSDK.getInstance()
+    internal val config = sdk.config
+    internal val telemetry = sdk.telemetry
+    internal val db = sdk.database
+    internal val chatRepo = ChatRepositoryImpl(db.chatMessageDao())
+
+    // Shared, ref-counted: an embedded CoachingChatFragment and the chat bottom
+    // sheet can be alive simultaneously — per-VM routers meant two engines on
+    // the same .task (double model memory, native MediaPipe crash). Paired
+    // with SharedInferenceRouter.release() in onCleared.
+    internal val inferenceRouter = SharedInferenceRouter.acquire(config)
+    // TTS locale must track the SDK language, NOT be hardcoded to Bangla — the
+    // chat message text is now language-matched (an English app shows/speaks the
+    // EN translation of the bn-only backend answer; Bangla speaks bn). A Bangla
+    // voice reading English text is what produced the "mixed BN+EN" audio.
+    // Mirrors LearnViewModel.ttsLocaleForSdkLanguage().
+    internal val tts = CoachingTtsHelper(application.applicationContext, ttsLocaleForSdkLanguage())
     // Lazy because it depends on `session` which is declared below.
-    private val eventRecorder: EventRecorder by lazy {
+    internal val eventRecorder: EventRecorder by lazy {
         EventRecorder(
             dao = db.coachingEventDao(),
             sessionId = session.sessionId,
             chwId = sdk.currentCHWId.orEmpty(),
         )
     }
-    private val outputValidator = OutputValidator()
-    private val suggestionsRepository = ChatSuggestionsRepository(
+    internal val outputValidator = OutputValidator()
+    internal val suggestionsRepository = ChatSuggestionsRepository(
         appContext = application.applicationContext,
         moduleDao = sdk.database.moduleDao(),
     )
+    internal val chatFaqRepository = ChatFaqRepository(db.chatFaqDao())
+
+    // Manual on-device/online mode preference. Defaults to on-device even when
+    // connected; the UI chip toggles this. Routing in sendMessage combines it
+    // with live connectivity: online = preferOnline && sdk.isNetworkAvailable().
+    private val chatModePrefs = ChatModePrefs(application.applicationContext)
+
+    /** Reactive on-device/online preference for the header chip. */
+    val preferOnline: StateFlow<Boolean> = chatModePrefs.preferOnline
+
+    /**
+     * Real download size for the selected model. Seeded from cache so a repeat
+     * visit is accurate on the first frame, then refreshed in the background.
+     * Null → the card falls back to the catalog's approximate constant.
+     */
+    private val aiSizeBytes = MutableStateFlow(
+        sdk.modelManager.cachedModelSizeBytes(),
+    )
+
+    fun setPreferOnline(value: Boolean) = chatModePrefs.setPreferOnline(value)
+
+    /**
+     * The TTS voice locale for the chat, derived from the SDK language so the
+     * spoken voice matches the (now language-matched) message text. English →
+     * en-US, Bangla → bn-BD. Read once at VM construction, consistent with the
+     * lesson player; a mid-session language switch recreates the chat surface.
+     */
+    internal fun ttsLocaleForSdkLanguage(): Locale = when (sdk.language) {
+        Language.ENGLISH -> Locale.US
+        Language.BANGLA -> Locale("bn", "BD")
+    }
 
     /**
      * Resolves a string resource through the SDK-configured locale rather than
      * the host's device locale, so error states surface in Bangla regardless
      * of where this VM is instantiated.
      */
-    private fun localizedString(@androidx.annotation.StringRes resId: Int): String {
+    internal fun localizedString(@androidx.annotation.StringRes resId: Int): String {
         val ctx = SdkLocaleHelper.wrap(
             getApplication<android.app.Application>(),
             sdk.language,
@@ -102,14 +148,14 @@ class ChatViewModel(
      * untruncated message bodies. The metadata-only trace lines (scores, ids,
      * lengths, booleans) carry no such risk.
      */
-    private fun tracePreview(s: String?, max: Int = 120): String {
+    internal fun tracePreview(s: String?, max: Int = 120): String {
         if (s.isNullOrEmpty()) return "∅"
         val oneLine = s.replace('\n', '⏎').replace("\r", "")
         return if (oneLine.length <= max) oneLine else oneLine.take(max) + "…(${oneLine.length} chars)"
     }
 
     /** One-line [TRACE_TAG] description of a BM25 grounding candidate. */
-    private fun traceChunk(label: String, i: Int, c: GroundingChunk): String =
+    internal fun traceChunk(label: String, i: Int, c: GroundingChunk): String =
         "$label[$i] score=%.2f src=%s chunk=%s family=%s title=\"%s\"".format(
             Locale.US,
             c.score,
@@ -119,19 +165,33 @@ class ChatViewModel(
             tracePreview(c.titleEn ?: c.titleBn, 60),
         )
 
-    private val _uiState = MutableStateFlow<ChatUiState>(ChatUiState.Loading)
+    internal val _uiState = MutableStateFlow<ChatUiState>(ChatUiState.Loading)
     val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
 
-    private val session = ChatSession(
+    internal val session = ChatSession(
         systemContext = systemContext,
     )
 
-    private val sessionSpan = telemetry.startChatSession(session.sessionId)
-    private var inferenceJob: Job? = null
+    internal val sessionSpan = telemetry.startChatSession(session.sessionId)
+    internal var inferenceJob: Job? = null
+
+    /**
+     * The CHW's raw question for the in-flight turn, stashed by [sendMessage] so
+     * the deep serve* helpers and payload builders can put it under
+     * `payload_json.question` (Events-Modelling 1.7) without threading it through
+     * every signature. Chat is strictly single-turn (`isGenerating` guards
+     * re-entry), so exactly one question is live at a time.
+     */
+    internal var currentQuestion: String? = null
 
     init {
+        // Chat is opening → start building the BM25 knowledge index now (deferred
+        // from SDK init). Idempotent; the first build finishes before the CHW can
+        // type + send, so retrieval at query time sees a populated index.
+        sdk.ensureChatKnowledgeIndex()
         viewModelScope.launch { initializeModel() }
         observeModelState()
+        observeVoiceForAutoEnter()
     }
 
     /**
@@ -140,16 +200,18 @@ class ChatViewModel(
      *
      * - [ModelState.Downloading]     → update progress bar while download is in flight
      * - [ModelState.DownloadFailed]  → clear the spinner so the user can retry
-     * - [ModelState.Ready]           → model just landed on device; auto-init the inference engine
+     * - [ModelState.Ready]           → model landed; mark the AI card done and only
+     *                                  enter chat once the voice pack is ready too
+     *                                  (see [maybeAutoEnterChat]) — no more silent auto-jump.
      */
-    private fun observeModelState() {
+    internal fun observeModelState() {
         viewModelScope.launch {
             sdk.modelManager.state.collect { modelState ->
                 when (modelState) {
                     is ModelState.Downloading -> {
                         _uiState.update {
                             when (it) {
-                                is ChatUiState.ModelNotReady -> it.copy(
+                                is ChatUiState.SetupRequired -> it.copy(
                                     isDownloading = true,
                                     isPaused = false,
                                     downloadProgress = modelState.progressPercent,
@@ -169,7 +231,7 @@ class ChatViewModel(
                     is ModelState.Paused -> {
                         _uiState.update {
                             when (it) {
-                                is ChatUiState.ModelNotReady -> it.copy(
+                                is ChatUiState.SetupRequired -> it.copy(
                                     isDownloading = false,
                                     isPaused = true,
                                     downloadProgress = modelState.progressPercent,
@@ -181,7 +243,7 @@ class ChatViewModel(
                     is ModelState.DownloadFailed -> {
                         _uiState.update {
                             when (it) {
-                                is ChatUiState.ModelNotReady -> it.copy(
+                                is ChatUiState.SetupRequired -> it.copy(
                                     isDownloading = false,
                                     isPaused = false,
                                     downloadProgress = -1,
@@ -220,19 +282,48 @@ class ChatViewModel(
                                 @Suppress("UNUSED_VARIABLE")
                                 val ignored = currentState
                             }
-                            else -> initializeModel()
+                            is ChatUiState.SetupRequired -> {
+                                // Model is downloaded — mark the AI card done and
+                                // enable the manual "Go to chat" button. Do NOT
+                                // auto-jump into chat here: entering waits until the
+                                // voice pack is ready too (maybeAutoEnterChat). The
+                                // user can still tap "Go to chat" now — voice keeps
+                                // downloading in the in-chat background banner.
+                                _uiState.update {
+                                    (it as? ChatUiState.SetupRequired)?.copy(
+                                        aiReady = true,
+                                        isDownloading = false,
+                                        isPaused = false,
+                                    ) ?: it
+                                }
+                                maybeAutoEnterChat()
+                            }
+                            else -> maybeAutoEnterChat()
                         }
                     }
                     is ModelState.LoadFailed -> {
-                        // Model file was corrupt and has been deleted; prompt re-download.
-                        _uiState.value = ChatUiState.ModelNotReady()
+                        // Keep the "downloaded" fact honest. onModelLoadFailed only
+                        // deletes a *truncated* file; a complete-but-unloadable file
+                        // stays on disk. If it's still present, show it as ready
+                        // (→ "Go to chat" retries the load) rather than a Download CTA
+                        // that would wipe + re-fetch a good file — the on-device loop.
+                        val present = sdk.modelManager.isModelPresent()
+                        _uiState.value = ChatUiState.SetupRequired(
+                            aiRequired = true,
+                            aiReady = present,
+                            aiSizeBytes = aiSizeBytes.value,
+                        )
                     }
                     is ModelState.Idle -> {
                         // Hit by cancelDownload — partial file is gone, reset the UI
-                        // back to the initial "Download AI Model" CTA.
+                        // back to the initial "Download AI Model" CTA (keep aiRequired).
                         _uiState.update {
                             when (it) {
-                                is ChatUiState.ModelNotReady -> ChatUiState.ModelNotReady()
+                                is ChatUiState.SetupRequired ->
+                                    ChatUiState.SetupRequired(
+                                        aiRequired = it.aiRequired,
+                                        aiSizeBytes = it.aiSizeBytes,
+                                    )
                                 else -> it
                             }
                         }
@@ -241,6 +332,58 @@ class ChatViewModel(
             }
         }
     }
+
+    /**
+     * Auto-enter chat only when everything the setup screen was waiting on is
+     * ready: the AI model (skipped on low-end) AND the Bengali voice pack (only
+     * relevant in BANGLA mode). If the model is ready but voice isn't, we stay on
+     * the setup screen with the "Go to chat" button enabled so the user can enter
+     * manually — voice then finishes in the in-chat background banner. TTS never
+     * gates entry (it's optional read-aloud and platform-delegated).
+     */
+    internal fun maybeAutoEnterChat() {
+        val s = _uiState.value as? ChatUiState.SetupRequired ?: return
+        val aiOk = !s.aiRequired || s.aiReady
+        val voiceOk = sdk.language != Language.BANGLA ||
+            sdk.sttModelManager.state.value is SttModelState.Ready
+        if (aiOk && voiceOk) enterChat()
+    }
+
+    /**
+     * Observe the Bengali voice pack so that, once it lands while the user is
+     * still on the setup screen, we re-check the both-ready gate and auto-enter.
+     * The card's live progress is collected separately in [CoachingChatSurface];
+     * this observer exists solely to trigger the auto-enter transition.
+     */
+    internal fun observeVoiceForAutoEnter() {
+        if (sdk.language != Language.BANGLA) return
+        viewModelScope.launch {
+            sdk.sttModelManager.state.collect { sttState ->
+                if (sttState is SttModelState.Ready &&
+                    _uiState.value is ChatUiState.SetupRequired
+                ) {
+                    maybeAutoEnterChat()
+                }
+            }
+        }
+    }
+
+    /**
+     * Kick off the small on-device language packs the moment chat opens, so they
+     * download in parallel with (or instead of) the AI model rather than only
+     * after it. Idempotent: [SttModelManager.triggerBengaliDownload] no-ops when
+     * the pack is already present or in flight. TTS reports its own state via the
+     * [tts] helper's init — no explicit trigger needed here.
+     */
+    internal fun autoStartOnDevicePacks() {
+        if (sdk.language == Language.BANGLA) {
+            runCatching { sdk.sttModelManager.triggerBengaliDownload() }
+                .onFailure { Log.w(TAG, "auto-start Bengali STT download failed: ${it.message}") }
+        }
+    }
+
+    /** Open the system TTS-data installer for the missing read-aloud voice pack. */
+    fun installTtsData() = tts.installLanguageData()
 
     /**
      * Tap handler for the seed-suggestion chips. Persists the suggestion as
@@ -268,7 +411,95 @@ class ChatViewModel(
         sendMessage(text, moduleFamilyId = suggestion.moduleFamilyId)
     }
 
-    private suspend fun initializeModel() {
+    /**
+     * Decide, on chat open, whether to show the on-device setup screen or go
+     * straight into chat — and kick off the small language packs either way.
+     *
+     * - Low-end devices never download the AI model. They show the setup screen
+     *   only while a voice pack is still pending; otherwise they open straight
+     *   into retrieval-only chat (as before).
+     * - Capable devices without the Gemma model on disk show the setup screen
+     *   (AI card behind a manual Download button + auto-downloading voice pack).
+     * - Capable devices with the model present load the engine and open chat.
+     *
+     * The actual "enter chat" work (engine + history load) lives in
+     * [loadReadyChat] so the setup screen's "Go to chat" button and the
+     * both-ready auto-enter can reuse it via [enterChat].
+     */
+    internal suspend fun initializeModel() {
+        _uiState.value = ChatUiState.Loading
+
+        // Start the small on-device packs immediately (idempotent) so they
+        // download while the user is on the setup screen — not only after the AI
+        // model lands. Replaces the old SDK-init "wait for AI Ready, then STT" chain.
+        autoStartOnDevicePacks()
+        refreshAiSizeLabel()
+
+        val voicePending = sdk.language == Language.BANGLA &&
+            sdk.sttModelManager.state.value !is SttModelState.Ready
+
+        if (sdk.isLowEndDevice) {
+            if (voicePending) {
+                Log.i(TAG, "Low-end device — voice pack pending, showing setup screen")
+                _uiState.value = ChatUiState.SetupRequired(aiRequired = false)
+                return
+            }
+            loadReadyChat()
+            return
+        }
+
+        if (!sdk.modelManager.isModelPresent()) {
+            Log.i(TAG, "AI model not present — showing setup screen")
+            _uiState.value = currentSetupRequiredState(aiRequired = true)
+            return
+        }
+
+        loadReadyChat()
+    }
+
+    /**
+     * Resolve the selected model's real download size in the background and patch
+     * it into a live [ChatUiState.SetupRequired] when it lands. Fire-and-forget:
+     * the size is informational and must never gate the setup screen. Nothing to
+     * patch once the user has entered chat.
+     */
+    private fun refreshAiSizeLabel() {
+        if (sdk.isLowEndDevice) return   // No AI card on low-end devices.
+        viewModelScope.launch {
+            val resolved = runCatching { sdk.modelManager.resolveModelSizeBytes() }.getOrNull()
+                ?: return@launch
+            if (aiSizeBytes.value == resolved) return@launch
+            aiSizeBytes.value = resolved
+            (_uiState.value as? ChatUiState.SetupRequired)?.let {
+                _uiState.value = it.copy(aiSizeBytes = resolved)
+            }
+        }
+    }
+
+    /**
+     * Actually enter chat: load history and (on capable devices) the inference
+     * engine, then emit [ChatUiState.Ready]. Low-end devices open in
+     * retrieval-only mode (`modelPresent=false`). On a capable device whose
+     * engine fails to load, fall back to the setup screen so the user can retry
+     * the download rather than typing into a non-functional model.
+     */
+    internal suspend fun loadReadyChat() {
+        try {
+            loadReadyChatInternal()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // Anything escaping here would strand _uiState on Loading, and
+            // [enterChat] refuses to re-enter from Loading — every later tap
+            // becomes a silent no-op behind a permanent spinner. Land on a state
+            // the user can retry from instead.
+            Log.e(TAG, "loadReadyChat failed unexpectedly: ${e.message}", e)
+            _uiState.value = currentSetupRequiredState(aiRequired = !sdk.isLowEndDevice)
+                .copy(loadError = e.message ?: e::class.simpleName)
+        }
+    }
+
+    private suspend fun loadReadyChatInternal() {
         _uiState.value = ChatUiState.Loading
 
         // Low-end devices skip the inference engine entirely. The chat opens
@@ -286,26 +517,63 @@ class ChatViewModel(
                 modelPresent = false,
                 suggestedQuestions = loadSuggestions(),
             )
+            backfillFaqTranslationsThenRefresh()
             return
         }
 
-        val service = inferenceRouter.initializeIfModelPresent()
+        // Load the engine, retrying briefly on failure. A model that JUST finished
+        // downloading can transiently fail to load (file still flushing / mmap race
+        // on slower physical devices). Retrying a couple of times with a short
+        // backoff clears the common case — critical, because the failure path below
+        // used to revert to a Download CTA whose re-tap wiped the (complete) file
+        // and re-downloaded it, an endless loop the user hit on device.
+        var service = inferenceRouter.initializeIfModelPresent()
+        var attempt = 1
+        while (service == null && attempt < MODEL_LOAD_MAX_ATTEMPTS && sdk.modelManager.isModelPresent()) {
+            Log.w(TAG, "Engine load returned null (attempt $attempt/${MODEL_LOAD_MAX_ATTEMPTS}) — retrying in ${MODEL_LOAD_RETRY_DELAY_MS}ms")
+            delay(MODEL_LOAD_RETRY_DELAY_MS)
+            service = inferenceRouter.initializeIfModelPresent()
+            attempt++
+        }
 
-        // No working local inference engine → show the dedicated download / progress
-        // surface, regardless of whether the host configured a backend URL. The
-        // online RAG fallback that justified a Ready(modelPresent=false) branch was
-        // removed in Phase 2.4 (backend `/rag/answer` not implemented — see comment
-        // in sendMessage), so the chat surface with input + suggestions chips would
-        // otherwise render over a non-functional model and let the CHW type
-        // questions that go nowhere. Collapsing both null-service paths keeps the
-        // UX honest: chat is only "ready" when the LLM can actually answer.
+        // No working local inference engine → fall back to the setup surface,
+        // regardless of whether the host configured a backend URL. Opening the
+        // chat surface here would render an input and suggestion chips over a
+        // model that can't answer, so chat is only "ready" once the engine loads.
         if (service == null) {
+            // A present file that no bundled engine can EVER load (non-runnable
+            // selected variant, or modelPath pointing at a non-`.task` file such
+            // as a leftover `.litertlm`) is not a transient failure — retrying just
+            // bounces the user back to a re-enabled "Go to chat" forever. Surface an
+            // honest error instead of the silent retry loop. (Transient native/mmap
+            // failures fall through to the retry-friendly path below.)
+            if (sdk.modelManager.isModelPresent() && !inferenceRouter.canRunResolvedModel()) {
+                Log.e(TAG, "Present model cannot be loaded by any bundled engine — not retryable; surfacing error.")
+                _uiState.value = ChatUiState.Error(localizedString(R.string.chat_model_unsupported))
+                return
+            }
             if (sdk.modelManager.isModelPresent()) {
                 // File on disk but engine couldn't load — let the manager decide
                 // whether to wipe it (truncated) or keep it for retry (size OK).
                 sdk.modelManager.onModelLoadFailed()
             }
-            _uiState.value = currentModelNotReadyState()
+            // Reflect reality: if a complete file is still on disk after that, the
+            // model IS downloaded → keep aiReady=true so the AI card shows "Done"
+            // and the user retries via "Go to chat" (which re-attempts the load).
+            // We must NOT show a Download button here — re-tapping it wipes and
+            // re-fetches a perfectly good file, the loop reported on device. Only
+            // when the file is genuinely gone (absent, or just deleted as truncated)
+            // do we fall back to the Download CTA.
+            // Carry the engine's reason back to the setup screen; without it the
+            // bounce is indistinguishable from the button doing nothing.
+            val loadError = inferenceRouter.lastLoadError
+            _uiState.value = if (sdk.modelManager.isModelPresent()) {
+                Log.e(TAG, "Engine failed to load a present model after $attempt attempt(s) — offering retry, not re-download")
+                currentSetupRequiredState(aiRequired = true)
+                    .copy(aiReady = true, loadError = loadError)
+            } else {
+                currentSetupRequiredState(aiRequired = true).copy(loadError = loadError)
+            }
             return
         }
 
@@ -322,6 +590,42 @@ class ChatViewModel(
             modelPresent = true,
             suggestedQuestions = seededQuestions,
         )
+        backfillFaqTranslationsThenRefresh()
+    }
+
+    /**
+     * Manual "Go to chat" from the setup screen (also the target of the both-ready
+     * auto-enter). Guards against re-entry: setting [ChatUiState.Loading]
+     * synchronously closes the window where a concurrent [maybeAutoEnterChat]
+     * could launch a second engine load on the same .task file.
+     */
+    fun enterChat() {
+        val current = _uiState.value
+        if (current is ChatUiState.Loading || current is ChatUiState.Ready) return
+        _uiState.value = ChatUiState.Loading
+        viewModelScope.launch { loadReadyChat() }
+    }
+
+    /**
+     * If any synced chat FAQ still lacks its English question, attempt on-device
+     * translation now (the ML Kit pack may have become available since the last
+     * sync) and refresh the suggestion chips when something changes. Fire-and-
+     * forget; a no-op when nothing is pending, and a passthrough (pack still
+     * unavailable) simply leaves the chips as-is for the next attempt.
+     */
+    internal fun backfillFaqTranslationsThenRefresh() {
+        viewModelScope.launch {
+            runCatching {
+                if (!chatFaqRepository.hasPendingTranslation()) return@launch
+                val updated = chatFaqRepository.translatePending(sdk.translator)
+                if (updated > 0) {
+                    val refreshed = loadSuggestions()
+                    _uiState.update { state ->
+                        (state as? ChatUiState.Ready)?.copy(suggestedQuestions = refreshed) ?: state
+                    }
+                }
+            }
+        }
     }
 
     /**
@@ -340,6 +644,9 @@ class ChatViewModel(
         if (readyState.isGenerating) return
 
         inferenceJob?.cancel()
+        // Stash the in-flight question so serve* helpers / payload builders can
+        // echo it into `payload_json.question` (Events-Modelling 1.7).
+        currentQuestion = trimmed
         inferenceJob = viewModelScope.launch {
             val currentState = _uiState.value as? ChatUiState.Ready ?: return@launch
 
@@ -362,18 +669,26 @@ class ChatViewModel(
             // ── Routing ──────────────────────────────────────────────────────
             // Online (any device): backend RAG — higher quality, no local LLM needed.
             // Offline: low-end uses BM25-only; normal device uses on-device Gemma + BM25.
-            val online = sdk.isNetworkAvailable()
+            //
+            // The chat now defaults to on-device: online is taken ONLY when the user
+            // has opted into it via the header mode chip AND connectivity is present.
+            // `preferOnline=false` (the default) forces the on-device pipeline even on
+            // a connected device.
+            val prefersOnline = preferOnline.value
+            val connected = sdk.isNetworkAvailable()
+            val online = prefersOnline && connected
             val route = when {
                 online -> "ONLINE → backend RAG (POST /coaching/rag-query) — no on-device BM25/translation"
                 sdk.isLowEndDevice -> "OFFLINE low-end → BM25-only (no LLM)"
-                else -> "OFFLINE → on-device Gemma + BM25"
+                else -> "ON-DEVICE → Gemma + BM25"
             }
             // The one line that tells you which pipeline actually answered. NOTE the
-            // "Online" badge in the chat header is a static UI label, NOT this value —
-            // only `net` below reflects real connectivity / the route taken.
+            // header chip reflects the *chosen* mode (prefer=... below); the route is
+            // gated by real connectivity — `net` is the live signal.
             Log.i(
                 TRACE_TAG,
-                "──── turn ──── route=[$route] net=$online lowEnd=${sdk.isLowEndDevice} " +
+                "──── turn ──── route=[$route] mode=${if (prefersOnline) "online(pref)" else "on-device(pref)"} " +
+                    "net=$connected lowEnd=${sdk.isLowEndDevice} " +
                     "lang=${sdk.language} strictness=${config.chatScopeStrictness} " +
                     "modelLoaded=${inferenceRouter.isModelAvailable} " +
                     "moduleFamilyId=${moduleFamilyId ?: "∅"} q=\"${tracePreview(trimmed)}\"",
@@ -401,940 +716,80 @@ class ChatViewModel(
      * the canonical values used by [sync.SyncApi.recordSyncAttempt] so the
      * dashboard sees a consistent vocabulary across event families.
      */
-    private fun currentNetworkState(): String =
+    internal fun currentNetworkState(): String =
         if (sdk.isNetworkAvailable()) "online" else "offline"
 
     /**
-     * Build a [ChatUiState.ModelNotReady] seeded from the *current* [ModelState]
+     * Build a [ChatUiState.SetupRequired] seeded from the *current* [ModelState]
      * snapshot — closes the race where a chat fragment opens mid-download and
      * the StateFlow's first emission lands while `_uiState` is still [Loading],
      * leaving the UI showing a "Download" button while a worker is actually in
-     * flight. Reading the state at the same moment we transition to ModelNotReady
+     * flight. Reading the state at the same moment we transition to SetupRequired
      * guarantees the very first frame reflects reality.
      */
-    private fun currentModelNotReadyState(): ChatUiState.ModelNotReady {
+    internal fun currentSetupRequiredState(aiRequired: Boolean): ChatUiState.SetupRequired {
+        // Size is orthogonal to the download state machine, so it's applied once
+        // here rather than threaded through every branch below.
+        return baseSetupRequiredState(aiRequired).copy(aiSizeBytes = aiSizeBytes.value)
+    }
+
+    private fun baseSetupRequiredState(aiRequired: Boolean): ChatUiState.SetupRequired {
         return when (val s = sdk.modelManager.state.value) {
-            is ModelState.Downloading -> ChatUiState.ModelNotReady(
+            is ModelState.Downloading -> ChatUiState.SetupRequired(
                 isDownloading = true,
                 isPaused = false,
                 downloadProgress = s.progressPercent,
                 downloadBytesDownloaded = s.bytesDownloaded,
                 downloadTotalBytes = s.totalBytes,
+                aiRequired = aiRequired,
             )
-            is ModelState.Paused -> ChatUiState.ModelNotReady(
+            is ModelState.Paused -> ChatUiState.SetupRequired(
                 isDownloading = false,
                 isPaused = true,
                 downloadProgress = s.progressPercent,
+                aiRequired = aiRequired,
             )
-            is ModelState.DownloadFailed -> ChatUiState.ModelNotReady(
+            is ModelState.DownloadFailed -> ChatUiState.SetupRequired(
                 isDownloading = false,
                 isPaused = false,
                 downloadProgress = -1,
+                aiRequired = aiRequired,
             )
-            else -> ChatUiState.ModelNotReady()
-        }
-    }
-
-    /**
-     * Serve a canned refusal message (chat_plan.md §B4 L1/L2/L4 paths). Persists an
-     * assistant ChatMessage with the refusal copy, stamps `meta.outcome` so the
-     * downstream TTS layer (Phase 6) can choose a distinctive voice, and emits one
-     * IT-help telemetry row with the refusal detail in `payload_json`.
-     */
-    private suspend fun serveRefusal(
-        refusal: ChatRefusal,
-        groundedFrom: List<String>,
-        topScore: Float?,
-        validatorReason: String? = null,
-    ) {
-        Log.i(
-            TRACE_TAG,
-            "OUTCOME=REFUSAL key=${refusal.outcomeKey} topScore=$topScore " +
-                "groundedFrom=$groundedFrom reason=${validatorReason ?: "∅"}",
-        )
-        // Use the SDK-locale-wrapped context so the refusal copy follows
-        // `MicroCoachingSDK.language` regardless of the host app's device locale —
-        // SPICE running in English would otherwise resolve every refusal through
-        // its own `Resources` and emit English text inside a Bangla-mode chat.
-        val ctx = SdkLocaleHelper.wrap(
-            getApplication<android.app.Application>(),
-            sdk.language,
-        )
-        val message = refusal.message(ctx)
-        val assistantMsg = ChatMessage(
-            sessionId = session.sessionId,
-            role = ChatRole.ASSISTANT,
-            text = message,
-            source = MessageSource.LOCAL_MODEL,
-            meta = ChatMessageMeta(outcome = refusal.outcomeKey, groundedFrom = groundedFrom),
-        ).let { it.copy(id = chatRepo.saveMessage(it, chwId = sdk.currentCHWId.orEmpty())) }
-        _uiState.update {
-            (it as? ChatUiState.Ready)?.copy(
-                messages = (it as ChatUiState.Ready).messages + assistantMsg,
-                isGenerating = false,
-                streamingText = "",
-            ) ?: it
-        }
-        eventRecorder.recordDigitalHelpUsed(
-            inferenceMode = "edge",
-            validatorStatus = "fail",
-            fallbackUsed = false,
-            networkState = currentNetworkState(),
-            payloadJson = buildRefusalPayload(
-                outcome = refusal.outcomeKey,
-                topScore = topScore,
-                chunkIds = groundedFrom,
-                validatorReason = validatorReason,
-            ),
-        )
-    }
-
-    /**
-     * Serve the BM25-selected clinician content when the model's own answer is
-     * rejected by a post-stream gate (the groundedness floor or the L4 validator).
-     * BM25 already surfaced relevant cards, so the CHW gets the authoritative
-     * answer instead of an "I don't have this" refusal. Order matters for tone:
-     *   1) a linked quiz EXPLANATION (concise, already answer-shaped) — far better
-     *      than a long third-person card body; served in the CHW's language directly.
-     *   2) else the retrieved CARD body, clipped to a complete sentence so it never
-     *      ends mid-sentence.
-     *   3) else (no usable text at all) an honest Unsafe refusal.
-     * Shared by the L3c groundedness gate and the L4 validator.
-     */
-    private suspend fun serveGroundingFallbackOrRefuse(
-        grounding: List<GroundingChunk>,
-        isBangla: Boolean,
-        validatorReason: String?,
-    ) {
-        val fbAttribution = resolveSourceAttribution(grounding)
-        val explanationChunk = grounding.firstOrNull { !explanationFor(it, isBangla).isNullOrBlank() }
-        val cardFallback = grounding.firstOrNull {
-            it.source == GroundingChunk.Source.CARD &&
-                (!it.bodyBn.isNullOrBlank() || !it.bodyEn.isNullOrBlank())
-        }
-        when {
-            explanationChunk != null -> serveFallback(
-                bodyBn = explanationFor(explanationChunk, isBangla).orEmpty(),
-                groundedFrom = listOf(explanationChunk.chunkId),
-                validatorReason = validatorReason,
-                fallbackKind = "fallback_quiz_explanation",
-                sourceDocuments = fbAttribution.docs,
-                groundingModuleFamilyId = fbAttribution.familyId,
-                groundingModuleId = fbAttribution.moduleId,
-                startPage = fbAttribution.startPage,
+            is ModelState.Ready -> ChatUiState.SetupRequired(
+                aiRequired = aiRequired,
+                aiReady = true,
             )
-            cardFallback != null -> serveFallback(
-                bodyBn = clipToCompleteSentence(resolveCardBody(cardFallback, isBangla)),
-                groundedFrom = listOf(cardFallback.chunkId),
-                validatorReason = validatorReason,
-                fallbackKind = "fallback_card_body",
-                sourceDocuments = fbAttribution.docs,
-                groundingModuleFamilyId = fbAttribution.familyId,
-                groundingModuleId = fbAttribution.moduleId,
-                startPage = fbAttribution.startPage,
+            is ModelState.LoadFailed -> ChatUiState.SetupRequired(
+                // A complete-but-unloadable file is kept on disk; treat it as
+                // downloaded so the UI offers a load retry, not a re-download.
+                aiRequired = aiRequired,
+                aiReady = sdk.modelManager.isModelPresent(),
             )
-            else -> serveRefusal(
-                ChatRefusal.Unsafe,
-                groundedFrom = grounding.map { it.chunkId },
-                topScore = grounding.firstOrNull()?.score,
-                validatorReason = validatorReason,
-            )
+            else -> ChatUiState.SetupRequired(aiRequired = aiRequired)
         }
-    }
-
-    /**
-     * Serve clinician-authored module text as the chat reply (L4 fallback).
-     * Used when the validator rejects Gemma's free-form answer but a retrieved
-     * grounding chunk carries trustworthy source text. [fallbackKind] is the
-     * `ChatMessageMeta.outcome` key — `fallback_quiz_explanation` for QUIZ
-     * chunks, `fallback_card_body` for CARD chunks.
-     */
-    private suspend fun serveFallback(
-        bodyBn: String,
-        groundedFrom: List<String>,
-        validatorReason: String?,
-        fallbackKind: String = "fallback_quiz_explanation",
-        sourceDocuments: List<SourceDocumentRef> = emptyList(),
-        groundingModuleFamilyId: String? = null,
-        groundingModuleId: String? = null,
-        startPage: Int? = null,
-    ) {
-        // The LLM answer was rejected (or skipped on low-end) and we are serving
-        // clinician-authored module text verbatim instead. Two identical questions
-        // taking different branches — one served the LLM answer, one fell back here —
-        // is itself a source of the "different answer each time" report.
-        Log.i(
-            TRACE_TAG,
-            "OUTCOME=FALLBACK kind=$fallbackKind groundedFrom=$groundedFrom " +
-                "reason=${validatorReason ?: "∅"} bodyLen=${bodyBn.length} " +
-                "body=\"${tracePreview(bodyBn)}\"",
-        )
-        val assistantMsg = ChatMessage(
-            sessionId = session.sessionId,
-            role = ChatRole.ASSISTANT,
-            text = bodyBn,
-            source = MessageSource.LOCAL_MODEL,
-            meta = ChatMessageMeta(outcome = fallbackKind, groundedFrom = groundedFrom),
-            sourceDocuments = sourceDocuments,
-            groundingModuleFamilyId = groundingModuleFamilyId,
-            startPage = startPage,
-        ).let { it.copy(id = chatRepo.saveMessage(it, chwId = sdk.currentCHWId.orEmpty())) }
-        _uiState.update {
-            (it as? ChatUiState.Ready)?.copy(
-                messages = (it as ChatUiState.Ready).messages + assistantMsg,
-                isGenerating = false,
-                streamingText = "",
-            ) ?: it
-        }
-        eventRecorder.recordDigitalHelpUsed(
-            inferenceMode = "edge",
-            validatorStatus = "fail",
-            fallbackUsed = true,
-            networkState = currentNetworkState(),
-            // A clinician-authored module body IS the served response here, so
-            // module_id is the module that formed it (Events-Modelling v1.2).
-            moduleId = groundingModuleId,
-            payloadJson = buildRefusalPayload(
-                outcome = fallbackKind,
-                topScore = null,
-                chunkIds = groundedFrom,
-                validatorReason = validatorReason,
-            ),
-        )
     }
 
     /**
      * Returns the suggestions to display above the chat input.
      *
-     * Currently serves [ChatSuggestionDefaults.all] — a curated, open-question
-     * list in EN + BN. To switch back to module-sourced dynamic suggestions
-     * (quiz questions sampled from the cached corpus), change the body to:
-     *   return suggestionsRepository.nextBatch()
+     * Prefers the synced chat FAQs ([ChatFaqRepository], ranked, cached via
+     * `/sync/chat-faqs`) when any are cached; otherwise falls back to the curated
+     * static [ChatSuggestionDefaults.all] (EN + BN). Module-sourced dynamic
+     * suggestions ([suggestionsRepository]) remain available but unused.
      */
-    private suspend fun loadSuggestions(): List<SuggestedQuestion> =
-        ChatSuggestionDefaults.all
+    internal suspend fun loadSuggestions(): List<SuggestedQuestion> =
+        chatFaqRepository.loadSuggestions().ifEmpty { ChatSuggestionDefaults.all }
+
+
 
     /**
-     * Backend RAG path — used when the device is online (any device class).
-     * Sends [trimmed] to `POST /coaching/rag-query`, maps the response to a
-     * [ChatMessage], persists it, and updates [_uiState]. No local scope-gate
-     * or LLM; the backend handles retrieval and generation.
-     *
-     * @return `true` when the turn was **handled** here — either a grounded
-     *   answer was served, or the backend returned a 2xx with a deliberately
-     *   blank answer (a content decision: shown as
-     *   [R.string.chat_error_no_response_available], no fallback). Returns
-     *   `false` on an **infrastructure** failure (network error / thrown
-     *   exception, non-2xx, empty body) **without** setting an error, so the
-     *   caller can fall back to the on-device pipeline — the device can still
-     *   answer from the offline BM25 index. Connectivity is never the excuse.
+     * Resolve which side of a CARD chunk to surface as a fallback message, in the
+     * SDK language. Prefer the same-language body; when only the other language is
+     * present, translate it (EN→BN in Bangla mode, BN→EN in English mode) so the
+     * served text matches the SDK language — an English user never sees raw Bengali.
+     * Empty when the chunk carries no body on either side.
      */
-    private suspend fun handleBackendRagMessage(trimmed: String): Boolean {
-        val responseLanguage = if (sdk.language == Language.BANGLA) "bn" else "en"
-        Log.i(
-            TRACE_TAG,
-            "backend-rag → request lang=$responseLanguage moduleLimit=5 q=\"${tracePreview(trimmed)}\"",
-        )
-        try {
-            val response = sdk.apiService.ragQuery(
-                RagQueryRequest(
-                    question = trimmed,
-                    moduleLimit = 5,
-                    responseLanguage = responseLanguage,
-                ),
-            )
-            val body = response.body()
-            // Infrastructure failure (non-2xx, empty body) — NOT a content
-            // decision. Return false WITHOUT setting an error so sendMessage falls
-            // back to on-device retrieval instead of dead-ending.
-            if (!response.isSuccessful || body == null) {
-                Log.w(TAG, "handleBackendRagMessage: non-success/empty body — HTTP ${response.code()} → on-device fallback")
-                Log.i(
-                    TRACE_TAG,
-                    "backend-rag ← FAIL http=${response.code()} success=${response.isSuccessful} " +
-                        "bodyNull=${body == null} → fallback",
-                )
-                return false
-            }
-            // 2xx with a deliberately blank answer: the backend retrieved nothing
-            // groundable and chose to say nothing. Final — show the message and do
-            // NOT fall back; a local BM25 guess would undercut that decision.
-            if (body.answer.isBlank()) {
-                Log.i(TRACE_TAG, "backend-rag ← 2xx blank answer — final (no fallback)")
-                _uiState.update {
-                    (it as? ChatUiState.Ready)?.copy(
-                        isGenerating = false,
-                        error = localizedString(R.string.chat_error_no_response_available),
-                    ) ?: it
-                }
-                return true
-            }
-
-            // The backend re-embeds + retrieves on every call. Logging the retrieved
-            // set (module + cosine_distance) and the cited ids across identical
-            // questions tells you whether inconsistency is a *retrieval* problem
-            // (different modules surface each time) or a *generation* problem (same
-            // modules, different answer → server LLM sampling).
-            Log.i(
-                TRACE_TAG,
-                "backend-rag ← HTTP ${response.code()} model=${body.model} " +
-                    "answerLen=${body.answer.length} citedModuleIds=${body.citedModuleIds} " +
-                    "answer=\"${tracePreview(body.answer)}\"",
-            )
-            body.retrievedModules.forEachIndexed { i, m ->
-                Log.i(
-                    TRACE_TAG,
-                    "  retrieved[$i] module=${m.moduleId} cosineDist=${m.cosineDistance} " +
-                        "domain=${m.domain} title=\"${tracePreview(m.titleEn ?: m.titleBn, 60)}\"",
-                )
-            }
-
-            val sourceDocs = body.sourceDocuments.map { doc ->
-                SourceDocumentRef(
-                    id = doc.sourceDocumentId,
-                    title = doc.title,
-                    originalFilename = doc.originalFilename,
-                )
-            }
-
-            // First positive page from source_pages, then from page_numbers fallback.
-            val startPage = body.sourceDocuments.firstOrNull()?.let { doc ->
-                doc.sourcePages.firstOrNull { it.pageNumber > 0 }?.pageNumber
-                    ?: doc.pageNumbers.firstOrNull { it > 0 }
-            }
-
-            // cited_module_ids are version UUIDs — look up the family UUID in local DB for
-            // the chip-label fallback. Null if the module hasn't been synced yet.
-            val familyId = body.citedModuleIds.firstOrNull()?.let { versionId ->
-                runCatching { sdk.database.moduleDao().getById(versionId)?.moduleFamilyId }.getOrNull()
-            }
-
-            val assistantMsg = ChatMessage(
-                sessionId = session.sessionId,
-                role = ChatRole.ASSISTANT,
-                text = body.answer,
-                source = MessageSource.RAG_API,
-                meta = ChatMessageMeta(
-                    outcome = "served_grounded",
-                    groundedFrom = body.citedModuleIds,
-                ),
-                sourceDocuments = sourceDocs,
-                groundingModuleFamilyId = familyId,
-                startPage = startPage,
-            ).let { it.copy(id = chatRepo.saveMessage(it, chwId = sdk.currentCHWId.orEmpty())) }
-
-            _uiState.update {
-                (it as? ChatUiState.Ready)?.copy(
-                    messages = (it as ChatUiState.Ready).messages + assistantMsg,
-                    isGenerating = false,
-                    streamingText = "",
-                ) ?: it
-            }
-
-            eventRecorder.recordDigitalHelpUsed(
-                inferenceMode = "online",
-                validatorStatus = "pass",
-                fallbackUsed = false,
-                networkState = currentNetworkState(),
-                // Events-Modelling v1.2: the module that formed the response is
-                // the top cited module version straight from the RAG response.
-                moduleId = body.citedModuleIds.firstOrNull(),
-            )
-            return true
-        } catch (e: Exception) {
-            // Network drop mid-request, timeout, deserialization — infrastructure,
-            // not content. Don't set an error; fall back to on-device retrieval.
-            Log.w(TAG, "handleBackendRagMessage failed: ${e.message}", e)
-            Log.i(TRACE_TAG, "backend-rag ← EXCEPTION ${e.javaClass.simpleName} → on-device fallback")
-            return false
-        }
-    }
-
-    /**
-     * On-device Gemma path — used when offline on a capable (≥ 3 GB RAM) device.
-     * Runs the full L0→L5 pipeline: deny-list, scope gate, BM25 retrieval,
-     * Gemma generation, L3/L4 validators, and BN↔EN translation round-trip.
-     *
-     * [currentState] is the [ChatUiState.Ready] snapshot captured at the start of
-     * [sendMessage] (before the user message was appended) so the prompt history
-     * excludes the current turn — the current message is passed separately to
-     * [ChatSession.buildPrompt].
-     */
-    private suspend fun handleLocalGemmaMessage(
-        trimmed: String,
-        moduleFamilyId: String?,
-        currentState: ChatUiState.Ready,
-    ) {
-        // On-device Gemma. When the model isn't loaded — e.g. an always-online
-        // device that never downloaded it, now falling back from a failed backend
-        // call — degrade to the BM25-only path rather than erroring. Clinician-
-        // authored content is still served from the offline index.
-        val llm = inferenceRouter.activeService ?: run {
-            Log.i(TRACE_TAG, "Gemma model unavailable → degrading to BM25-only")
-            handleLowEndMessage(trimmed)
-            return
-        }
-
-        // BN→EN→AI→EN→BN round-trip: Gemma 3 1B is English-dominant, so when
-        // the SDK is configured for Bangla we pre-translate the user's question
-        // to English before prompting (the response is post-translated below).
-        // This keeps the UI bubble showing the original Bangla input but lets
-        // the model actually understand the question.
-        // Track BN↔EN passthrough across both pivots for F5 telemetry.
-        var translationPassthrough = false
-        val englishCurrent = if (sdk.language == Language.BANGLA) {
-            val result = sdk.translator.translateBnToEnResult(trimmed)
-            if (!result.translated) {
-                translationPassthrough = true
-                Log.w(TAG, "BN→EN input passthrough — untranslated Bangla sent to the LLM")
-            }
-            // translated=false means MLKit fell back to passthrough (pack not ready /
-            // translate threw) → the LLM receives raw Bangla. altered=true means the
-            // text actually changed, i.e. the model saw something different from what
-            // the CHW typed — inspect `out` when an answer looks off-topic.
-            Log.i(
-                TRACE_TAG,
-                "BN→EN translate: translated=${result.translated} altered=${result.text != trimmed} " +
-                    "in=\"${tracePreview(trimmed)}\" out=\"${tracePreview(result.text)}\"",
-            )
-            result.text
-        } else {
-            Log.i(
-                TRACE_TAG,
-                "BN→EN translate: SKIPPED (SDK language=${sdk.language}) — query goes to the LLM verbatim",
-            )
-            trimmed
-        }
-
-        // L0 — Hard deny-list. Catches obvious out-of-scope topics (coding,
-        // sports, weather, entertainment, etc.) before any LLM call. Applies
-        // in BOTH Strict and ExtendedClinical modes because the 1B model has
-        // proven unreliable at refusing these on its own even with a tight
-        // open-scope prompt. Cheap (substring match against ~50 terms).
-        val scopeClassifier = ScopeClassifier.buildFrom(sdk.morningModules.value)
-        if (scopeClassifier.isOutOfScope(trimmed) || scopeClassifier.isOutOfScope(englishCurrent)) {
-            Log.d(TAG, "L0 deny-list: hard out-of-scope match — refusing without LLM call")
-            serveRefusal(ChatRefusal.Scope, groundedFrom = emptyList(), topScore = null)
-            return
-        }
-
-        // L1 — Scope allow-list (chat_plan.md §B4). Advisory only: a keyword miss no
-        // longer hard-refuses before retrieval — that pre-search gate caused
-        // false refusals on legitimate clinical questions the gazetteer hadn't seen.
-        // The real backstops are L2 retrieval (no grounding → honest refusal below)
-        // and the OffTopicGuard clinical-overlap check. L0 (deny-list) still blocks
-        // obvious out-of-scope topics hard, before any of this.
-        val l1InScope = scopeClassifier.isInScope(trimmed) || scopeClassifier.isInScope(englishCurrent)
-        if (!l1InScope) {
-            Log.d(TAG, "L1 advisory: scope keyword miss — deferring to retrieval + OffTopicGuard")
-        }
-
-        // L2 — Retrieval threshold gate. Score like-for-like: the user's-language
-        // query against that language's index, plus (only when we translated for
-        // the LLM) the English query against the English index. BM25 scores are not
-        // calibrated across languages, so we bias toward the user's actual language:
-        // a translated-English hit only overrides a native hit when it wins by a
-        // clear margin, or when the native search found nothing.
-        val knowledgeIndex = sdk.chatKnowledgeIndex.value
-        val nativeLang =
-            if (sdk.language == Language.BANGLA) ModuleKnowledgeIndex.Lang.BN
-            else ModuleKnowledgeIndex.Lang.EN
-        // k=3: the verified "Low BP 90/60" failure had the clinically-correct card
-        // at rank 3 — k=2 cut it before the LLM ever saw it. Three reference cards
-        // fit comfortably in the prompt budget now that the session window is 1536.
-        val bm25Threshold = config.chatTuning.bm25ScoreThreshold
-        val nativeHits = knowledgeIndex.search(
-            trimmed, k = GROUNDING_K, scoreThreshold = bm25Threshold, language = nativeLang,
-        )
-        val translatedHits = if (englishCurrent != trimmed) {
-            knowledgeIndex.search(
-                englishCurrent, k = GROUNDING_K, scoreThreshold = bm25Threshold,
-                language = ModuleKnowledgeIndex.Lang.EN,
-            )
-        } else emptyList()
-        val nativeTop = nativeHits.firstOrNull()?.score ?: 0f
-        val translatedTop = translatedHits.firstOrNull()?.score ?: 0f
-        val grounding = when {
-            nativeHits.isEmpty() -> translatedHits
-            translatedTop > nativeTop * CROSS_LANGUAGE_OVERRIDE_MARGIN -> translatedHits
-            else -> nativeHits
-        }
-
-        // BM25 is deterministic for a given query+corpus, so identical questions
-        // should produce identical candidate sets here. If the served answers differ
-        // anyway, the divergence is downstream (LLM sampling / validator branch), not
-        // retrieval. Watch for an on-topic question grounding to an off-topic module
-        // (e.g. a "low BP / hypotension" question matching a "hypertension" card — the
-        // tokens overlap but the clinical meaning is opposite).
-        Log.i(
-            TRACE_TAG,
-            "BM25 native[$nativeLang] hits=${nativeHits.size} topScore=%.2f".format(Locale.US, nativeTop),
-        )
-        nativeHits.forEachIndexed { i, h -> Log.i(TRACE_TAG, traceChunk("  native", i, h)) }
-        if (englishCurrent != trimmed) {
-            Log.i(
-                TRACE_TAG,
-                "BM25 translated[EN] hits=${translatedHits.size} topScore=%.2f".format(Locale.US, translatedTop),
-            )
-            translatedHits.forEachIndexed { i, h -> Log.i(TRACE_TAG, traceChunk("  translated", i, h)) }
-        }
-        val chosenLabel = when {
-            nativeHits.isEmpty() -> "translated (native empty)"
-            grounding === translatedHits -> "translated (beat native by >${CROSS_LANGUAGE_OVERRIDE_MARGIN}×)"
-            else -> "native"
-        }
-        Log.i(TRACE_TAG, "BM25 grounding chosen=$chosenLabel size=${grounding.size}")
-
-        // Phase-0 garbage guard. Refuses only when the top hit shares ZERO clinical
-        // tokens with the query — the "BM25 latched onto a stop-word" failure that
-        // the prior synonym-map bug also enabled (e.g. "low BP 90/60" returning a
-        // diarrhoea card). The tuned refusal floor (Phase 2) replaces this once the
-        // benchmark gives us in- vs out-of-corpus score distributions to calibrate.
-        val guardQuery = if (englishCurrent != trimmed) "$trimmed $englishCurrent" else trimmed
-        if (OffTopicGuard.isClearlyUnanswerable(
-                query = guardQuery,
-                topHit = grounding.firstOrNull(),
-                clinicalTerms = scopeClassifier.scopeTerms(),
-            )
-        ) {
-            Log.i(TRACE_TAG, "Phase-0 garbage guard: zero clinical-token overlap with top hit — refusing")
-            serveRefusal(
-                ChatRefusal.NoGround,
-                groundedFrom = emptyList(),
-                topScore = grounding.firstOrNull()?.score,
-            )
-            return
-        }
-
-        // Routing — honest-refusal policy: we never let the 1B model answer
-        // ungrounded clinical content. No grounding → honest refusal. With grounding
-        // present the model answers from it (and may answer the part it covers — see
-        // the hardened prompt). The open-scope general-knowledge path was removed.
-        if (grounding.isEmpty()) {
-            serveRefusal(ChatRefusal.NoGround, groundedFrom = emptyList(), topScore = null)
-            return
-        }
-        val promptMode = PromptMode.Grounded
-        Log.d(TAG, "promptMode=$promptMode, grounding=${grounding.size} chunks, topScore=${grounding.firstOrNull()?.score}")
-
-        // Build prompt — pass previous messages only; currentMessage is appended by buildPrompt.
-        // Force the English system-prompt variant when round-tripping so all model-facing
-        // instructions are in the language the model handles best.
-        val promptLanguage = if (sdk.language == Language.BANGLA) "en-US" else sdk.language.bcp47
-        val scopeTermsForPrompt = if (promptMode == PromptMode.OpenScope) {
-            (CLINICAL_SCOPE_FLOOR + scopeClassifier.scopeTerms()).distinct()
-        } else emptyList()
-        // History is deliberately NOT replayed to the model — every turn is
-        // independent. Verified 2026-06-11: with prior exchanges in the prompt,
-        // the model imitates its own earlier free-form answers (which were
-        // grounded on *different* references) and answers from pre-training
-        // instead of the current reference block — the breastfeeding turn scored
-        // groundedness 0.14 with history vs 0.50 without, identical retrieval.
-        // The conversation stays visible in the UI; this only affects model
-        // context. When follow-up support is needed, re-introduce history as a
-        // standalone-question rewrite (use the last topic to rewrite the query
-        // BEFORE retrieval) rather than verbatim turn replay.
-        val prompt = session.buildPrompt(
-            currentMessage = englishCurrent,
-            history = emptyList(),
-            language = promptLanguage,
-            grounding = grounding,
-            mode = promptMode,
-            scopeTerms = scopeTermsForPrompt,
-        )
-        Log.d(TAG, "Prompt: $prompt")
-
-        // OTel span
-        val modelName = config.modelPath.substringAfterLast("/").ifBlank { "gemma.task" }
-        val engineName = "mediapipe"
-        val inferenceSpan = telemetry.startInferenceStream(
-            modelName = modelName,
-            engineName = engineName,
-            sessionId = session.sessionId,
-        )
-
-        val startMs = System.currentTimeMillis()
-        val responseBuilder = StringBuilder()
-
-        // Guard against endInferenceStream being called twice: once from .catch (on error)
-        // and once from the success path below. The span must be ended exactly once.
-        var inferenceSpanEnded = false
-
-        val isBangla = sdk.language == Language.BANGLA
-
-        llm.generateResponseStream(prompt)
-            .catch { cause ->
-                val errMsg = cause.message ?: "Generation failed"
-                inferenceSpanEnded = true
-                telemetry.endInferenceStream(
-                    span = inferenceSpan,
-                    estimatedInputTokens = (prompt.length / 4).toLong(),
-                    estimatedOutputTokens = (responseBuilder.length / 4).toLong(),
-                    latencyMs = System.currentTimeMillis() - startMs,
-                    success = false,
-                    errorMessage = errMsg,
-                )
-                // IT-help telemetry — inference threw. validator_status is left null
-                // because no output reached the validator. payload_json carries the
-                // error message for debug aggregation.
-                eventRecorder.recordDigitalHelpUsed(
-                    inferenceMode = "edge",
-                    validatorStatus = null,
-                    fallbackUsed = false,
-                    networkState = currentNetworkState(),
-                    payloadJson = buildJsonObject { put("error", errMsg) }.toString(),
-                )
-                _uiState.update {
-                    (it as? ChatUiState.Ready)?.copy(isGenerating = false, error = errMsg) ?: it
-                }
-            }
-            .takeWhile {
-                // Stream cap — every chat mode mandates a 2–4 sentence answer. A
-                // stream blowing far past that is the model ignoring the prompt
-                // and free-styling from pre-training (verified 2026-06-11: a 28 s,
-                // 1.3 k-char low-BP essay that the groundedness gate then refused
-                // anyway). Cancelling early reaches the same outcome in a fraction
-                // of the latency; the partial text still runs the normal gates.
-                val streamCap = config.chatTuning.streamCapChars
-                val withinCap = responseBuilder.length < streamCap
-                if (!withinCap) {
-                    Log.i(
-                        TRACE_TAG,
-                        "stream-cap: aborted generation at ${responseBuilder.length} chars " +
-                            "(cap=$streamCap — model ignored the 2–4 sentence rule)",
-                    )
-                }
-                withinCap
-            }
-            .collect { token ->
-                responseBuilder.append(token)
-                // Tokens are buffered, never streamed raw to the UI. The raw
-                // English still has to pass the validation gates (groundedness,
-                // question-echo, L4 block-list), any of which can replace it with
-                // a refusal or card fallback — streaming it live means the CHW
-                // watches an answer appear and then vanish (verified UX failure).
-                // StreamingBubble shows "●●●" while we collect; the validated
-                // text is typewritten afterwards, in every language.
-            }
-
-        val latencyMs = System.currentTimeMillis() - startMs
-        // Strip <end_of_turn> and anything after it — Gemma appends it after its response.
-        val untrimmedResponse = responseBuilder.toString()
-            .substringBefore("<end_of_turn>")
-            .trim()
-
-        // The model's raw English output, pre-validation/translation.
-        // sawEndOfTurn=false means generation stopped because the SESSION token
-        // window (`maxInferenceTokens` = input + output, see MicroCoachingConfig)
-        // was exhausted, not because the model finished — the reply is cut
-        // mid-sentence. We salvage it by trimming back to the last complete
-        // sentence ('.', '!', '?', or the Bangla danda '।') so the CHW never
-        // sees a dangling fragment like "Pain can be alleviated by".
-        val sawEndOfTurn = responseBuilder.contains("<end_of_turn>")
-        val rawResponse =
-            if (sawEndOfTurn) untrimmedResponse else trimToCompleteSentence(untrimmedResponse)
-        Log.i(
-            TRACE_TAG,
-            "LLM raw: len=${untrimmedResponse.length} latencyMs=$latencyMs sawEndOfTurn=$sawEndOfTurn " +
-                "temp=${config.inferenceTemperature} maxTokens=${config.maxInferenceTokens} " +
-                "text=\"${tracePreview(untrimmedResponse, 220)}\"",
-        )
-        if (rawResponse.length != untrimmedResponse.length) {
-            Log.i(
-                TRACE_TAG,
-                "truncation-trim: dropped ${untrimmedResponse.length - rawResponse.length} trailing chars " +
-                    "(window exhausted mid-sentence) kept=\"${tracePreview(rawResponse, 120)}\"",
-            )
-        }
-
-        // L3 — Intercept the REFUSE_NO_GROUND sentinel before it reaches the user.
-        // Treat the same as L2 (no grounding) but emit a distinct telemetry signal.
-        if (outputValidator.isNoGroundSentinel(rawResponse)) {
-            serveRefusal(
-                ChatRefusal.NoGround,
-                groundedFrom = grounding.map { it.chunkId },
-                topScore = grounding.firstOrNull()?.score,
-            )
-            return
-        }
-
-        // L3b — Open-scope sentinel: the LLM judged the question off-topic. Serve
-        // the same canned scope-refusal copy used by L1 in Strict mode.
-        if (promptMode == PromptMode.OpenScope && outputValidator.isOutOfScopeSentinel(rawResponse)) {
-            serveRefusal(ChatRefusal.Scope, groundedFrom = emptyList(), topScore = null)
-            return
-        }
-
-        // L3c — Groundedness gate (grounded mode only). The [[REFUSE_NO_GROUND]]
-        // sentinel relies on the model NOTICING the references don't cover the
-        // question; when the references are merely adjacent (newborn-warmth cards
-        // for a breast-engorgement question — the verified failure) a 1B model
-        // answers fluently from pre-training instead. Reference vocabulary
-        // survives honest paraphrase, so a near-zero content-word overlap means
-        // the answer did not come from the references. Refuse rather than serve
-        // confident pre-training content as if it were clinician-reviewed. Score
-        // is traced on every grounded turn so the floor can be tuned from logs.
-        if (promptMode == PromptMode.Grounded && rawResponse.isNotBlank()) {
-            val tuning = config.chatTuning
-            val topScore = grounding.firstOrNull()?.score
-            val groundedness = outputValidator.groundednessScore(rawResponse, grounding)
-            // Two-tier groundedness gate — always on, leniency scaled by retrieval
-            // confidence. Reference vocabulary survives honest paraphrase, so a
-            // near-zero content-word overlap means the answer did not come from the
-            // references (the model free-styled from pre-training). When BM25 found a
-            // strong match (top score ≥ strongRetrievalScore) we trust the right
-            // references are present and apply the lenient floor so a paraphrase that
-            // doesn't literally match still serves; a weak match uses the stricter
-            // floor. Both floors are tunable via ChatTuning. Score is traced on every
-            // grounded turn so the floors can be tuned from logs.
-            // PHASE3_RETIRE: delete score-based bypass when OffTopicGuard is out-of-corpus-only.
-            val strongRetrieval = (topScore ?: 0f) >= tuning.strongRetrievalScore
-            val floor =
-                if (strongRetrieval) tuning.strongRetrievalGroundednessFloor
-                else tuning.groundednessFloor
-            Log.i(
-                TRACE_TAG,
-                "groundedness=%.2f floor=%.2f strongRetrieval=%b topScore=%.2f grounded=%s".format(
-                    Locale.US, groundedness, floor, strongRetrieval,
-                    topScore ?: 0f, grounding.map { it.chunkId },
-                ),
-            )
-            if (groundedness < floor) {
-                // The model's own answer isn't grounded enough — but BM25 DID select
-                // relevant cards, so instead of telling the CHW "I don't have this"
-                // we serve the clinician-authored card content (the BM25 result) so
-                // they still get the full, authoritative answer. Same graceful
-                // fallback the L4 validator uses.
-                Log.i(
-                    TRACE_TAG,
-                    "groundedness %.2f < floor %.2f → serving BM25 card fallback"
-                        .format(Locale.US, groundedness, floor),
-                )
-                serveGroundingFallbackOrRefuse(
-                    grounding = grounding,
-                    isBangla = isBangla,
-                    validatorReason = "groundedness:%.2f".format(Locale.US, groundedness),
-                )
-                return
-            }
-        }
-
-        // L4 — Output validator. Reject responses that introduce drugs or dosages
-        // not present in the retrieved candidates, or that exceed the length cap.
-        // In the open-scope path there are no candidates by definition, so drop the
-        // drug/dosage block-list — the safety caveat in the system prompt does the
-        // work the block-list was meant to do.
-        val validation = outputValidator.validateChatResponse(
-            rawResponse,
-            grounding,
-            maxWords = config.chatTuning.maxResponseWords,
-            allowFreeText = (promptMode == PromptMode.OpenScope),
-            // English text as it appeared in the prompt — covers Bangla mode too,
-            // where the question is pre-translated before reaching the LLM.
-            userQuestion = englishCurrent,
-            enableDrugGuard = config.chatTuning.enableDrugGuard,
-            enableDosageGuard = config.chatTuning.enableDosageGuard,
-        )
-        if (!validation.isValid) {
-            Log.w(TAG, "L4 validator rejected: ${validation.failureReason}")
-            serveGroundingFallbackOrRefuse(
-                grounding = grounding,
-                isBangla = isBangla,
-                validatorReason = validation.failureReason,
-            )
-            return
-        }
-
-        val responseText = if (isBangla && rawResponse.isNotBlank()) {
-            val outResult = sdk.translator.translateEnToBnResult(rawResponse)
-            if (!outResult.translated) {
-                translationPassthrough = true
-                Log.w(TAG, "EN→BN output passthrough — untranslated English shown to the CHW")
-            }
-            val bn = outResult.text.ifBlank { rawResponse }
-            Log.d(TAG, "Post-translated EN→BN (${rawResponse.length} → ${bn.length} chars)")
-            // L5 — translation fidelity guard. If MLKit hands back an empty string
-            // or a response that's still > 30% Latin chars, prefix the EN body with
-            // the "(translation unavailable)" string so the CHW gets *something*
-            // actionable rather than a blank Bangla bubble.
-            val latinShare = bn.count { it.code in 0x41..0x7A }.toFloat() / bn.length.coerceAtLeast(1).toFloat()
-            if (latinShare > 0.3f) {
-                Log.w(TAG, "L5 translation degraded — latinShare=$latinShare; falling back to EN+prefix")
-                localizedString(R.string.chat_translation_degraded)
-                    .format(rawResponse)
-            } else {
-                bn
-            }
-        } else rawResponse
-
-        // No typewriter reveal: the assistant bubble renders markdown (**bold**,
-        // bullet/numbered lists), and progressively revealing half-typed markdown
-        // reflows and flashes raw markers. Instead the StreamingBubble shows only
-        // the "●●●" typing dots (streamingText stays blank) for the whole
-        // generation, then snaps to the fully-rendered message committed below.
-
-        if (!inferenceSpanEnded) {
-            telemetry.endInferenceStream(
-                span = inferenceSpan,
-                estimatedInputTokens = (prompt.length / 4).toLong(),
-                estimatedOutputTokens = (responseText.length / 4).toLong(),
-                latencyMs = latencyMs,
-                success = responseText.isNotBlank(),
-            )
-        }
-        telemetry.chatMessageCounter.add(1)
-
-        if (responseText.isNotBlank()) {
-            val happyOutcome = if (promptMode == PromptMode.OpenScope) "served_open_scope" else "served_grounded"
-            Log.i(
-                TRACE_TAG,
-                "OUTCOME=$happyOutcome served len=${responseText.length} " +
-                    "grounded=${grounding.map { it.chunkId }} text=\"${tracePreview(responseText)}\"",
-            )
-            val attribution = resolveSourceAttribution(grounding)
-            val assistantMsg = ChatMessage(
-                sessionId = session.sessionId,
-                role = ChatRole.ASSISTANT,
-                text = responseText,
-                traceId = inferenceSpan.spanContext.traceId,
-                source = MessageSource.LOCAL_MODEL,
-                meta = ChatMessageMeta(
-                    outcome = happyOutcome,
-                    groundedFrom = grounding.map { it.chunkId },
-                ),
-                sourceDocuments = attribution.docs,
-                groundingModuleFamilyId = attribution.familyId,
-                startPage = attribution.startPage,
-            ).let { it.copy(id = chatRepo.saveMessage(it, chwId = sdk.currentCHWId.orEmpty())) }
-            _uiState.update {
-                (it as? ChatUiState.Ready)?.copy(
-                    messages = (it as ChatUiState.Ready).messages + assistantMsg,
-                    isGenerating = false,
-                    streamingText = "",
-                ) ?: it
-            }
-            // IT-help telemetry — happy path. `served_grounded` when retrieval surfaced
-            // the answer; `served_open_scope` when the LLM judged scope itself.
-            val topScore = grounding.firstOrNull()?.score
-            val chunkIds = grounding.map { it.chunkId }
-            eventRecorder.recordDigitalHelpUsed(
-                inferenceMode = "edge",
-                validatorStatus = "pass",
-                fallbackUsed = false,
-                networkState = currentNetworkState(),
-                // Events-Modelling v1.2: the dominant grounding chunk's module
-                // version is what grounded this served answer.
-                moduleId = attribution.moduleId,
-                payloadJson = buildRefusalPayload(
-                    outcome = happyOutcome,
-                    topScore = topScore,
-                    chunkIds = chunkIds,
-                    validatorReason = null,
-                    translationPassthrough = if (isBangla) translationPassthrough else null,
-                ),
-            )
-        } else {
-            Log.i(TRACE_TAG, "OUTCOME=empty_response — LLM/translation produced no text; nothing served")
-            _uiState.update {
-                (it as? ChatUiState.Ready)?.copy(
-                    isGenerating = false,
-                    streamingText = "",
-                    error = localizedString(R.string.chat_error_no_response_generated),
-                ) ?: it
-            }
-            // IT-help telemetry — empty-response branch. Tracked separately so we can
-            // distinguish silent failures from thrown ones in the dashboard.
-            eventRecorder.recordDigitalHelpUsed(
-                inferenceMode = "edge",
-                validatorStatus = "fail",
-                fallbackUsed = false,
-                networkState = currentNetworkState(),
-                payloadJson = "{\"reason\":\"empty_response\"}",
-            )
-        }
-    }
-
-    /**
-     * Retrieval-only path used on low-end (< 3 GB RAM) devices. Mirrors the
-     * scope filters from the capable-device path (L0 deny-list, L1 allow-list
-     * in Strict mode) but skips the LLM, the L3 sentinels, and the L4
-     * validator entirely — the BM25 result is served verbatim.
-     */
-    private suspend fun handleLowEndMessage(trimmed: String) {
-        val isBangla = sdk.language == Language.BANGLA
-        val scopeClassifier = ScopeClassifier.buildFrom(sdk.morningModules.value)
-
-        // L0 — hard deny-list. Cheap; runs on the original (untranslated) text.
-        if (scopeClassifier.isOutOfScope(trimmed)) {
-            Log.d(TAG, "Low-end L0 deny-list match — refusing without retrieval")
-            serveRefusal(ChatRefusal.Scope, groundedFrom = emptyList(), topScore = null)
-            return
-        }
-
-        // L1 — allow-list (Strict only; Extended skips and lets BM25 decide).
-        val strictMode = config.chatScopeStrictness == ChatScopeStrictness.Strict
-        if (strictMode && !scopeClassifier.isInScope(trimmed)) {
-            serveRefusal(ChatRefusal.Scope, groundedFrom = emptyList(), topScore = null)
-            return
-        }
-
-        // L2 — BM25 retrieval. Single search on the input query against the index
-        // for the CHW's configured language; no BN→EN pre-translation since we
-        // never feed an LLM here.
-        val knowledgeIndex = sdk.chatKnowledgeIndex.value
-        val searchLang =
-            if (isBangla) ModuleKnowledgeIndex.Lang.BN else ModuleKnowledgeIndex.Lang.EN
-        val grounding = knowledgeIndex.search(
-            trimmed, k = 2, scoreThreshold = config.chatTuning.bm25ScoreThreshold, language = searchLang,
-        )
-        Log.i(TRACE_TAG, "BM25 low-end[$searchLang] hits=${grounding.size}")
-        grounding.forEachIndexed { i, h -> Log.i(TRACE_TAG, traceChunk("  hit", i, h)) }
-        val top = grounding.firstOrNull {
-            !it.bodyBn.isNullOrBlank() || !it.bodyEn.isNullOrBlank()
-        }
-        if (top == null) {
-            Log.d(TAG, "Low-end retrieval miss — no usable grounding chunk")
-            serveRefusal(ChatRefusal.NoGround, groundedFrom = emptyList(), topScore = null)
-            return
-        }
-        // Phase-0 garbage guard. On the low-end path the retrieved chunk IS the
-        // user-visible answer, so a wrong-card miss is louder than on the Gemma
-        // path. Refuses only when query and top hit share NO clinical tokens.
-        if (OffTopicGuard.isClearlyUnanswerable(
-                query = trimmed,
-                topHit = top,
-                clinicalTerms = scopeClassifier.scopeTerms(),
-            )
-        ) {
-            Log.i(TRACE_TAG, "Phase-0 garbage guard (low-end): zero clinical-token overlap — refusing")
-            serveRefusal(ChatRefusal.NoGround, groundedFrom = emptyList(), topScore = top.score)
-            return
-        }
-        Log.d(TAG, "Low-end serving retrieval-only — chunkId=${top.chunkId} score=${top.score}")
-        val attribution = resolveSourceAttribution(listOf(top))
-        // Prefer the concise linked quiz explanation; else the card body, clipped so
-        // it never ends mid-sentence. Both are clinician-authored — safe to serve
-        // verbatim on the LLM-less low-end path.
-        val explanation = explanationFor(top, isBangla)
-        serveFallback(
-            bodyBn = explanation ?: clipToCompleteSentence(resolveCardBody(top, isBangla)),
-            groundedFrom = listOf(top.chunkId),
-            validatorReason = null,
-            fallbackKind = if (explanation != null) "fallback_quiz_explanation" else "served_retrieval_only",
-            sourceDocuments = attribution.docs,
-            groundingModuleFamilyId = attribution.familyId,
-            groundingModuleId = attribution.moduleId,
-            startPage = attribution.startPage,
-        )
-    }
-
-    /**
-     * Resolve which side of a CARD chunk to surface as the L4 fallback message.
-     * In Bangla mode prefer `bodyBn` (no translator round-trip needed); fall
-     * back to translating `bodyEn` when only English is present. In English
-     * mode the order is reversed.
-     */
-    private suspend fun resolveCardBody(
+    internal suspend fun resolveCardBody(
         chunk: GroundingChunk,
         isBangla: Boolean,
     ): String {
@@ -1342,24 +797,37 @@ class ChatViewModel(
         if (!primary.isNullOrBlank()) return primary
         val secondary = if (isBangla) chunk.bodyEn else chunk.bodyBn
         if (secondary.isNullOrBlank()) return ""
-        return if (isBangla) sdk.translator.translateEnToBn(secondary).ifBlank { secondary } else secondary
+        return if (isBangla) {
+            sdk.translator.translateEnToBn(secondary).ifBlank { secondary }
+        } else {
+            sdk.translator.translateBnToEn(secondary).ifBlank { secondary }
+        }
     }
 
     /**
-     * The linked quiz explanation in the CHW's language, or null. We only use the
-     * same-language side — serving an English explanation inside a Bangla chat reads
-     * worse than falling through to the card body (which [resolveCardBody] can
-     * translate). Real content ships both EN + BN explanations, so this usually fires.
+     * The linked quiz explanation in the SDK language, or null when the chunk has
+     * none. Prefers the same-language side; when only the other language is present
+     * it is translated (EN→BN in Bangla mode, BN→EN in English mode). Real content
+     * ships both sides, so translation is the rare path.
      */
-    private fun explanationFor(chunk: GroundingChunk, isBangla: Boolean): String? =
-        (if (isBangla) chunk.explanationBn else chunk.explanationEn)?.takeIf { it.isNotBlank() }
+    internal suspend fun resolveExplanation(chunk: GroundingChunk, isBangla: Boolean): String? {
+        val primary = (if (isBangla) chunk.explanationBn else chunk.explanationEn)?.takeIf { it.isNotBlank() }
+        if (primary != null) return primary
+        val secondary = (if (isBangla) chunk.explanationEn else chunk.explanationBn)?.takeIf { it.isNotBlank() }
+            ?: return null
+        return if (isBangla) {
+            sdk.translator.translateEnToBn(secondary).ifBlank { secondary }
+        } else {
+            sdk.translator.translateBnToEn(secondary).ifBlank { secondary }
+        }
+    }
 
     /**
      * Clip a fallback body to its last complete sentence so a served card body never
      * ends mid-sentence (the "…in the tablet. Each" failure). Falls back to the
      * trimmed raw text when the body carries no sentence terminator at all.
      */
-    private fun clipToCompleteSentence(text: String): String =
+    internal fun clipToCompleteSentence(text: String): String =
         trimToCompleteSentence(text).ifBlank { text.trim() }
 
     /**
@@ -1384,7 +852,7 @@ class ChatViewModel(
         }
     }
 
-    private suspend fun resolveSourceAttribution(
+    internal suspend fun resolveSourceAttribution(
         grounding: List<GroundingChunk>,
     ): SourceAttribution {
         val top = grounding.firstOrNull() ?: return SourceAttribution.EMPTY
@@ -1418,7 +886,7 @@ class ChatViewModel(
      * lazily by [moduleTitleFor]. Keyed by `moduleFamilyId` rather than
      * message id so all messages sharing a module reuse the same title.
      */
-    private val moduleTitleCache = mutableMapOf<String, String?>()
+    internal val moduleTitleCache = mutableMapOf<String, String?>()
 
     /**
      * Look up the SDK-locale title for a grounding module family, or `null` if
@@ -1452,11 +920,14 @@ class ChatViewModel(
      * already greyed-out in that state by
      * [com.medtroniclabs.microcoaching.MicroCoachingSDK.networkAvailable].
      *
-     * @param startPage 1-indexed PDF page to deep-link to — sourced from the
-     *   BM25-matched card's `source_pages`. Null falls back to page 1 in the
-     *   PDF viewer; ignored entirely for image / external formats.
+     * @param citedPage 1-indexed PDF page the citation points to — sourced from the
+     *   BM25-matched card's `source_pages`. The viewer opens in single-page mode
+     *   showing ONLY this page (the citation is a specific excerpt, so the rest of
+     *   the document is deliberately not browsable here — the "Open in browser"
+     *   fallback still reaches the full doc). Null falls back to page 1; ignored
+     *   entirely for image / external formats.
      */
-    fun openSourceDocument(sourceDocumentId: String, fallbackTitle: String, startPage: Int? = null) {
+    fun openSourceDocument(sourceDocumentId: String, fallbackTitle: String, citedPage: Int? = null) {
         if (sourceDocumentId.isBlank()) return
         val originalFilename = (_uiState.value as? ChatUiState.Ready)?.messages
             ?.flatMap { it.sourceDocuments }
@@ -1467,8 +938,8 @@ class ChatViewModel(
                 context = getApplication<android.app.Application>(),
                 sourceDocumentId = sourceDocumentId,
                 title = fallbackTitle,
-                startPage = startPage,
                 originalFilename = originalFilename,
+                selectedPage = citedPage,
             )
         }
     }
@@ -1477,14 +948,24 @@ class ChatViewModel(
      * Compose the small JSON blob used for `payload_json` on chatbot events.
      * Keys mirror the Events Modelling intent: refusal_outcome, top_score, chunk_ids,
      * and an optional validator_reason for L4 rejects so tuning can debug per-class.
+     *
+     * [response] carries the served **response object as a JSON string** (Events
+     * Modelling 1.4/1.5: the `digital` family's `payload_json.response` is the full
+     * RAG response object, or the offline-constructed equivalent — see
+     * [serializeChatResponse] / [offlineChatResponse]). Passed for every served /
+     * refusal / fallback turn; omitted only on pre-response failures
+     * (language-pack, empty-response, inference error).
      */
-    private fun buildRefusalPayload(
+    internal fun buildRefusalPayload(
         outcome: String,
         topScore: Float?,
         chunkIds: List<String>,
         validatorReason: String?,
         translationPassthrough: Boolean? = null,
+        response: String? = null,
     ): String = buildJsonObject {
+        // The CHW's question for this turn (Events-Modelling 1.7 `digital_help_used`).
+        currentQuestion?.takeIf { it.isNotBlank() }?.let { put("question", it) }
         put("refusal_outcome", outcome)
         // Keep the 3-decimal rounding the hand-rolled version emitted.
         if (topScore != null) put("top_score", String.format(Locale.US, "%.3f", topScore).toDouble())
@@ -1494,7 +975,34 @@ class ChatViewModel(
         // so grounded-answer fidelity of the LLM path can be measured in the field
         // (untranslated input to the model, or untranslated output to the CHW).
         if (translationPassthrough != null) put("translation_passthrough", translationPassthrough)
+        if (!response.isNullOrBlank()) put("response", response)
     }.toString()
+
+    /**
+     * Json for `payload_json.response`. `encodeDefaults = true` keeps empty lists
+     * and null scalars in the output so the offline-constructed response object
+     * matches the online RAG shape field-for-field.
+     */
+    private val chatResponseJson = kotlinx.serialization.json.Json { encodeDefaults = true }
+
+    /**
+     * Serialize a [RagQueryResponse] to the JSON string stored in
+     * `payload_json.response` for chat telemetry. `encodeDefaults = true` so empty
+     * lists and null scalars are still emitted — the offline-constructed object
+     * (see [offlineChatResponse]) then has the exact same shape as a real online
+     * RAG response, with the non-fillable fields present but empty.
+     */
+    internal fun serializeChatResponse(resp: RagQueryResponse): String =
+        chatResponseJson.encodeToString(RagQueryResponse.serializer(), resp)
+
+    /**
+     * The canonical response object for an OFFLINE turn (on-device Gemma, BM25
+     * fallback, refusal), matching the online RAG shape. Only [answer] and — when
+     * known — the grounding [moduleId] are filled; retrieval/source/suggestion
+     * fields stay empty so the object is structurally identical to an online one.
+     */
+    internal fun offlineChatResponse(answer: String, moduleId: String? = null): RagQueryResponse =
+        RagQueryResponse(answer = answer, citedModuleIds = listOfNotNull(moduleId))
 
     fun sendQuickAnswer(question: String, answer: String) {
         if (_uiState.value !is ChatUiState.Ready) return
@@ -1515,6 +1023,95 @@ class ChatViewModel(
         }
     }
 
+    /**
+     * Record CHW feedback on an assistant response (thumbs up/down).
+     *
+     * **One-shot:** the first tap is final — once a message is rated it cannot be
+     * cleared or switched (the UI disables both thumbs). A rating emits one
+     * `chat_feedback_*` event mirroring the rated turn's `digital_help_used`
+     * context. Thumbs-UP emits immediately; thumbs-DOWN defers its event to
+     * [commitNegativeFeedback] when the detail sheet closes, so the CHW's optional
+     * note rides in the SAME event. The rating is held in
+     * [ChatUiState.Ready.feedback] (in-memory only — see the field's doc).
+     *
+     * (Toggling may return later; for now a re-tap is a no-op.)
+     *
+     * @param messageId [ChatMessage.id] of the rated assistant message.
+     * @param positive true for thumbs-up, false for thumbs-down.
+     */
+    fun submitFeedback(messageId: Long, positive: Boolean) {
+        val ready = _uiState.value as? ChatUiState.Ready ?: return
+        val message = ready.messages.firstOrNull { it.id == messageId } ?: return
+        if (message.role != ChatRole.ASSISTANT) return
+
+        // Already rated → no-op. One-shot for now (see kdoc).
+        if (ready.feedback.containsKey(messageId)) return
+
+        _uiState.update {
+            (it as? ChatUiState.Ready)?.copy(feedback = it.feedback + (messageId to positive)) ?: it
+        }
+
+        if (positive) emitChatFeedback(message, positive = true, note = null)
+    }
+
+    /**
+     * Commit thumbs-down feedback when the detail sheet closes (Submit, scrim, or
+     * swipe), carrying the CHW's optional free-text [note] in the same
+     * `chat_feedback_negative` event so the backend receives it in
+     * `payload_json.feedback` (Events Modelling 1.5).
+     *
+     * The note is also mirrored into [ChatUiState.Ready.feedbackNotes] so the sheet
+     * can re-show it. No-op if the message is no longer rated thumbs-down (e.g. the
+     * CHW cleared it in the meantime).
+     */
+    fun commitNegativeFeedback(messageId: Long, note: String) {
+        val ready = _uiState.value as? ChatUiState.Ready ?: return
+        if (ready.feedback[messageId] != false) return
+        val message = ready.messages.firstOrNull { it.id == messageId } ?: return
+        val trimmed = note.trim()
+        _uiState.update {
+            val r = it as? ChatUiState.Ready ?: return@update it
+            r.copy(
+                feedbackNotes = if (trimmed.isBlank()) r.feedbackNotes - messageId
+                else r.feedbackNotes + (messageId to trimmed),
+            )
+        }
+        emitChatFeedback(message, positive = false, note = trimmed.ifBlank { null })
+    }
+
+    /**
+     * Emit one `chat_feedback_*` telemetry event for [message], echoing the rated
+     * turn's pipeline context from [ChatMessage.meta] (inferring inference mode
+     * from [ChatMessage.source] for history-loaded messages that carry no meta),
+     * then nudge the outbound sync. [note] is the thumbs-down free text (null on
+     * thumbs-up / when none was given).
+     */
+    private fun emitChatFeedback(message: ChatMessage, positive: Boolean, note: String?) {
+        val meta = message.meta
+        val inferenceMode = meta?.inferenceMode
+            ?: if (message.source == MessageSource.RAG_API) "online" else "edge"
+        // The rated response object as a JSON string, captured on the message when
+        // it was served. History-loaded messages carry no meta → reconstruct a
+        // minimal object from the visible text so the shape is still consistent.
+        val responseJson = meta?.responseJson
+            ?: serializeChatResponse(offlineChatResponse(message.text, meta?.moduleId))
+        viewModelScope.launch {
+            eventRecorder.recordChatFeedback(
+                positive = positive,
+                responseJson = responseJson,
+                feedbackText = note,
+                question = meta?.question,
+                moduleId = meta?.moduleId,
+                inferenceMode = inferenceMode,
+                validatorStatus = meta?.validatorStatus,
+                fallbackUsed = meta?.fallbackUsed,
+                networkState = meta?.networkState ?: currentNetworkState(),
+            )
+            // Analytics events ride the existing telemetry sync; nudge it now.
+            runCatching { sdk.flushTelemetryNow() }
+        }
+    }
+
     fun speakText(text: String) = tts.speak(text)
 
     fun stopSpeaking() = tts.stop()
@@ -1527,7 +1124,7 @@ class ChatViewModel(
         sdk.modelManager.triggerDownload()
         _uiState.update {
             when (it) {
-                is ChatUiState.ModelNotReady -> it.copy(isDownloading = true)
+                is ChatUiState.SetupRequired -> it.copy(isDownloading = true)
                 is ChatUiState.Ready -> it.copy(isModelDownloading = true, modelDownloadProgress = 0)
                 else -> it
             }
@@ -1571,12 +1168,14 @@ class ChatViewModel(
     override fun onCleared() {
         super.onCleared()
         telemetry.endChatSession(sessionSpan)
-        inferenceRouter.release()
+        // Drops this VM's reference; the engine unloads only when the LAST
+        // live chat surface clears (see SharedInferenceRouter).
+        SharedInferenceRouter.release()
         tts.release()
     }
 
     companion object {
-        private const val TAG = "ChatViewModel"
+        internal const val TAG = "ChatViewModel"
 
         /**
          * Dedicated tag for the end-to-end chat pipeline trace. Filter the whole
@@ -1586,15 +1185,7 @@ class ChatViewModel(
          * line that names the route actually taken, so it is unambiguous whether a
          * message hit the backend RAG endpoint or the on-device Gemma/BM25 pipeline.
          */
-        private const val TRACE_TAG = "ChatTrace"
-
-        /**
-         * Factor by which a translated-English retrieval hit must beat the
-         * user's native-language hit before it is allowed to override it (see the
-         * L2 grounding gate). Biases grounding toward the language the CHW actually
-         * typed, since BM25 scores are not calibrated across the two indices.
-         */
-        private const val CROSS_LANGUAGE_OVERRIDE_MARGIN = 1.25f
+        internal const val TRACE_TAG = "ChatTrace"
 
         /**
          * Grounding chunks retrieved per query and injected as reference cards.
@@ -1602,7 +1193,7 @@ class ChatViewModel(
          * rank 3. Three ~300-char references fit the prompt budget comfortably
          * within the 1536-token session window.
          */
-        private const val GROUNDING_K = 3
+        internal const val GROUNDING_K = 3
 
         // The groundedness floor and the streamed-response cap are now tunable at
         // runtime via [com.medtroniclabs.microcoaching.ChatTuning] (groundednessFloor /
@@ -1631,13 +1222,23 @@ class ChatViewModel(
         private const val HISTORY_LIMIT = 50
 
         /**
+         * Engine-load retry budget for [loadReadyChat]. A model that just finished
+         * downloading can transiently fail to load (file still flushing / mmap race
+         * on slower physical devices), so we back off briefly and retry a couple of
+         * times before treating the load as failed — this prevents the "download
+         * completes, reverts to Download, re-downloads forever" loop.
+         */
+        private const val MODEL_LOAD_MAX_ATTEMPTS = 3
+        private const val MODEL_LOAD_RETRY_DELAY_MS = 500L
+
+        /**
          * Static floor of clinical domains injected into the open-scope LLM
          * prompt. Always present so the model has a stable scope reference
          * even when the indexed module corpus is empty (fresh install,
          * pre-sync). Combined at call-time with [ScopeClassifier.scopeTerms]
          * to widen scope as new modules ship.
          */
-        private val CLINICAL_SCOPE_FLOOR = listOf(
+        internal val CLINICAL_SCOPE_FLOOR = listOf(
             "hypertension",
             "diabetes",
             "non-communicable diseases",

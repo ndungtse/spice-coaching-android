@@ -31,6 +31,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.medtroniclabs.microcoaching.R
+import com.medtroniclabs.microcoaching.ui.document.DocumentFileType
 import com.medtroniclabs.microcoaching.ui.theme.MicroCoachingTheme
 import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueContainer
 import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueDark
@@ -70,6 +71,13 @@ fun ModuleTile(
     progress: Float = 0f,
     onDownloadClick: (() -> Unit)? = null,
     knowledgeCached: Boolean = false,
+    /** Original filename (KNOWLEDGE variant) — drives the file-type icon in the
+     *  thumbnail fallback so it matches [KnowledgeCard]. Null → generic icon. */
+    fileName: String? = null,
+    /** Content-domain taxonomy (Med-I617); null → Clinical. Rendered as a
+     *  [ContentDomainTag] under the subtitle. Omitted when [showContentDomain] is false. */
+    contentDomain: String? = null,
+    showContentDomain: Boolean = false,
 ) {
     Card(
         onClick = onClick,
@@ -93,11 +101,20 @@ fun ModuleTile(
                     .size(56.dp)
                     .clip(RoundedCornerShape(12.dp)),
                 fallback = {
-                    Box(
-                        modifier = Modifier
-                            .matchParentSize()
-                            .background(SpiceBlueContainer),
-                    )
+                    when (variant) {
+                        // Same gradient + file-type icon as KnowledgeCard so a
+                        // document without a thumbnail looks identical in the
+                        // home row and this grid; icon scaled to the 56.dp tile.
+                        ModuleTileVariant.KNOWLEDGE -> KnowledgeThumbnailFallback(
+                            fileType = DocumentFileType.fromFilename(fileName),
+                            iconSize = 24.dp,
+                        )
+                        ModuleTileVariant.TRAINING -> Box(
+                            modifier = Modifier
+                                .matchParentSize()
+                                .background(SpiceBlueContainer),
+                        )
+                    }
                 },
             )
 
@@ -121,6 +138,9 @@ fun ModuleTile(
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
+                }
+                if (showContentDomain) {
+                    ContentDomainTag(contentDomain)
                 }
             }
 

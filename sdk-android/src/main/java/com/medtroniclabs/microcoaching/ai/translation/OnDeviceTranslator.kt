@@ -154,6 +154,20 @@ class OnDeviceTranslator {
      */
     suspend fun translate(text: String): String = translateEnToBn(text)
 
+    /**
+     * Releases both ML Kit translator clients (each pins loaded native model
+     * memory once used). Called by
+     * [com.medtroniclabs.microcoaching.MicroCoachingSDK.shutdown] when the SDK
+     * instance is replaced. Translating after close falls back to passthrough
+     * via the per-call catch, so only invoke on a discarded instance.
+     */
+    fun close() {
+        runCatching { enToBnClient.close() }
+            .onFailure { Log.w(TAG, "enToBnClient.close threw: ${it.message}") }
+        runCatching { bnToEnClient.close() }
+            .onFailure { Log.w(TAG, "bnToEnClient.close threw: ${it.message}") }
+    }
+
     private suspend fun translateInternal(text: String, awaitMs: Long, enToBn: Boolean): TranslationResult {
         if (text.isBlank()) return TranslationResult(text, translated = false)
 

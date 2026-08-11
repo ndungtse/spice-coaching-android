@@ -1,5 +1,6 @@
 package com.medtroniclabs.microcoaching.data.repository
 
+import com.medtroniclabs.microcoaching.data.db.JsonCodecs
 import com.medtroniclabs.microcoaching.data.db.dao.ChatMessageDao
 import com.medtroniclabs.microcoaching.data.db.entity.ChatMessageEntity
 import com.medtroniclabs.microcoaching.network.SourceDocumentRef
@@ -23,8 +24,6 @@ import kotlinx.serialization.json.jsonPrimitive
  * `getRecentHistory(chwId, …)` is what drives chat-history restoration on
  * sheet reopen — a stable identity that survives the fresh-UUID-per-VM model.
  */
-private val json = Json { ignoreUnknownKeys = true }
-
 open class ChatRepositoryImpl(private val dao: ChatMessageDao) {
 
     /**
@@ -100,26 +99,13 @@ open class ChatRepositoryImpl(private val dao: ChatMessageDao) {
         startPage = startPage,
     )
 
-    private fun encodeRefs(refs: List<SourceDocumentRef>): String =
-        if (refs.isEmpty()) "[]"
-        else json.encodeToString(ListSerializer(SourceDocumentRef.serializer()), refs)
+    private fun encodeRefs(refs: List<SourceDocumentRef>): String = JsonCodecs.encodeRefs(refs)
 
-    private fun decodeRefs(jsonStr: String): List<SourceDocumentRef> =
-        runCatching {
-            json.decodeFromString(ListSerializer(SourceDocumentRef.serializer()), jsonStr)
-                .filter { it.id.isNotBlank() }
-        }.getOrDefault(emptyList())
+    private fun decodeRefs(jsonStr: String): List<SourceDocumentRef> = JsonCodecs.decodeRefs(jsonStr)
 
-    private fun encodeStringList(list: List<String>): String =
-        if (list.isEmpty()) "[]"
-        else JsonArray(list.map { JsonPrimitive(it) }).toString()
+    private fun encodeStringList(list: List<String>): String = JsonCodecs.encodeStringList(list)
 
-    private fun decodeStringList(jsonStr: String): List<String> =
-        runCatching {
-            Json.parseToJsonElement(jsonStr).jsonArray
-                .map { it.jsonPrimitive.content }
-                .filter { it.isNotBlank() }
-        }.getOrDefault(emptyList())
+    private fun decodeStringList(jsonStr: String): List<String> = JsonCodecs.decodeStringList(jsonStr)
 
     companion object {
         const val DEFAULT_HISTORY_LIMIT = 50
