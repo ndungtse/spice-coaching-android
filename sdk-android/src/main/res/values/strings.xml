@@ -1,0 +1,413 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- ── Common ────────────────────────────────────────────────────────── -->
+    <string name="common_close">Close</string>
+    <string name="common_error_title">Something went wrong</string>
+    <string name="common_collapse">Collapse</string>
+    <string name="common_expand">Expand</string>
+    <string name="common_back">Back</string>
+    <string name="common_home">Home</string>
+
+    <!-- ── Chat ──────────────────────────────────────────────────────────── -->
+    <string name="chat_model_not_installed">Local AI model not installed</string>
+    <string name="chat_model_downloading_progress">Downloading %1$d%%</string>
+    <string name="chat_model_downloading_waiting">Downloading&#8230;</string>
+    <string name="chat_model_download_action">Download</string>
+    <string name="chat_show_english">Show English</string>
+    <string name="chat_show_bengali">Show Bengali</string>
+    <string name="chat_speak">Speak</string>
+    <string name="chat_translate">Translate</string>
+    <string name="chat_response_details">Response Details</string>
+    <string name="chat_risk_label">Risk: </string>
+    <string name="chat_sources_label">Sources:</string>
+    <!-- Source-document attribution chips (below assistant chat bubbles). -->
+    <string name="chat_source_default">Source document</string>
+    <string name="chat_source_offline">Offline</string>
+    <string name="chat_source_unavailable">Source document unavailable</string>
+    <string name="chat_source_open_externally">Open in browser</string>
+    <string name="chat_source_page_prev">Previous page</string>
+    <string name="chat_source_page_next">Next page</string>
+    <!-- Rich-card media (images / videos embedded in lesson card bodies). -->
+    <string name="rich_media_unavailable">Media unavailable</string>
+    <string name="rich_image_content_description">Lesson image</string>
+    <string name="rich_video_play">Play video</string>
+    <string name="rich_video_title">Video</string>
+    <string name="chat_source_loading">Loading document&#8230;</string>
+    <string name="chat_source_indexed_suffix">%1$s — SA %2$d</string>
+    <string name="chat_ai_coaching_title">AI Coaching</string>
+    <string name="chat_model_download_description">The AI model needs to be downloaded before you can start coaching sessions.</string>
+    <string name="chat_downloading_model_progress">Downloading model&#8230; (%1$d%%)</string>
+    <string name="chat_downloading_model_preparing">Downloading model&#8230; (preparing)</string>
+    <string name="chat_model_size_hint">Requires ~%1$s. Recommended over Wi-Fi.</string>
+    <string name="chat_download_ai_model">Download AI Model</string>
+    <string name="chat_suggested_questions">Suggested Questions</string>
+    <string name="chat_next_question">Next Question</string>
+    <string name="chat_input_placeholder">Type a message&#8230;</string>
+    <string name="chat_send_message">Send message</string>
+    <string name="chat_header_title">AI Coach</string>
+    <string name="chat_header_online">Online</string>
+    <string name="chat_header_offline">Offline</string>
+    <string name="chat_today">Today</string>
+    <string name="chat_welcome_message">How can I help you today? You can ask me about patient counselling, clinical protocols, growth monitoring, or SPICE.</string>
+    <string name="chat_close_sheet">Close chat</string>
+    <string name="chat_download_pause">Pause</string>
+    <string name="chat_download_resume">Resume</string>
+    <string name="chat_download_cancel">Cancel</string>
+    <string name="chat_download_continue_in_background">Continue in background</string>
+    <string name="chat_download_maybe_later">Maybe later</string>
+    <string name="chat_download_paused_status">Paused at %1$d%%</string>
+
+    <!-- Chat header overflow + Clear history -->
+    <string name="chat_overflow_open_menu">More options</string>
+    <string name="chat_overflow_clear_history">Clear chat history</string>
+    <string name="chat_overflow_download_voice_model">Download voice model</string>
+    <string name="chat_clear_history_dialog_title">Clear chat history?</string>
+    <string name="chat_clear_history_dialog_message">This will permanently delete all your saved chat messages. This action cannot be undone.</string>
+    <string name="chat_clear_history_dialog_confirm">Clear</string>
+    <string name="chat_clear_history_dialog_cancel">Cancel</string>
+
+    <!-- ── Coaching Card ──────────────────────────────────────────────────── -->
+    <string name="card_loading">Loading coaching card&#8230;</string>
+    <string name="card_offline_badge">Offline card</string>
+    <string name="card_warning_signs">Warning Signs</string>
+    <string name="card_next_step">Next Step</string>
+    <string name="card_referral_destination">Referral Destination</string>
+    <string name="card_skip">Skip</string>
+    <string name="card_complete">Done</string>
+    <string name="card_no_guidance">No guidance available at this time.</string>
+
+    <!-- ── Learn ─────────────────────────────────────────────────────────── -->
+    <string name="learn_loading_modules">Loading modules&#8230;</string>
+    <string name="learn_module_list_title">Your Learning Modules</string>
+    <string name="learn_module_list_subtitle">Complete modules to earn badges</string>
+    <string name="learn_module_ready_title">Module Ready</string>
+    <string name="learn_module_ready_subtitle">Complete this module to earn a badge.</string>
+    <string name="learn_start_learning">Start Learning</string>
+    <string name="learn_completed_cd">Completed</string>
+    <string name="learn_reference_guide">Reference guide for Community Health Workers</string>
+    <string name="learn_warning_signs">Warning Signs</string>
+    <string name="learn_next_step">Next Step</string>
+    <string name="learn_referral_destination">Referral Destination</string>
+    <string name="learn_continue_quiz">Continue to Quiz</string>
+    <string name="learn_lesson_complete_title">Lesson complete!</string>
+    <string name="learn_lesson_complete_body">You\'ve read through the Blood Pressure Referral reference table. You can come back here to review at any time.</string>
+    <string name="learn_back_to_modules">Back to modules</string>
+    <string name="learn_retry_sync">Retry</string>
+
+    <!-- ── Domain chips ───────────────────────────────────────────────────── -->
+    <string name="domain_hypertension">Hypertension</string>
+    <string name="domain_diabetes">Diabetes</string>
+    <string name="domain_maternal_health">Maternal Health</string>
+    <string name="domain_emergency">Emergency</string>
+    <string name="domain_spice_digital">SPICE Digital</string>
+
+    <!-- ── Status chips ───────────────────────────────────────────────────── -->
+    <string name="status_completed">Completed</string>
+    <string name="status_in_progress">In Progress</string>
+
+    <!-- ── Quiz ──────────────────────────────────────────────────────────── -->
+    <string name="quiz_question_counter">Question %1$d / %2$d</string>
+    <string name="quiz_select_answer">Select an answer</string>
+    <string name="quiz_next_question">Next Question</string>
+    <string name="quiz_case_context_label">Context</string>
+    <string name="quiz_nav_previous">Previous question</string>
+    <string name="quiz_nav_next">Next question</string>
+    <string name="quiz_nav_close">Close quiz</string>
+    <string name="quiz_complete_title">Quiz Complete!</string>
+    <string name="quiz_correct_count">%1$d / %2$d correct</string>
+    <string name="quiz_badge_earned">Badge earned</string>
+    <string name="badge_expert">Expert</string>
+    <string name="badge_learner">Learner</string>
+    <string name="badge_practice">Keep Practising</string>
+    <string name="quiz_back_to_home">Back to HOME</string>
+    <string name="quiz_more_modules">More Modules</string>
+    <string name="quiz_back_to_refreshers">Back to Refreshers</string>
+    <string name="quiz_correct">Correct! 🎉</string>
+    <string name="quiz_incorrect">Incorrect</string>
+    <string name="quiz_correct_answer">Correct answer: %1$s</string>
+    <string name="quiz_points">+%1$d pts</string>
+    <string name="quiz_review_title">Question Review</string>
+    <string name="quiz_score_summary">You scored %1$d out of %2$d correct</string>
+    <string name="quiz_your_answers">Your answers</string>
+    <string name="quiz_xp_module_caption">Earned for completing this module</string>
+    <string name="quiz_done">Done</string>
+
+    <!-- ── FAB ───────────────────────────────────────────────────────────── -->
+    <string name="fab_open_coaching">Open coaching</string>
+    <string name="fab_open_learn">Learn &amp; grow</string>
+    <string name="fab_open_chat">Ask AI Assistant</string>
+    <string name="coaching_download_started">Downloading the AI assistant…</string>
+
+    <!-- ── Chat refusal taxonomy (chat_plan.md §B4 L1/L2/L4) ────────────────── -->
+    <string name="chat_refusal_scope">I can only help with hypertension, diabetes, maternal health, newborn health, cancer screening, malnutrition, infectious diseases, family planning, and the SPICE app. For other topics, please ask your supervisor.</string>
+    <string name="chat_refusal_no_ground">I don\'t have this in my training material yet. Please consult your supervisor.</string>
+    <string name="chat_refusal_unsafe">Withholding this answer for safety. Please consult your supervisor.</string>
+    <string name="chat_translation_degraded">(translation unavailable) %1$s</string>
+
+    <!-- ── Coaching card banner (UC-2 home banner) ───────────────────────── -->
+    <string name="banner_eyebrow">COACHING-QUICK RESPONSE</string>
+    <string name="morning_card_eyebrow">MORNING REFRESHER</string>
+    <string name="banner_subtitle">Based on your recent screenings, a 2-minute review before your visits today.</string>
+    <string name="banner_meta_minutes">%1$d min</string>
+    <plurals name="banner_meta_questions">
+        <item quantity="one">%1$d question</item>
+        <item quantity="other">%1$d questions</item>
+    </plurals>
+    <plurals name="morning_card_meta_cards">
+        <item quantity="one">%1$d card</item>
+        <item quantity="other">%1$d cards</item>
+    </plurals>
+    <string name="banner_meta_language_bn">Bangla</string>
+    <string name="banner_meta_language_en">English</string>
+    <string name="banner_action_start">Start</string>
+    <string name="banner_action_skip">Skip today</string>
+
+    <!-- ── Coaching card bottom sheet ────────────────────────────────────── -->
+    <string name="card_sheet_pill">QUICK REFRESHER</string>
+
+    <!-- ── Module detail screen ──────────────────────────────────────────── -->
+    <string name="module_detail_tab_about">About</string>
+    <string name="module_detail_tab_curriculum">Curriculum</string>
+    <string name="module_detail_action_start_course">Start Course</string>
+    <string name="module_detail_action_do_quiz">Do a Quiz</string>
+    <string name="module_detail_action_read_course">Read course</string>
+    <string name="module_detail_classes">%1$d Class</string>
+    <string name="module_detail_hours">%1$d Hours</string>
+    <string name="module_detail_minutes">%1$d Mins</string>
+    <!-- ── W4 course-detail + lesson player ───────────────────────────────── -->
+    <string name="module_detail_curriculum">Curriculum</string>
+    <string name="module_detail_learning_cards">Learning cards</string>
+    <string name="module_detail_quiz_section">Quiz</string>
+    <string name="module_detail_knowledge_check">Knowledge check</string>
+    <string name="module_detail_listen_bangla">Listen in Bangla</string>
+    <string name="module_detail_listen_english">Listen in English</string>
+    <string name="module_detail_listen_caption">Auto-speak will start when you open the lesson</string>
+    <string name="lesson_player_auto_speak_on">Auto-speak is on. Tap to turn off.</string>
+    <string name="lesson_player_auto_speak_off">Auto-speak is off. Tap to turn on.</string>
+    <string name="tts_language_missing">Voice not installed. Opening device settings.</string>
+    <string name="module_detail_cards_stat">Cards</string>
+    <string name="module_detail_questions_stat">Questions</string>
+    <string name="module_detail_duration_stat">Duration</string>
+    <string name="module_detail_min">%1$d min</string>
+    <string name="lesson_player_progress">Learning %1$d of %2$d</string>
+    <string name="lesson_player_next">Next</string>
+    <string name="lesson_player_previous">Previous</string>
+    <string name="refresher_card_done">Done</string>
+    <string name="refresher_next">Next refresher</string>
+    <string name="refresher_back">Back</string>
+    <string name="lesson_player_start_quiz">Start Quiz</string>
+    <string name="lesson_player_back_to_modules">More modules</string>
+    <string name="quiz_try_again">Try Again</string>
+
+    <!-- ── Voice input + translation ─────────────────────────────────────── -->
+    <string name="chat_voice_input_hint">Tap to speak</string>
+    <string name="chat_voice_input_unavailable">Voice input coming soon</string>
+    <string name="chat_input_placeholder_bn">Ask in Bangla…</string>
+    <string name="chat_input_placeholder_en">Ask in English…</string>
+    <string name="chat_translate_to_bangla">Show in Bangla</string>
+    <string name="chat_translate_to_english">Show in English</string>
+
+    <!-- ── Coach mark ─────────────────────────────────────────────────────── -->
+    <string name="coachmark_title">Your coaching module is ready!</string>
+    <string name="coachmark_body">Tap this button to access your micro-learning module and improve your NCD counselling skills.</string>
+    <string name="coachmark_got_it">Got it</string>
+
+    <!-- ── Onboarding navigation ─────────────────────────────────────────── -->
+    <string name="onboarding_page_counter">%1$d of %2$d</string>
+    <string name="onboarding_next">Next  →</string>
+    <string name="onboarding_get_started">Get started  →</string>
+    <string name="onboarding_skip">Skip intro</string>
+
+    <!-- ── Chat demo metadata ─────────────────────────────────────────────── -->
+    <string name="chat_confidence">Confidence: %1$d%%</string>
+    <string name="chat_domain">Domain: %1$s</string>
+
+    <!-- ── Onboarding slides ──────────────────────────────────────────────── -->
+    <string name="onboarding_slide1_title">Learn at your own pace</string>
+    <string name="onboarding_slide1_body">Short, focused lessons designed for busy Community Health Workers. Complete a module in under 10 minutes — anytime, anywhere.</string>
+    <string name="onboarding_slide2_title">Get better with every patient</string>
+    <string name="onboarding_slide2_body">Apply what you learn directly to your patients\' care plans. Evidence-based guidance for NCD management in Bangladesh.</string>
+    <string name="onboarding_slide3_title">Track your progress</string>
+    <string name="onboarding_slide3_body">Earn badges as you complete modules. Your supervisor can see your achievements and support your growth.</string>
+
+    <!-- ── Initial assessment (UC-1) ─────────────────────────────────────── -->
+    <string name="assessment_loading">Preparing your assessment…</string>
+    <string name="assessment_title">Quick Knowledge Check</string>
+    <string name="assessment_subtitle">Answer a few questions so we can personalise your learning path.</string>
+    <string name="assessment_complete_title">Your learning path is ready!</string>
+    <string name="assessment_complete_body">Based on your answers, we\'ve personalised your learning modules. You can explore all topics any time.</string>
+    <string name="assessment_start_btn">Start Learning  →</string>
+    <string name="assessment_close">Back to HOME</string>
+
+    <!-- ── Edge model dialogs ────────────────────────────────────────────── -->
+    <string name="edge_model_required_title">AI Model Required</string>
+    <string name="edge_model_required_msg">A local AI model is needed to generate personalised coaching cards. Download it now (~%1$s)?</string>
+    <string name="edge_model_download_btn">Download</string>
+    <string name="edge_model_later_btn">Later</string>
+    <string name="edge_error_title">AI Unavailable</string>
+    <string name="edge_error_msg">The AI could not generate a coaching card at this time. A pre-authored card is available instead.</string>
+    <string name="edge_error_dismiss">OK</string>
+
+    <!-- ── Learn screen error / empty states (Block G) ─────────────────── -->
+    <string name="learn_error_failed_load">Failed to load modules. Please restart the app.</string>
+    <string name="learn_empty_no_backend">No modules available. Backend is not configured.</string>
+    <string name="learn_empty_no_internet">No internet connection — connect to the internet and try again.</string>
+    <string name="learn_empty_no_modules">No learning modules available right now. New content will appear here when it\'s published.</string>
+    <string name="card_error_could_not_load">Could not load card.</string>
+    <!-- Generic, cause-agnostic: shown when no answer could be produced (backend
+         returned nothing, or local generation came up empty). Deliberately avoids
+         naming connection/model download — the real cause varies and pinning it is
+         misleading. -->
+    <string name="chat_error_no_response_available">Couldn\'t get a response right now. Please try again.</string>
+    <string name="chat_error_no_response_generated">No response generated — try again.</string>
+
+    <!-- ── Translation pack state chip (Block E) ────────────────────────── -->
+    <string name="translation_pack_downloading">Translation pack downloading…</string>
+    <string name="translation_pack_unavailable">Translation unavailable — content shown in English.</string>
+
+    <!-- ── UC-2 client-side gap reminders (S2) ──────────────────────────────
+         Appended as a final counselling point when the CHW has the named
+         active gap and the card domain matches. Keep ≤120 chars. -->
+    <string name="gap_reminder_missed_hypertension_referral_threshold">If BP is 160/100 or higher, refer to UHC the same day — do not delay.</string>
+    <string name="gap_reminder_diabetes_referral_threshold_missed">If FBS is 11.1 mmol/L or higher, refer the same day.</string>
+    <string name="gap_reminder_anc_danger_signs_education_gap">If severe headache, blurred vision, or bleeding occurs, send the patient to UHC immediately.</string>
+    <string name="gap_reminder_missed_referral_for_danger_signs">If you see any danger sign, refer without delay — same-day referral saves lives.</string>
+    <string name="gap_reminder_generic_hypertension">Reinforce the BP-control routine — daily medicine, less salt, daily walking.</string>
+    <string name="gap_reminder_generic_diabetes">Reinforce the diabetes routine — regular FBS check, less sugar, watch the feet.</string>
+    <string name="gap_reminder_generic_maternal_health">Reinforce the ANC routine — 4 visits, iron-folic acid, danger-sign awareness.</string>
+    <string name="gap_reminder_generic_default">Use this as a reinforcement opportunity — ask the patient to repeat the key points back to you.</string>
+
+    <!-- ── Quick learn banner (v0.3.2 modules screen) ─────────────────────── -->
+    <string name="quick_learn_label">MICRO-COACHING</string>
+    <string name="quick_learn_tap_to_answer">Tap to answer</string>
+    <string name="quick_learn_xp_reward">+%1$d XP</string>
+    <string name="quick_learn_meta_count">%1$d ASHAs answered today</string>
+
+    <!-- ── Section headings ───────────────────────────────────────────────── -->
+    <string name="modules_section_refreshers">Refreshers</string>
+    <string name="modules_section_training">Training</string>
+    <string name="modules_section_knowledge">Knowledge</string>
+    <string name="modules_see_all">See all</string>
+    <string name="refresher_empty_no_skipped">No skipped refreshers</string>
+    <string name="refresher_empty_none">No refreshers yet.</string>
+    <string name="refresher_more">More</string>
+    <string name="modules_download_cd">Download</string>
+    <string name="knowledge_pdf_label">PDF</string>
+    <string name="knowledge_downloading">Downloading… %1$s</string>
+    <string name="knowledge_doc_unavailable_offline">Document not available offline</string>
+    <string name="knowledge_view_cd">View</string>
+    <string name="doc_error_storage_full">Not enough storage to download this document</string>
+    <string name="doc_type_pdf">PDF</string>
+    <string name="doc_type_presentation">Slides</string>
+    <string name="doc_type_spreadsheet">Spreadsheet</string>
+    <string name="doc_type_document">Document</string>
+    <string name="doc_type_image">Image</string>
+    <string name="doc_type_file">File</string>
+    <!-- Host coaching grid tile (CoachingGridTile). -->
+    <string name="coaching_tile_label">Coaching</string>
+    <string name="coaching_tile_badge_cd">%1$d skipped refreshers</string>
+    <string name="doc_cannot_preview">This file can\'t be previewed in-app</string>
+    <string name="doc_open_with">Open with another app</string>
+
+    <!-- ── Refresher tile meta + categories ──────────────────────────────── -->
+    <plurals name="refresher_meta_quiz">
+        <item quantity="one">Quiz · %1$d question</item>
+        <item quantity="other">Quiz · %1$d questions</item>
+    </plurals>
+    <string name="refresher_quiz_back">Back to modules</string>
+    <string name="refresher_quiz_no_questions">No questions available for this module yet.</string>
+    <string name="category_clinical_assessment">Clinical Assessment</string>
+    <string name="category_learning">Learning</string>
+    <string name="category_spice_app">SPICE App</string>
+    <!-- Refresher content-type labels (shown on the refresher tile). -->
+    <string name="refresher_type_microcoaching">Microcoaching</string>
+    <string name="refresher_type_learning_card">Learning card</string>
+    <string name="refresher_type_quiz">Quiz</string>
+    <!-- Behavioural-gap severity chips on the refresher tile. -->
+    <string name="severity_high">HIGH</string>
+    <string name="severity_moderate">MODERATE</string>
+    <string name="severity_low">LOW</string>
+    <!-- Refresher last-card footer secondary action. -->
+    <string name="refresher_do_it_later">I\'ll do it later</string>
+
+    <!-- ── Training / Knowledge metadata ─────────────────────────────────── -->
+    <string name="training_meta_minutes_questions">%1$d min · %2$d questions</string>
+    <string name="badge_critical">CRITICAL</string>
+    <string name="badge_gap">GAP</string>
+    <string name="badge_read">READ</string>
+
+    <!-- ── Modules screen header ─────────────────────────────────────────────── -->
+    <string name="modules_screen_title">Personalised Coaching</string>
+    <!-- Header subtitle on the coaching modules screen. %1$s is a formatted date-time, e.g. "29 Jun, 14:30". -->
+    <string name="modules_last_synced">Last synced %1$s</string>
+    <string name="modules_last_synced_never">Not synced yet</string>
+
+    <!-- ── Answer feedback overlay ───────────────────────────────────────────── -->
+    <string name="feedback_why_this_matters">Why this matters</string>
+
+    <!-- ── Refresher quiz result ──────────────────────────────────────────────── -->
+    <string name="quiz_next_refresher">Next Refresher →</string>
+
+    <!-- ── Chat voice input (STT) ─────────────────────────────────────────────── -->
+    <string name="chat_voice_listening">Listening…</string>
+    <string name="chat_voice_tap_to_stop">Tap to stop</string>
+    <string name="chat_voice_permission_rationale">Microphone access is needed to dictate messages.</string>
+    <string name="chat_voice_permission_denied">Microphone permission denied. Enable it in Settings to use voice input.</string>
+    <string name="chat_voice_error_no_match">Didn\'t catch that. Tap the mic to try again.</string>
+    <string name="chat_voice_error_no_speech">No speech detected.</string>
+    <string name="chat_voice_error_network">Network error. Try again when you\'re online.</string>
+    <string name="chat_voice_error_engine">Voice input isn\'t available on this device.</string>
+    <string name="chat_voice_error_generic">Voice input failed. Tap the mic to try again.</string>
+    <string name="chat_voice_backend_on_device">On-device (offline)</string>
+    <string name="chat_voice_backend_server">Server (needs internet)</string>
+    <string name="chat_voice_backend_offline_model">Offline voice model</string>
+    <string name="chat_voice_error_offline_model_missing">You\'re offline. Download the Bengali voice model to dictate without internet.</string>
+
+    <!-- ── STT (sherpa-onnx) Bengali model download ───────────────────────────── -->
+    <string name="notification_stt_download_channel_name">Voice model download</string>
+    <string name="notification_stt_download_channel_desc">Shows progress while the offline Bengali voice model downloads.</string>
+    <string name="notification_stt_download_title">Downloading Bengali voice model</string>
+    <string name="notification_stt_download_extracting">Unpacking model files…</string>
+    <string name="stt_banner_downloading">Downloading Bengali voice model — %1$d MB / %2$d MB · %3$d%%</string>
+    <string name="stt_banner_downloading_preparing">Preparing Bengali voice model download…</string>
+    <string name="stt_banner_extracting">Unpacking Bengali voice model…</string>
+    <string name="stt_banner_failed">Voice model download failed — tap retry</string>
+    <string name="stt_banner_retry">Retry</string>
+    <string name="stt_banner_cancel">Cancel</string>
+
+    <!-- ── Download item cards on ModelNotReady screen ─────────────────────────── -->
+    <string name="download_card_ai_title">AI Model</string>
+    <string name="download_card_ai_size">~%1$s</string>
+    <string name="download_card_voice_title">Bengali Voice Model</string>
+    <string name="download_card_voice_size">~90 MB</string>
+    <string name="download_card_label_required">Required</string>
+    <string name="download_card_label_optional">Optional</string>
+    <string name="download_card_action_download">Download</string>
+    <string name="download_card_action_pause">Pause</string>
+    <string name="download_card_action_resume">Resume</string>
+    <string name="download_card_action_cancel">Cancel</string>
+    <string name="download_card_status_done">Downloaded</string>
+    <string name="download_card_status_failed">Failed</string>
+    <string name="download_card_status_preparing">Preparing…</string>
+    <string name="download_card_status_extracting">Unpacking…</string>
+    <string name="download_card_status_paused_progress">Paused at %1$d%%</string>
+    <string name="download_card_progress_mb">%1$d MB / %2$d MB · %3$d%%</string>
+    <string name="download_card_progress_indeterminate">%1$d MB downloaded</string>
+    <string name="download_card_progress_percent">%1$d%%</string>
+    <string name="download_both">Download both</string>
+    <string name="download_both_hint">Voice model continues after the AI model finishes.</string>
+
+    <!-- ── Model download foreground-service notification ─────────────────────── -->
+    <string name="notification_model_download_channel_name">AI model download</string>
+    <string name="notification_model_download_channel_desc">Shows progress while the on-device AI coaching model downloads in the background.</string>
+    <string name="notification_model_download_title">Downloading AI coaching model</string>
+    <!-- Body when total size is known: "450 MB / 900 MB · 50%" -->
+    <string name="notification_model_download_progress">%1$d MB / %2$d MB · %3$d%%</string>
+    <!-- Body when total size is unknown yet (chunked / pre-headers): "Downloaded 12 MB" -->
+    <string name="notification_model_download_progress_indeterminate">Downloaded %1$d MB</string>
+
+    <!-- In-app variant of chat_downloading_model_progress that also shows MB. -->
+    <string name="chat_downloading_model_progress_mb">Downloading model… (%1$d MB / %2$d MB · %3$d%%)</string>
+
+</resources>

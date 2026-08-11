@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!--
+        mediapipe-genai declares minSdk 24. We ship at minSdk 23 to match
+        SPICE 2.0; mediapipe is gated behind a runtime API check in
+        EdgeInference / ModelManager so the override is safe on API 23.
+        Without this, every host app would need to add the override line
+        themselves.
+    -->
+    <uses-sdk tools:overrideLibrary="com.google.mediapipe.tasks.genai" />
+
+    <!-- Required for OTel OTLP export and backend API calls -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- Required for model download (WorkManager constraints) -->
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+
+    <!--
+        Foreground service for the model download worker (~900 MB Gemma download).
+        Promoting the worker to a foreground service via WorkManager's setForeground()
+        keeps the OS from killing it while the host app is backgrounded, and surfaces a
+        persistent system notification with MB / percent progress.
+
+        FOREGROUND_SERVICE_DATA_SYNC matches the ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+        attached in ModelDownloadWorker.getForegroundInfo() on API ≥ 34. On older releases
+        the permission is silently ignored. POST_NOTIFICATIONS is required on API 33+ for
+        the notification itself; SPICE already requests it at launch.
+    -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!--
+        Required for the chat speech-to-text feature. The SDK wraps Android's
+        SpeechRecognizer; AndroidSpeechRecognizerEngine.startListening will fail
+        with ERROR_INSUFFICIENT_PERMISSIONS if the user has not granted this at
+        runtime. The chat layer requests it via ActivityResultContracts when the
+        user first taps the mic icon.
+    -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+    <!--
+        Package-visibility declaration for Android 11+ (API 30). Without this,
+        SpeechRecognizer.isRecognitionAvailable() returns false on apps targeting
+        API 30+ even when Google's recognition service is installed, because the
+        underlying ResolveInfo lookup is filtered.
+
+        See: https://developer.android.com/training/package-visibility
+    -->
+    <queries>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+    </queries>
+
+    <application>
+        <!--
+            Patch WorkManager's foreground service with the `dataSync` type.
+
+            WorkManager's library manifest declares SystemForegroundService without a
+            foregroundServiceType. When ModelDownloadWorker.getForegroundInfo() returns
+            ForegroundInfo(…, FOREGROUND_SERVICE_TYPE_DATA_SYNC), the OS rejects the
+            startForeground() call with:
+
+                "foregroundServiceType 0x00000001 is not a subset of
+                 foregroundServiceType attribute 0x00000000 in service element"
+
+            Setting the attribute here merges it into the host app's manifest so the
+            type declared on the worker matches the type declared on the service.
+            tools:node="merge" preserves WorkManager's other attributes (enabled,
+            directBootAware, exported).
+        -->
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="dataSync"
+            tools:node="merge" />
+
+        <!-- SDK coaching flow — started by CoachingFlowActivity.launch() -->
+        <activity
+            android:name="com.medtroniclabs.microcoaching.ui.flow.CoachingFlowActivity"
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar"
+            android:windowSoftInputMode="adjustResize"
+            android:exported="false" />
+
+        <!--
+            Source-document preview — launched from chat citation chips. Hosts
+            the WebView that renders the presigned-URL PDF. `configChanges` keeps
+            the WebView state across rotation so the user doesn't lose their
+            place after a tilt. Exported=false: only SDK code calls it.
+        -->
+        <activity
+            android:name="com.medtroniclabs.microcoaching.ui.document.DocumentPreviewActivity"
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:exported="false" />
+
+        <!--
+            Fullscreen video playback — launched from a rich-card video thumbnail.
+            Hosts Media3/ExoPlayer. `configChanges` keeps playback across rotation.
+            Exported=false: only SDK code calls it.
+        -->
+        <activity
+            android:name="com.medtroniclabs.microcoaching.ui.video.VideoPlayerActivity"
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:exported="false" />
+
+        <!--
+            FileProvider for sharing locally-cached source documents with
+            external apps (e.g. Google Docs, Microsoft Office) when the
+            document format cannot be previewed in-app.
+
+            Authority uses ${applicationId} so it is unique per host app and
+            never collides with the host's own provider.
+            Exported=false + grantUriPermissions=true is the standard pattern
+            for in-app file sharing — only activities we explicitly grant URIs
+            to can read the file.
+        -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.microcoaching.provider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/microcoaching_file_paths" />
+        </provider>
+
+        <!-- AndroidX App Startup initializer — zero boilerplate for SPICE -->
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            android:exported="false"
+            tools:node="merge">
+            <meta-data
+                android:name="com.medtroniclabs.microcoaching.MicroCoachingInitializer"
+                android:value="androidx.startup" />
+        </provider>
+    </application>
+
+</manifest>

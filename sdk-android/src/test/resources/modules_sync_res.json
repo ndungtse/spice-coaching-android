@@ -1,0 +1,503 @@
+{
+  "modules": [
+    {
+      "id": "b9aedd1a-a2d0-4f62-bebd-ddfad7fb1aae",
+      "module_family_id": "5a4bba34-234d-4925-b28c-78ff27c8659d",
+      "version": 1,
+      "title_bn": "অসংক্রামক রোগ কি?",
+      "title_en": "Introduction to Non-Communicable Diseases (NCDs)",
+      "description_bn": "This module introduces the concept of Non-Communicable Diseases (NCDs). It defines NCDs, contrasts them with communicable diseases, and names major examples like hypertension, diabetes, and cancer. The module covers the primary risk factors, including poor diet, lack of physical activity, and tobacco use. It also outlines key preventive measures and explains the importance of regular screening for early detection.",
+      "description_en": null,
+      "domain": "rmnch",
+      "sub_domain": null,
+      "module_type": "initial_training",
+      "tenant_id": null,
+      "estimated_minutes": 10,
+      "difficulty_level": "moderate",
+      "pass_threshold_override": null,
+      "clinically_reviewed": false,
+      "published_at": "2026-05-09T17:51:06.078437Z",
+      "updated_at": "2026-05-09T17:51:06.085723Z",
+      "cards": [
+        {
+          "body_bn": "অসংক্রামক রোগ এমন একটি শারিরীক অবস্থা যা চিকিৎসা ও নিয়ম নীতির মাধ্যমে নিয়ন্ত্রণ করা যায় কিন্তু সম্পূর্ণ ভাল করা সম্ভব নয়।",
+          "body_en": "Non-communicable diseases (NCDs) are a physical condition that can be managed through treatment and adherence to rules, but cannot be completely cured.",
+          "title_bn": "অসংক্রামক রোগ কি?",
+          "title_en": "What are Non-Communicable Diseases (NCDs)?",
+          "thresholds": [],
+          "source_block_ids": ["63971043-50cc-4d22-9320-3f58035fe2b9"]
+        },
+        {
+          "body_bn": "কয়েকটি অসংক্রামক রোগের নাম:\n* উচ্চরক্তচাপ।\n* ডায়াবেটিস।\n* ক্যান্সার।\n* ফুসফুসের দীর্ঘ স্থায়ী শ্বাসরোধক রোগ (সিওপিডি)।",
+          "body_en": "Some examples of non-communicable diseases:\n* Hypertension.\n* Diabetes.\n* Cancer.\n* Chronic Obstructive Pulmonary Disease (COPD).",
+          "title_bn": "কয়েকটি অসংক্রামক রোগের নাম",
+          "title_en": "Examples of Non-Communicable Diseases (NCDs)",
+          "thresholds": [],
+          "source_block_ids": ["63971043-50cc-4d22-9320-3f58035fe2b9"]
+        },
+        {
+          "body_bn": "সংক্রামক ও অসংক্রামক রোগের ২ টি পার্থক্য:\n| সংক্রামক রোগ           | অসংক্রামক রোগ           |\n| :------------------- | :--------------------- |\n| জীবাণু দ্বারা হয়       | জীবাণু দ্বারা হয় না      |\n| একজন থেকে আরেকজনে ছড়ায় | একজন থেকে আরেকজনে কোন ভাবেই ছড়ায় না |",
+          "body_en": "Two differences between communicable and non-communicable diseases:\n| Communicable Disease | Non-Communicable Disease |\n| :------------------- | :----------------------- |\n| Caused by germs      | Not caused by germs      |\n| Spreads from person to person | Does not spread from person to person in any way |",
+          "title_bn": "সংক্রামক ও অসংক্রামক রোগের পার্থক্য",
+          "title_en": "Difference between Communicable and Non-Communicable Diseases",
+          "thresholds": [],
+          "source_block_ids": ["63971043-50cc-4d22-9320-3f58035fe2b9"]
+        },
+        {
+          "body_bn": "কি কি কারণে অসংক্রামক রোগ হয়?\n* মন্দ খাদ্যাভ্যাস।\n* পরিশ্রম না করা।\n* তামাকজাতীয় দ্রব্য ব্যবহার।\n* মানসিক চাপ ও মদ্যপান।\n* বংশগত।\n* স্থূলতা বা অতিরিক্ত মেদ।",
+          "body_en": "What causes non-communicable diseases?\n* Poor eating habits.\n* Lack of physical activity.\n* Use of tobacco products.\n* Mental stress and alcohol consumption.\n* Heredity.\n* Obesity or excessive fat.",
+          "title_bn": "কি কি কারণে অসংক্রামক রোগ হয়?",
+          "title_en": "Causes of Non-Communicable Diseases (NCDs)",
+          "thresholds": [],
+          "source_block_ids": ["63971043-50cc-4d22-9320-3f58035fe2b9"]
+        },
+        {
+          "body_bn": "অসংক্রামক রোগ থেকে বাঁচার উপায়:\n১. খাদ্য অভ্যাস:\n* প্রতিদিন পরিমিত পরিমাণে শর্করা জাতীয় খাবার (যেমন- ভাত, রুটি) খাওয়া, বেশী বেশী শাকসবজি খাওয়া।\n* মৌসুমী ফল ও প্রচুর পরিমান পানি খাওয়া।\n* চিনি এবং চিনি থেকে তৈরী করা খাবার পরিহার করা।\n* পাতে আলগা লবন না খাওয়া।\n* চিপস, বিস্কুট, চানাচুর, বার্গার, সিংগারাসহ অন্যান্য ফাস্টফুড অতিরিক্ত না খাওয়া।\n* কোমল পানীয় (কোক,জুস) পরিহার করা।\n* তৈল জাতীয় খাবার (ঘি, মাখন, ডালডা, নারিকেল তেল) পরিহার করা।",
+          "body_en": "Ways to prevent non-communicable diseases:\n1. Eating habits:\n* Eat moderate amounts of carbohydrate-rich foods daily (e.g., rice, bread), and plenty of vegetables.\n* Eat seasonal fruits and drink plenty of water.\n* Avoid sugar and foods made from sugar.\n* Do not add extra salt to your plate.\n* Do not overeat chips, biscuits, chanachur, burgers, singara, and other fast foods.\n* Avoid soft drinks (Coke, juice).\n* Avoid oily foods (ghee, butter, dalda, coconut oil).",
+          "title_bn": "অসংক্রামক রোগ থেকে বাঁচার উপায়: খাদ্য অভ্যাস",
+          "title_en": "Preventing Non-Communicable Diseases (NCDs): Diet",
+          "thresholds": [],
+          "source_block_ids": [
+            "63971043-50cc-4d22-9320-3f58035fe2b9",
+            "3c115b0e-c4b2-430e-b16b-61c03ba81678"
+          ]
+        },
+        {
+          "body_bn": "অসংক্রামক রোগ থেকে বাঁচার উপায়:\n২. কায়িক পরিশ্রম করা:\n* প্রতিদিন ৩০ মিনিট করে সপ্তাহে অন্তত ১৫০ মিনিট ঘাম ঝরিয়ে হাটা বা ব্যায়াম করা।\n* ওজন নিয়ন্ত্রণে রাখা (শরীরের উচ্চতা অনুযায়ী ওজন)।\n* তামাক / ধুমপান বর্জন করা যেমন বিড়ি, সিগারেট, গুল, সাদাপাতা, জর্দা।\n* মদ্যপান থেকে বিরত থাকা।\n* দুশ্চিন্তা মুক্ত থাকা।",
+          "body_en": "Ways to prevent non-communicable diseases:\n2. Physical activity:\n* Walk or exercise for at least 30 minutes daily, totaling at least 150 minutes per week, to break a sweat.\n* Maintain a healthy weight (weight according to body height).\n* Avoid tobacco/smoking such as bidis, cigarettes, gul, sadapata, jorda.\n* Refrain from alcohol consumption.\n* Stay free from anxiety.",
+          "title_bn": "অসংক্রামক রোগ থেকে বাঁচার উপায়: কায়িক পরিশ্রম ও অন্যান্য",
+          "title_en": "Preventing Non-Communicable Diseases (NCDs): Lifestyle",
+          "thresholds": [],
+          "source_block_ids": ["3c115b0e-c4b2-430e-b16b-61c03ba81678"]
+        },
+        {
+          "body_bn": "অসংক্রামক রোগ যে কোন বয়সে হতে পারে। অসংক্রামক রোগ হলে শারীরিক লক্ষণ সহজে প্রকাশ পায় না। যেহেতু সবসময় লক্ষণ প্রকাশ পায় না, তাই মাঝে মাঝে শারীরিক পরীক্ষা করলে অল্পতে রোগ ধরা পড়ে এবং নিয়ন্ত্রন করা সহজ হয়।",
+          "body_en": "Non-communicable diseases can occur at any age. Physical symptoms of NCDs do not easily appear. Since symptoms are not always evident, occasional physical examinations can detect the disease early, making it easier to control.",
+          "title_bn": "অসংক্রামক রোগ নির্ণয়ে নিয়মিত পরীক্ষার প্রয়োজন কেন?",
+          "title_en": "Why Regular Screening is Needed for NCDs",
+          "thresholds": [],
+          "source_block_ids": [
+            "73636fb7-d919-4d69-b1ea-6ce8bc35e969",
+            "cb88771c-2ddc-4bc8-b4f6-981c35032bbe"
+          ]
+        }
+      ],
+      "quiz": [
+        {
+          "id": "35170a91-4240-4917-89bf-6e9066ba4958",
+          "question_order": 1,
+          "question_bn": "অসংক্রামক রোগ সম্পর্কে নিচের কোন তথ্যটি সঠিক?",
+          "question_en": "Which of the following statements about non-communicable diseases (NCDs) is correct?",
+          "case_setup_bn": null,
+          "case_setup_en": null,
+          "options_bn": [
+            "এটি সম্পূর্ণভাবে নিরাময় করা সম্ভব।",
+            "এটি চিকিৎসা ও নিয়ম নীতির মাধ্যমে নিয়ন্ত্রণ করা যায় কিন্তু সম্পূর্ণ ভাল করা সম্ভব নয়।",
+            "এটি শুধুমাত্র জীবাণু দ্বারা ছড়ায়।",
+            "এটি শুধুমাত্র বয়স্কদের হয়।"
+          ],
+          "options_en": [
+            "It can be completely cured.",
+            "It can be controlled through treatment and guidelines but cannot be completely cured.",
+            "It is only spread by germs.",
+            "It only affects older people."
+          ],
+          "correct_indices": [1],
+          "explanation_bn": "কার্ড ১ অনুযায়ী, অসংক্রামক রোগ চিকিৎসা ও নিয়ম নীতির মাধ্যমে নিয়ন্ত্রণ করা যায় কিন্তু সম্পূর্ণ ভাল করা সম্ভব নয়।",
+          "explanation_en": "According to Card 1, non-communicable diseases can be controlled through treatment and guidelines but cannot be completely cured.",
+          "difficulty": "easy"
+        },
+        {
+          "id": "a6581ec1-fc09-456f-bee4-1d4f5cad8c9d",
+          "question_order": 2,
+          "question_bn": "নিচের কোনটি একটি অসংক্রামক রোগ?",
+          "question_en": "Which of the following is a non-communicable disease?",
+          "case_setup_bn": null,
+          "case_setup_en": null,
+          "options_bn": ["ডায়াবেটিস", "কলেরা", "টাইফয়েড", "ম্যালেরিয়া"],
+          "options_en": ["Diabetes", "Cholera", "Typhoid", "Malaria"],
+          "correct_indices": [0],
+          "explanation_bn": "কার্ড ২ অনুযায়ী, ডায়াবেটিস একটি অসংক্রামক রোগ।",
+          "explanation_en": "According to Card 2, Diabetes is a non-communicable disease.",
+          "difficulty": "easy"
+        },
+        {
+          "id": "412517b7-2860-4e27-8ad6-79c28f37a7f9",
+          "question_order": 3,
+          "question_bn": "সংক্রামক রোগ এবং অসংক্রামক রোগের মধ্যে প্রধান পার্থক্য কী?",
+          "question_en": "What is the main difference between communicable and non-communicable diseases?",
+          "case_setup_bn": null,
+          "case_setup_en": null,
+          "options_bn": [
+            "সংক্রামক রোগ জীবাণু দ্বারা হয়, অসংক্রামক রোগ জীবাণু দ্বারা হয় না।",
+            "অসংক্রামক রোগ একজন থেকে আরেকজনে ছড়ায়, সংক্রামক রোগ ছড়ায় না।",
+            "সংক্রামক রোগ সম্পূর্ণ নিরাময়যোগ্য, অসংক্রামক রোগ নিরাময়যোগ্য নয়।",
+            "অসংক্রামক রোগ শুধুমাত্র শিশুদের হয়, সংক্রামক রোগ প্রাপ্তবয়স্কদের হয়।"
+          ],
+          "options_en": [
+            "Communicable diseases are caused by germs, non-communicable diseases are not.",
+            "Non-communicable diseases spread from person to person, communicable diseases do not.",
+            "Communicable diseases are completely curable, non-communicable diseases are not.",
+            "Non-communicable diseases only affect children, communicable diseases affect adults."
+          ],
+          "correct_indices": [0],
+          "explanation_bn": "কার্ড ৩ অনুযায়ী, সংক্রামক রোগ জীবাণু দ্বারা হয় কিন্তু অসংক্রামক রোগ জীবাণু দ্বারা হয় না।",
+          "explanation_en": "According to Card 3, communicable diseases are caused by germs, but non-communicable diseases are not.",
+          "difficulty": "moderate"
+        },
+        {
+          "id": "84d5bdfb-3b56-479d-b195-5a07c11ce395",
+          "question_order": 4,
+          "question_bn": "অসংক্রামক রোগ হওয়ার কারণগুলোর মধ্যে কোনটি সঠিক নয়?",
+          "question_en": "Which of the following is NOT a cause of non-communicable diseases?",
+          "case_setup_bn": null,
+          "case_setup_en": null,
+          "options_bn": [
+            "মন্দ খাদ্যাভ্যাস",
+            "পরিশ্রম না করা",
+            "তামাকজাতীয় দ্রব্য ব্যবহার",
+            "পর্যাপ্ত ঘুম"
+          ],
+          "options_en": [
+            "Poor eating habits",
+            "Lack of physical activity",
+            "Use of tobacco products",
+            "Adequate sleep"
+          ],
+          "correct_indices": [3],
+          "explanation_bn": "কার্ড ৪ অনুযায়ী, মন্দ খাদ্যাভ্যাস, পরিশ্রম না করা এবং তামাকজাতীয় দ্রব্য ব্যবহার অসংক্রামক রোগের কারণ। পর্যাপ্ত ঘুম অসংক্রামক রোগের কারণ নয়।",
+          "explanation_en": "According to Card 4, poor eating habits, lack of physical activity, and use of tobacco products are causes of NCDs. Adequate sleep is not a cause of NCDs.",
+          "difficulty": "moderate"
+        },
+        {
+          "id": "c4673707-424e-438c-be24-d9a41ec4e537",
+          "question_order": 5,
+          "question_bn": "অসংক্রামক রোগ থেকে বাঁচতে নিচের কোন খাদ্য অভ্যাসটি পরিহার করা উচিত?",
+          "question_en": "Which of the following dietary habits should be avoided to prevent non-communicable diseases?",
+          "case_setup_bn": null,
+          "case_setup_en": null,
+          "options_bn": [
+            "প্রতিদিন পরিমিত পরিমাণে শর্করা জাতীয় খাবার খাওয়া।",
+            "মৌসুমী ফল ও প্রচুর পরিমান পানি খাওয়া।",
+            "চিনি এবং চিনি থেকে তৈরী করা খাবার পরিহার করা।",
+            "বেশী বেশী শাকসবজি খাওয়া।"
+          ],
+          "options_en": [
+            "Eating moderate amounts of carbohydrate-rich foods daily.",
+            "Eating seasonal fruits and plenty of water.",
+            "Avoiding sugar and foods made from sugar.",
+            "Eating more vegetables."
+          ],
+          "correct_indices": [2],
+          "explanation_bn": "কার্ড ৫ অনুযায়ী, চিনি এবং চিনি থেকে তৈরী করা খাবার পরিহার করা উচিত অসংক্রামক রোগ থেকে বাঁচতে।",
+          "explanation_en": "According to Card 5, avoiding sugar and foods made from sugar should be done to prevent non-communicable diseases.",
+          "difficulty": "easy"
+        },
+        {
+          "id": "54d84509-bdb9-4ca7-8503-dc95968e1197",
+          "question_order": 6,
+          "question_bn": "অসংক্রামক রোগ থেকে বাঁচার জন্য একজন ব্যক্তির সপ্তাহে কত মিনিট ঘাম ঝরিয়ে হাঁটা বা ব্যায়াম করা উচিত?",
+          "question_en": "To prevent non-communicable diseases, how many minutes per week should a person walk or exercise to break a sweat?",
+          "case_setup_bn": null,
+          "case_setup_en": null,
+          "options_bn": ["৩০ মিনিট", "৬০ মিনিট", "১৫০ মিনিট", "২০০ মিনিট"],
+          "options_en": [
+            "30 minutes",
+            "60 minutes",
+            "150 minutes",
+            "200 minutes"
+          ],
+          "correct_indices": [2],
+          "explanation_bn": "কার্ড ৬ অনুযায়ী, প্রতিদিন ৩০ মিনিট করে সপ্তাহে অন্তত ১৫০ মিনিট ঘাম ঝরিয়ে হাটা বা ব্যায়াম করা উচিত।",
+          "explanation_en": "According to Card 6, one should walk or exercise to break a sweat for at least 150 minutes per week, 30 minutes daily.",
+          "difficulty": "moderate"
+        },
+        {
+          "id": "6e33f5bf-975c-4468-ab67-5a18a321525d",
+          "question_order": 7,
+          "question_bn": "অসংক্রামক রোগ নির্ণয়ে নিয়মিত পরীক্ষার প্রয়োজন কেন?",
+          "question_en": "Why is regular screening necessary for diagnosing non-communicable diseases?",
+          "case_setup_bn": null,
+          "case_setup_en": null,
+          "options_bn": [
+            "কারণ অসংক্রামক রোগ সবসময় লক্ষণ প্রকাশ করে।",
+            "কারণ অসংক্রামক রোগ শুধুমাত্র বয়স্কদের হয়।",
+            "কারণ সবসময় লক্ষণ প্রকাশ পায় না, তাই মাঝে মাঝে শারীরিক পরীক্ষা করলে অল্পতে রোগ ধরা পড়ে এবং নিয়ন্ত্রণ করা সহজ হয়।",
+            "কারণ অসংক্রামক রোগ দ্রুত নিরাময়যোগ্য।"
+          ],
+          "options_en": [
+            "Because non-communicable diseases always show symptoms.",
+            "Because non-communicable diseases only affect older people.",
+            "Because symptoms do not always appear, so occasional physical examinations can detect the disease early and make it easier to control.",
+            "Because non-communicable diseases are quickly curable."
+          ],
+          "correct_indices": [2],
+          "explanation_bn": "কার্ড ৭ অনুযায়ী, যেহেতু সবসময় লক্ষণ প্রকাশ পায় না, তাই মাঝে মাঝে শারীরিক পরীক্ষা করলে অল্পতে রোগ ধরা পড়ে এবং নিয়ন্ত্রণ করা সহজ হয়।",
+          "explanation_en": "According to Card 7, since symptoms do not always appear, occasional physical examinations can detect the disease early and make it easier to control.",
+          "difficulty": "hard"
+        }
+      ]
+    },
+    {
+      "id": "1f472957-251a-4879-ae7f-c3d12456f335",
+      "module_family_id": "05e5af34-04e6-4f79-9e53-b1ccd9a7369c",
+      "version": 1,
+      "title_bn": "ক্যান্সার কি?",
+      "title_en": "Cancer: Cervical and Breast Cancer Screening and Prevention",
+      "description_bn": "This module covers the identification, symptoms, causes, and prevention of cervical and breast cancer. It details the signs of cervical cancer, such as irregular bleeding, and its risk factors like early marriage and multiple partners. For breast cancer, it describes symptoms like lumps, changes in skin texture, and nipple discharge, along with risk factors and the procedure for breast self-examination. The module also includes general cancer danger signs and emphasizes that early detection and treatment can be effective.",
+      "description_en": null,
+      "domain": "rmnch",
+      "sub_domain": null,
+      "module_type": "initial_training",
+      "tenant_id": null,
+      "estimated_minutes": 10,
+      "difficulty_level": "moderate",
+      "pass_threshold_override": null,
+      "clinically_reviewed": false,
+      "published_at": "2026-05-09T17:52:17.855773Z",
+      "updated_at": "2026-05-09T17:52:17.863486Z",
+      "cards": [
+        {
+          "body_bn": "ক্যান্সার হল এক ধরনের অসংক্রামক রোগ। কিছু ক্যান্সারের হার নারীদের মাঝে বেশী যেমন- জরায়ু ক্যান্সার ও স্তন ক্যান্সার। ক্যান্সার এখন আর মরণ ঘাতি রোগ নয়। আগে ক্যান্সার চিহ্নিত করা গেলে এবং সঠিক সময়ে চিকিৎসা নিলে ক্যান্সার ভাল হয়।",
+          "body_en": "Cancer is a type of non-communicable disease. Some cancers are more common among women, such as cervical cancer and breast cancer. Cancer is no longer a fatal disease. If cancer is identified early and treated at the right time, it can be cured.",
+          "title_bn": "ক্যান্সার কি?",
+          "title_en": "What is Cancer?",
+          "source_block_ids": ["6b6aee22-df0e-4a09-ac7a-abfe816cf31a"]
+        },
+        {
+          "body_bn": "জরায়ুর ক্যান্সার হল এক ধরনের ক্যান্সার যা জরায়ুর কোষের অস্বাভাবিক ভাবে আকৃতি পরিবর্তন বা সংখ্যা বৃদ্ধি করে এবং কার্যক্ষমতা নষ্ট করে দেয় এবং এক অঙ্গ থেকে অন্য অঙ্গে ছড়িয়ে পড়ে।",
+          "body_en": "Cervical cancer is a type of cancer where the cells of the cervix abnormally change shape or multiply, destroying their function and spreading from one organ to another.",
+          "title_bn": "জরায়ুর ক্যান্সার কি?",
+          "title_en": "What is Cervical Cancer?",
+          "source_block_ids": [
+            "874cf8e3-d5b2-4521-a22b-5c669c6e1a56",
+            "65d226eb-be3f-43e2-b34b-459d2c8e7623"
+          ]
+        },
+        {
+          "body_bn": "<ul><li>অনিয়মিত রক্তস্রাব</li><li>সহবাসের সময় রক্তস্রাব</li><li>মাসিক ব্যতীত যে কোন সময় রক্তস্রাব</li><li>মাসিক বন্ধ হওয়ার পর রক্তস্রাব (ঋতুজরা)</li><li>তলপেটে বা কোমরে ব্যাথা</li></ul>",
+          "body_en": "<ul><li>Irregular bleeding</li><li>Bleeding during intercourse</li><li>Bleeding at any time other than menstruation</li><li>Bleeding after menopause (postmenopausal bleeding)</li><li>Pain in the lower abdomen or waist</li></ul>",
+          "title_bn": "জরায়ুর ক্যান্সার এর লক্ষণ গুলো কি কি?",
+          "title_en": "Symptoms of Cervical Cancer",
+          "source_block_ids": [
+            "ff12d2b7-22b0-4d13-9573-4834ca9c6e6d",
+            "b214524b-c940-4ca4-9942-450a93ec3019"
+          ]
+        },
+        {
+          "body_bn": "<ul><li>২১ বছর বয়স থেকে ৬৫ বছর বয়স পর্যন্ত প্রতি ৩ বছর পর পর জরায়ু পরীক্ষা করা</li><li>জরায়রু ক্যান্সার এর প্রতিষেধক টিকা নেয়া</li><li>অল্প বয়সে বিয়ে এবং সহবাস না করা</li><li>৪ বা তার বেশি সন্তান ধারন না করা</li><li>মাসিকের সময় পরিষ্কার পরিচ্ছন্ন থাকা</li><li>একের অধিক যৌনসঙ্গী না থাকা</li></ul>",
+          "body_en": "<ul><li>Get a cervical exam every 3 years from age 21 to 65</li><li>Get vaccinated against cervical cancer</li><li>Avoid early marriage and intercourse</li><li>Avoid having 4 or more children</li><li>Maintain cleanliness during menstruation</li><li>Avoid having multiple sexual partners</li></ul>",
+          "title_bn": "জরায়ুর ক্যান্সার থেকে কিভাবে নিজেকে প্রতিরোধ করবেন?",
+          "title_en": "Preventing Cervical Cancer",
+          "source_block_ids": [
+            "0268c449-f4d0-4600-8e68-d835edd3dafd",
+            "81710ef0-ba2c-4b2c-8db8-8102f1c9cca7"
+          ]
+        },
+        {
+          "body_bn": "স্তনের ক্যান্সার হল এক ধরনের ক্যান্সার যা স্তনের গ্রন্থি, নালী ও কোষের অস্বাভাবিক ভাবে আকৃতি পরিবর্তন বা কোষের সংখ্যা বৃদ্ধি করে যা তার কার্যক্ষমতা নষ্ট করে দেয় এবং এক অঙ্গ থেকে অন্য অঙ্গে ছড়িয়ে পড়ে।",
+          "body_en": "Breast cancer is a type of cancer where the glands, ducts, and cells of the breast abnormally change shape or multiply, destroying their function and spreading from one organ to another.",
+          "title_bn": "স্তনের ক্যান্সার কি?",
+          "title_en": "What is Breast Cancer?",
+          "source_block_ids": [
+            "7d2a1291-c364-4752-8160-e9bbd066016a",
+            "a505076f-a6bd-4110-bb98-a6a504daf5aa"
+          ]
+        },
+        {
+          "body_bn": "<ul><li>স্তনে এক বা একাধিক চাকা বা দলা অনুভব করা।</li><li>স্তন ফুলে যাওয়া বা শক্ত হয়ে যাওয়া।</li><li>স্তনের চামড়া কমলা লেবুর খোসার মত হয়ে যাওয়া।</li><li>স্তনের বোটার চামড়া শুষ্ক, কুচকিয়ে যাওয়া ও লাল হওয়া।</li><li>স্তনের বোটা ব্যাথা ও ভিতরে ঢুকে থাকা</li><li>স্তনের বোটা থেকে পানি, পুঁজ বা রক্ত পড়া</li><li>স্তনের আকার আকৃতি পরিবর্তন হওয়া</li></ul>",
+          "body_en": "<ul><li>Feeling one or more lumps or masses in the breast.</li><li>Breast swelling or hardening.</li><li>Breast skin becoming like an orange peel.</li><li>Nipple skin becoming dry, wrinkled, and red.</li><li>Nipple pain and inversion.</li><li>Discharge of water, pus, or blood from the nipple.</li><li>Changes in breast size and shape.</li></ul>",
+          "title_bn": "স্তন ক্যান্সারের লক্ষণ?",
+          "title_en": "Symptoms of Breast Cancer",
+          "source_block_ids": [
+            "e8a98151-c747-4e1d-91f2-ba318259e958",
+            "867866e1-d6b2-489b-b120-3ed5280b9245",
+            "74bc30c5-8b33-4170-9e90-b81086676aed"
+          ]
+        },
+        {
+          "body_bn": "<ul><li>খাদ্যাভ্যাস বা মলত্যাগের অভ্যাসে পরিবর্তন</li><li>অনিয়মিত মাসিক এবং অস্বাভাবিক ও অতিরিক্ত রক্তক্ষরণ</li><li>ভাল হচ্ছে না এমন কোন ঘাঁ বা ক্ষত থাকা</li><li>স্তনে চাকা বা শক্ত অংশ</li><li>তিল বা আঁচিলে পরিবর্তন</li><li>একমাসের অধিক কাশি, কন্ঠস্বর ভেঙ্গে যাওয়া বা কর্কশ হয়ে যাওয়া</li><li>নাক-মুখ-পায়ুপথ-মুত্রপথসহ যেকোন পথে শরীর থেকে রক্তক্ষরণ</li><li>কারণ ছাড়া ওজন কমে গেলে</li></ul>মারাত্মক রক্তস্বল্পতা, খেতে না পারা ও মারাত্মক ওজন হ্রাস এসকল লক্ষণের সাথে যে কোন একটি বিপদচিহ্ন থাকলে দেরী না করে চিকিৎসকের পরামর্শ নিন।",
+          "body_en": "<ul><li>Changes in eating habits or bowel movements</li><li>Irregular menstruation and abnormal or excessive bleeding</li><li>Any wound or sore that is not healing</li><li>Lump or hard area in the breast</li><li>Changes in moles or warts</li><li>Cough lasting more than one month, hoarseness or a rough voice</li><li>Bleeding from any body opening including nose, mouth, anus, or urinary tract</li><li>Unexplained weight loss</li></ul>If any of these danger signs are present along with severe anemia, inability to eat, and severe weight loss, consult a doctor without delay.",
+          "title_bn": "ক্যান্সারের কি কি বিপদচিহ্ন আছে?",
+          "title_en": "General Danger Signs of Cancer",
+          "source_block_ids": [
+            "de052ad7-35c0-4e89-b2cc-2fcb24621870",
+            "442f6dc6-bdbb-4a77-b65c-1f4dbb515d18",
+            "f7e8f91a-4715-4647-b414-50c46857da92",
+            "61c6c21f-f6ef-46bc-8446-da2db6b04058"
+          ]
+        }
+      ],
+      "quiz": [
+        {
+          "id": "75e913d0-b821-43f5-817d-65880bedae4c",
+          "question_order": 1,
+          "question_bn": "ক্যান্সার সম্পর্কে নিচের কোন তথ্যটি সঠিক?",
+          "question_en": "Which of the following statements about cancer is correct?",
+          "case_setup_bn": null,
+          "case_setup_en": null,
+          "options_bn": [
+            "ক্যান্সার একটি সংক্রামক রোগ।",
+            "ক্যান্সার এখন আর মরণঘাতী রোগ নয়, যদি দ্রুত চিহ্নিত করে চিকিৎসা করা হয়।",
+            "কিছু ক্যান্সারের হার পুরুষদের মাঝে বেশি, যেমন জরায়ু ক্যান্সার।",
+            "ক্যান্সার একবার হলে কখনোই ভালো হয় না।"
+          ],
+          "options_en": [
+            "Cancer is an infectious disease.",
+            "Cancer is no longer a fatal disease if identified early and treated.",
+            "Some cancers are more common in men, such as cervical cancer.",
+            "Once cancer occurs, it never gets better."
+          ],
+          "correct_indices": [1],
+          "explanation_bn": "কার্ড ১ অনুযায়ী, ক্যান্সার এখন আর মরণঘাতী রোগ নয়, যদি আগে চিহ্নিত করা যায় এবং সঠিক সময়ে চিকিৎসা নেওয়া যায়।",
+          "explanation_en": "According to Card 1, cancer is no longer a fatal disease if identified early and treated at the right time.",
+          "difficulty": "easy"
+        },
+        {
+          "id": "72571474-01e3-4e4f-acb4-022b8446bc1b",
+          "question_order": 2,
+          "question_bn": "জরায়ুর ক্যান্সার বলতে কী বোঝায়?",
+          "question_en": "What does cervical cancer mean?",
+          "case_setup_bn": null,
+          "case_setup_en": null,
+          "options_bn": [
+            "এটি এক ধরনের ক্যান্সার যা স্তনের কোষের অস্বাভাবিক বৃদ্ধি ঘটায়।",
+            "এটি এক ধরনের ক্যান্সার যা জরায়ুর কোষের অস্বাভাবিক আকৃতি পরিবর্তন বা সংখ্যা বৃদ্ধি করে এবং এক অঙ্গ থেকে অন্য অঙ্গে ছড়িয়ে পড়ে।",
+            "এটি একটি সংক্রামক রোগ যা জরায়ুতে প্রদাহ সৃষ্টি করে।",
+            "এটি জরায়ুর একটি সাধারণ সংক্রমণ যা অ্যান্টিবায়োটিক দিয়ে নিরাময় করা যায়।"
+          ],
+          "options_en": [
+            "It is a type of cancer that causes abnormal growth of breast cells.",
+            "It is a type of cancer that abnormally changes the shape or increases the number of cells in the uterus and spreads from one organ to another.",
+            "It is an infectious disease that causes inflammation in the uterus.",
+            "It is a common uterine infection that can be cured with antibiotics."
+          ],
+          "correct_indices": [1],
+          "explanation_bn": "কার্ড ২ অনুযায়ী, জরায়ুর ক্যান্সার হল এক ধরনের ক্যান্সার যা জরায়ুর কোষের অস্বাভাবিক ভাবে আকৃতি পরিবর্তন বা সংখ্যা বৃদ্ধি করে এবং কার্যক্ষমতা নষ্ট করে দেয় এবং এক অঙ্গ থেকে অন্য অঙ্গে ছড়িয়ে পড়ে।",
+          "explanation_en": "According to Card 2, cervical cancer is a type of cancer that abnormally changes the shape or increases the number of cells in the uterus, destroys their function, and spreads from one organ to another.",
+          "difficulty": "easy"
+        },
+        {
+          "id": "b3e0fdc6-ea9a-4b45-8eea-fbb38d68811b",
+          "question_order": 3,
+          "question_bn": "এই লক্ষণগুলো কোন ক্যান্সারের ইঙ্গিত দিতে পারে?",
+          "question_en": "These symptoms might indicate which type of cancer?",
+          "case_setup_bn": "একজন মহিলা আপনার কাছে এসে জানালেন যে তার মাসিকের সময় ছাড়াও রক্তপাত হচ্ছে এবং সহবাসের সময়ও রক্ত দেখা যায়।",
+          "case_setup_en": "A woman came to you and reported that she has bleeding outside of her menstrual period and also experiences bleeding during intercourse.",
+          "options_bn": [
+            "স্তনের ক্যান্সার",
+            "ফুসফুসের ক্যান্সার",
+            "জরায়ুর ক্যান্সার",
+            "ত্বকের ক্যান্সার"
+          ],
+          "options_en": [
+            "Breast cancer",
+            "Lung cancer",
+            "Cervical cancer",
+            "Skin cancer"
+          ],
+          "correct_indices": [2],
+          "explanation_bn": "কার্ড ৩ অনুযায়ী, অনিয়মিত রক্তস্রাব এবং সহবাসের সময় রক্তস্রাব জরায়ুর ক্যান্সারের লক্ষণ।",
+          "explanation_en": "According to Card 3, irregular bleeding and bleeding during intercourse are symptoms of cervical cancer.",
+          "difficulty": "moderate"
+        },
+        {
+          "id": "f7e19afe-6b4d-4485-ac0f-f63c12161c1c",
+          "question_order": 4,
+          "question_bn": "জরায়ুর ক্যান্সার প্রতিরোধের জন্য নিচের কোন কাজটি করা উচিত?",
+          "question_en": "Which of the following actions should be taken to prevent cervical cancer?",
+          "case_setup_bn": null,
+          "case_setup_en": null,
+          "options_bn": [
+            "প্রতি বছর জরায়ু পরীক্ষা করা।",
+            "অল্প বয়সে বিয়ে এবং সহবাস করা।",
+            "জরায়ু ক্যান্সারের প্রতিষেধক টিকা নেওয়া।",
+            "৪ বা তার বেশি সন্তান ধারণ করা।"
+          ],
+          "options_en": [
+            "Get a cervical exam every year.",
+            "Marry and have intercourse at an early age.",
+            "Get vaccinated against cervical cancer.",
+            "Have 4 or more children."
+          ],
+          "correct_indices": [2],
+          "explanation_bn": "কার্ড ৪ অনুযায়ী, জরায়ু ক্যান্সারের প্রতিষেধক টিকা নেওয়া জরায়ুর ক্যান্সার প্রতিরোধের একটি উপায়।",
+          "explanation_en": "According to Card 4, getting vaccinated against cervical cancer is a way to prevent it.",
+          "difficulty": "easy"
+        },
+        {
+          "id": "2697b493-cf9c-488b-85b9-511f115bc423",
+          "question_order": 5,
+          "question_bn": "স্তনের ক্যান্সার বলতে কী বোঝায়?",
+          "question_en": "What does breast cancer mean?",
+          "case_setup_bn": null,
+          "case_setup_en": null,
+          "options_bn": [
+            "এটি স্তনের একটি সাধারণ প্রদাহ যা অ্যান্টিবায়োটিক দিয়ে নিরাময় করা যায়।",
+            "এটি এক ধরনের ক্যান্সার যা স্তনের গ্রন্থি, নালী ও কোষের অস্বাভাবিক ভাবে আকৃতি পরিবর্তন বা কোষের সংখ্যা বৃদ্ধি করে এবং এক অঙ্গ থেকে অন্য অঙ্গে ছড়িয়ে পড়ে।",
+            "এটি একটি সংক্রামক রোগ যা স্তনে ব্যথা সৃষ্টি করে।",
+            "এটি স্তনের কোষের স্বাভাবিক বৃদ্ধি যা বয়সের সাথে ঘটে।"
+          ],
+          "options_en": [
+            "It is a common inflammation of the breast that can be cured with antibiotics.",
+            "It is a type of cancer that abnormally changes the shape or increases the number of cells in the breast glands, ducts, and cells, and spreads from one organ to another.",
+            "It is an infectious disease that causes breast pain.",
+            "It is the normal growth of breast cells that occurs with age."
+          ],
+          "correct_indices": [1],
+          "explanation_bn": "কার্ড ৫ অনুযায়ী, স্তনের ক্যান্সার হল এক ধরনের ক্যান্সার যা স্তনের গ্রন্থি, নালী ও কোষের অস্বাভাবিক ভাবে আকৃতি পরিবর্তন বা কোষের সংখ্যা বৃদ্ধি করে যা তার কার্যক্ষমতা নষ্ট করে দেয় এবং এক অঙ্গ থেকে অন্য অঙ্গে ছড়িয়ে পড়ে।",
+          "explanation_en": "According to Card 5, breast cancer is a type of cancer that abnormally changes the shape or increases the number of cells in the breast glands, ducts, and cells, which destroys their function and spreads from one organ to another.",
+          "difficulty": "easy"
+        },
+        {
+          "id": "8081f3ba-b5ea-4175-938b-c31290b6bda1",
+          "question_order": 6,
+          "question_bn": "এই লক্ষণগুলো কোন ক্যান্সারের ইঙ্গিত দিতে পারে?",
+          "question_en": "These symptoms might indicate which type of cancer?",
+          "case_setup_bn": "একজন মহিলা আপনার কাছে এসে জানালেন যে তার স্তনে একটি চাকা বা দলা অনুভব করছেন এবং স্তনের চামড়া কমলা লেবুর খোসার মত হয়ে গেছে।",
+          "case_setup_en": "A woman came to you and reported feeling a lump or mass in her breast and that her breast skin has become like an orange peel.",
+          "options_bn": [
+            "জরায়ুর ক্যান্সার",
+            "ফুসফুসের ক্যান্সার",
+            "স্তনের ক্যান্সার",
+            "রক্তের ক্যান্সার"
+          ],
+          "options_en": [
+            "Cervical cancer",
+            "Lung cancer",
+            "Breast cancer",
+            "Blood cancer"
+          ],
+          "correct_indices": [2],
+          "explanation_bn": "কার্ড ৬ অনুযায়ী, স্তনে চাকা বা দলা অনুভব করা এবং স্তনের চামড়া কমলা লেবুর খোসার মত হয়ে যাওয়া স্তন ক্যান্সারের লক্ষণ।",
+          "explanation_en": "According to Card 6, feeling a lump or mass in the breast and the breast skin becoming like an orange peel are symptoms of breast cancer.",
+          "difficulty": "moderate"
+        },
+        {
+          "id": "114f195a-3b87-4510-ab77-a86457ead380",
+          "question_order": 7,
+          "question_bn": "ক্যান্সারের বিপদচিহ্নগুলোর মধ্যে কোনটি সঠিক?",
+          "question_en": "Which of the following is a correct danger sign of cancer?",
+          "case_setup_bn": null,
+          "case_setup_en": null,
+          "options_bn": [
+            "এক মাসের কম কাশি এবং কন্ঠস্বর স্বাভাবিক থাকা।",
+            "কারণ ছাড়া ওজন বৃদ্ধি পাওয়া।",
+            "নাক-মুখ-পায়ুপথ-মুত্রপথসহ যেকোন পথে শরীর থেকে রক্তক্ষরণ।",
+            "তিল বা আঁচিলে কোন পরিবর্তন না হওয়া।"
+          ],
+          "options_en": [
+            "Cough for less than a month and normal voice.",
+            "Weight gain without reason.",
+            "Bleeding from any body opening including nose, mouth, anus, or urinary tract.",
+            "No change in moles or warts."
+          ],
+          "correct_indices": [2],
+          "explanation_bn": "কার্ড ৭ অনুযায়ী, নাক-মুখ-পায়ুপথ-মুত্রপথসহ যেকোন পথে শরীর থেকে রক্তক্ষরণ ক্যান্সারের একটি বিপদচিহ্ন।",
+          "explanation_en": "According to Card 7, bleeding from any body opening including the nose, mouth, anus, or urinary tract is a danger sign of cancer.",
+          "difficulty": "moderate"
+        }
+      ]
+    }
+  ]
+}
