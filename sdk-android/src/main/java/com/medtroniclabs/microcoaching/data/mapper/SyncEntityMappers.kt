@@ -15,6 +15,7 @@ import com.medtroniclabs.microcoaching.network.ChwQuizQuestionStateSyncPayload
 import com.medtroniclabs.microcoaching.network.ChwModulePartialCompletionSyncPayload
 import com.medtroniclabs.microcoaching.network.ChwModuleCompletionSyncPayload
 import com.medtroniclabs.microcoaching.network.ModuleSyncPayload
+import com.medtroniclabs.microcoaching.sync.absoluteExpiry
 import com.medtroniclabs.microcoaching.network.ModuleTriggerBindingSyncPayload
 import com.medtroniclabs.microcoaching.network.SourceDocumentRef
 import com.medtroniclabs.microcoaching.network.TriggerDefinitionSyncPayload
@@ -31,11 +32,11 @@ import java.time.Instant
  * Extension functions mapping v3 backend `*SyncPayload` types to their Room
  * counterparts. Used by [com.medtroniclabs.microcoaching.sync.SyncApi].
  *
- * Filename remains `ScenarioBundleMapper.kt` for git-history continuity; the
- * scenario layer itself was removed in 0.3.0.
+ * (Formerly `ScenarioBundleMapper.kt` — the scenario layer was removed in 0.3.0 and the file
+ * is now named for what it actually does.)
  */
 
-private val bundleJson = Json { ignoreUnknownKeys = true; isLenient = true }
+private val bundleJson = com.medtroniclabs.microcoaching.util.LenientJson
 
 private val jsonObjectListSerializer = ListSerializer(JsonObject.serializer())
 private val jsonElementListSerializer = ListSerializer(JsonElement.serializer())
@@ -57,6 +58,7 @@ fun ModuleSyncPayload.toEntity(lastSynced: Long): ModuleEntity = ModuleEntity(
     descriptionJson = resolvedDescription().toJsonString(),
     domain = domain,
     subDomain = subDomain,
+    contentDomain = contentDomain,
     moduleType = moduleType,
     tenantId = tenantId,
     estimatedMinutes = estimatedMinutes,
@@ -88,9 +90,11 @@ fun ModuleSyncPayload.toEntity(lastSynced: Long): ModuleEntity = ModuleEntity(
     primaryGapId = primaryGapId,
     behaviouralGapIdsJson = bundleJson.encodeToString(stringListSerializer, behaviouralGapIds),
     hasThumbnail = hasThumbnail,
-    // thumbnailUrl / thumbnailExpiresAtEpochSec are intentionally left at their
-    // defaults (null): a module REPLACE resets them, and thumbnail sync
-    // (SyncApi.pullModuleThumbnails) repopulates them in the same inbound pass.
+    thumbnailUrl = thumbnailPresignedUrl,
+    // The wire carries a relative lifetime; the column holds an absolute expiry, so
+    // it is anchored to this row's own sync time rather than to read time.
+    thumbnailExpiresAtEpochSec = thumbnailPresignedExpiresSeconds
+        ?.let { absoluteExpiry(lastSynced / 1000L, it) },
     lastSynced = lastSynced,
 )
 

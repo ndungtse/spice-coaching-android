@@ -118,6 +118,19 @@ object BanglaTokenizer {
     }
 
     /**
+     * True when the query visibly mixes Bangla with substantial Latin/English words.
+     * Used only to decide whether the EN retrieval index should run alongside the
+     * BN index; it does NOT change the user-visible reply language.
+     */
+    fun hasLatinClinicalSignal(text: String): Boolean =
+        splitSurfaceWords(text).any { token ->
+            token.length >= 3 &&
+                token.any { it.code < 128 && it.isLetter() } &&
+                token.all { it.code < 128 && (it.isLetterOrDigit() || it == '/' || it == '.') } &&
+                token !in STOPWORDS
+        }
+
+    /**
      * Shared first pass: normalise, split, lowercase, drop sub-token fragments.
      * Surface forms only — used by [wordBigrams] so phrase tokens are not broken
      * by stem duplicates inserted between adjacent words.

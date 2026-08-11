@@ -18,6 +18,14 @@ data class LearnModule(
     val title: String,
     val body: String,
     val clinicalDomain: String,
+    /**
+     * Content-domain taxonomy from `ModuleEntity.contentDomain`: "clinical" |
+     * "digital" | "operational". Drives the SK/PO content-domain tag on Learning
+     * Library & Practice Zone cards (Med-I617). Distinct from [clinicalDomain] (a
+     * clinical *topic* code) and [moduleType]. Null → rendered as "clinical", the
+     * documented default (see [com.medtroniclabs.microcoaching.ui.learn.modules.components.ContentDomainTag]).
+     */
+    val contentDomain: String? = null,
     val warningSigns: List<String> = emptyList(),
     val nextStep: String = "",
     val referralDestination: String? = null,
@@ -65,6 +73,17 @@ data class LearnModule(
      */
     val source: String? = null,
     /**
+     * A single `module_quiz_question.id` this refresher targets, carried from the
+     * morning-cards response (`morning_card_cache.quiz_id`, non-null only when
+     * `source == "quiz"`). When set, the module is always shown as a **Quiz**
+     * (even before the quiz blob is hydrated) and the refresher drill runs ONLY
+     * this one question — see
+     * [com.medtroniclabs.microcoaching.ui.learn.modules.QuickLearnViewModel.primeRefresherQuiz].
+     * A stale/missing id (not present in the module's current quiz) falls back to
+     * the normal to-reinforce set, same as every other refresher.
+     */
+    val targetQuizId: String? = null,
+    /**
      * True when the morning-card selector emitted this module — it has a row in
      * `morning_card_cache` (backend `GET /morning/cards` OR the on-device
      * [com.medtroniclabs.microcoaching.domain.gaps.ondevice.OnDeviceMorningGenerator]).
@@ -93,9 +112,27 @@ data class LearnModule(
     /**
      * Raw `cards_json` from [ModuleEntity] — forwarded so [LessonPlayerScreen] and
      * [ModuleDetailScreen] can parse the card list without a DB round-trip.
-     * Defaults to `"[]"` when not available (e.g. QuickLearn minimal mapping).
+     * Defaults to `"[]"` when not available.
+     *
+     * **Lazy-load note:** for LIST rendering this is intentionally left as `"[]"`
+     * (see [CoachingModuleStore]'s slim mapping) — the heavy card blob is loaded
+     * only when a module is opened (detail/lesson/quiz re-read the entity by id).
+     * List tiles must use [cardCount]/[questionCount], never parse this field.
      */
     val cardsJson: String = "[]",
+    /**
+     * Number of lesson cards, always populated (even in the slim list mapping,
+     * from the cheap `ModuleEntity.cardCount` count getter). Use this for list
+     * tiles instead of parsing [cardsJson].
+     */
+    val cardCount: Int = 0,
+    /**
+     * Number of quiz questions, always populated (even in the slim list mapping,
+     * from the cheap `ModuleEntity.questionCount` count getter). Use this for
+     * list tiles instead of reading [inlineQuestions]?.size (which is null in the
+     * slim mapping).
+     */
+    val questionCount: Int = 0,
     /**
      * Actual quiz score from the CHW's last attempt (0.0–1.0).
      * Seeded from [ChwModuleCompletionEntity.latestQuizScore] on every
@@ -141,23 +178,28 @@ data class LearnModule(
      */
     val attemptedQuestionCount: Int? = null,
     /**
-     * Millis-since-epoch when this module version was published, parsed from
-     * `ModuleEntity.publishedAtIso` via `parseIsoMillis`. Null when the backend
-     * didn't send a `published_at` or when parsing failed.
+     * Millis-since-epoch when this module was **assigned** to the current user —
+     * the backend's `assigned_module_ids[].assigned_at`, carried on
+     * [com.medtroniclabs.microcoaching.data.db.entity.AssignedModuleEntity.assignedAt]
+     * and joined onto the module in
+     * [com.medtroniclabs.microcoaching.domain.refresher.CoachingModuleStore.trainingModules].
+     * Null for modules reached outside the assigned-training list, or when the
+     * backend didn't send an assignment date.
      *
      * **Used only by [com.medtroniclabs.microcoaching.ui.learn.QuizRetryGate].**
-     * The gate closes the "Start Quiz" CTA once the module is older than
-     * 7 days (the retry window) AND the CHW has attempted every question at
-     * least once. Within the 7-day window CHWs can keep retrying; first-time
-     * attempts are always allowed (a never-attempted module is not a retry).
+     * The gate closes the "Start Quiz" CTA once the reattempt window
+     * (Assignment Date + configured days; default 7, admin-configurable via
+     * config sync — MED-1529 Req 1) has elapsed AND the CHW has attempted every
+     * question at least once. Within the window CHWs can keep retrying;
+     * first-time attempts are always allowed (a never-attempted module is not a
+     * retry). Null → gate stays open (fail-safe: never lock out on missing data).
      *
      * **To remove the retry-window feature**: delete [QuizRetryGate], remove
-     * the OR clause in [com.medtroniclabs.microcoaching.ui.flow.CoachingNavGraph]'s
-     * `readOnly` decision, and drop this field + its assignment in
-     * `LearnViewModel.mapModules`. No UI changes are needed — the read-only
-     * "Back to modules" CTA path already exists for completed modules.
+     * the gate call in [com.medtroniclabs.microcoaching.ui.learn.LearnViewModel]'s
+     * `canRetryActiveQuiz`, and drop this field + its assignment in
+     * `CoachingModuleStore.trainingModules`.
      */
-    val publishedAtMs: Long? = null,
+    val assignedAtMs: Long? = null,
     /**
      * Cached presigned URL for the module thumbnail, carried from
      * [com.medtroniclabs.microcoaching.data.db.entity.ModuleEntity.thumbnailUrl].
@@ -165,7 +207,25 @@ data class LearnModule(
      * the tile / detail header simply omits the image in that case.
      */
     val thumbnailUrl: String? = null,
-)
+) {
+    /**
+     * Whether this module counts as **complete for progress/reminder purposes**
+     * (MED-1940 Req 2): the CHW has passed it ([status] == "completed"), OR has
+     * attempted every quiz question at least once (pass or fail).
+     *
+     * This is the single definition shared by the All Modules progress ring
+     * ([com.medtroniclabs.microcoaching.ui.learn.modules.components.progressFractionFor])
+     * and the incomplete-module reminder count
+     * ([com.medtroniclabs.microcoaching.domain.refresher.CoachingModuleStore.incompleteAssignedCount])
+     * so the two can never disagree. It is deliberately the "attempted-all"
+     * semantic, distinct from the passing-only [status] == "completed", and it
+     * equals exactly the condition under which the ring shows 100% (so the ring's
+     * visible behaviour is unchanged).
+     */
+    val isProgressComplete: Boolean
+        get() = status == "completed" ||
+            (questionCount > 0 && (attemptedQuestionCount ?: 0) >= questionCount)
+}
 
 /**
  * UI model for a single quiz question (backed by [QuizQuestionCacheEntity]).
@@ -178,6 +238,12 @@ data class LearnModule(
  * @param correctIndex Zero-based index of the correct answer.
  * @param explanation Bangla explanation shown after the CHW answers.
  * @param pointValue Score points for a correct answer.
+ * @param optionOriginalIndices Display→original option-index mapping produced when a
+ *   fresh attempt shuffles this question's options (see [withShuffledOptions]).
+ *   `optionOriginalIndices[displayIndex]` is the option's index in the authored/backend
+ *   order. Empty for unshuffled questions ⇒ identity mapping. Used by
+ *   [canonicalOptionIndex] so telemetry keeps reporting the backend's option coordinates
+ *   even though the CHW sees a shuffled order.
  */
 data class QuizQuestion(
     val id: String,
@@ -187,4 +253,5 @@ data class QuizQuestion(
     val explanation: String = "",
     val caseSetup: String = "",
     val pointValue: Int = 10,
+    val optionOriginalIndices: List<Int> = emptyList(),
 )

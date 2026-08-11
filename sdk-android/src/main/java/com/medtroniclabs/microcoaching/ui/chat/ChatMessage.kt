@@ -56,10 +56,44 @@ data class ChatMessage(
 /**
  * In-memory metadata attached to an assistant [ChatMessage] for TTS / telemetry handoff.
  * See [ChatMessage.meta].
+ *
+ * The trailing fields ([moduleId] … [fallbackUsed]) snapshot the pipeline context
+ * of the turn that produced this response so a later thumbs-up/down tap can emit a
+ * `chat_feedback_*` event mirroring the original `digital_help_used` row (Events
+ * Modelling 1.4) — segmenting feedback by online/edge, module, and validator outcome
+ * without a message-store join. Not persisted; history-loaded messages have `meta =
+ * null`, so feedback on them falls back to inferring [inferenceMode] from
+ * [ChatMessage.source].
  */
 data class ChatMessageMeta(
     val outcome: String,
     val groundedFrom: List<String> = emptyList(),
+    /** Version-specific module UUID that grounded this response. Null on refusals. */
+    val moduleId: String? = null,
+    /** `"online"` (backend RAG) or `"edge"` (on-device Gemma / BM25). */
+    val inferenceMode: String? = null,
+    /** ConnectivityManager snapshot at response time: `"online"` / `"offline"`. */
+    val networkState: String? = null,
+    /** B4 validator status for the served turn: `"pass"` / `"fail"` / null. */
+    val validatorStatus: String? = null,
+    /** True when clinician-authored content was served in place of LLM output. */
+    val fallbackUsed: Boolean? = null,
+    /**
+     * The served response **object as a JSON string** — the online RAG response,
+     * or the offline-constructed equivalent (same shape, empty retrieval fields).
+     * Captured at serve time so a later thumbs-up/down can put it under
+     * `payload_json.response` without reconstructing it. Null for history-loaded
+     * messages, where it is rebuilt from the visible text on demand.
+     */
+    val responseJson: String? = null,
+    /**
+     * The CHW's raw question that produced this response, captured at serve time
+     * so a later thumbs-up/down can echo it into `payload_json.question`
+     * (Events-Modelling 1.7). Like the rest of [ChatMessageMeta] this is not
+     * persisted, so history-loaded messages carry null here and the feedback
+     * payload simply omits `question` — best-effort, same as [responseJson].
+     */
+    val question: String? = null,
 )
 
 object ChatRole {

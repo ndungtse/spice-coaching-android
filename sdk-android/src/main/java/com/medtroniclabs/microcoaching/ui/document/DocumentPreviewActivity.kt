@@ -36,14 +36,16 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import com.medtroniclabs.microcoaching.MicroCoachingSDK
+import com.medtroniclabs.microcoaching.network.SourceDocumentUrlStore
 import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.data.asset.AssetKind
 import com.medtroniclabs.microcoaching.data.asset.InsufficientStorageException
-import com.medtroniclabs.microcoaching.network.SourceDocumentPresignedUrlRequest
+import com.medtroniclabs.microcoaching.domain.telemetry.EventRecorder
 import com.medtroniclabs.microcoaching.ui.SdkLocaleHelper
 import com.medtroniclabs.microcoaching.ui.SdkLocalizedTheme
 import com.medtroniclabs.microcoaching.ui.common.SdkScreenHeader
 import com.medtroniclabs.microcoaching.ui.video.ExoPlayerSurface
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -51,34 +53,42 @@ import kotlinx.coroutines.launch
 import java.io.File
 
 /**
- * In-app preview for source documents cited from chat citation chips.
+ * In-app preview for source documents, opened from chat citation chips and from
+ * the Knowledge section.
  *
  * Resolves the document to a local file via the durable
  * [com.medtroniclabs.microcoaching.data.asset.AssetCache] (cache hit → works
- * offline; online miss → fetch a presigned URL, download, store under
- * `filesDir`), then routes by format ([detectFormat], extension hint + magic
- * bytes):
+ * offline; miss → download using the presigned URL the last sync stored, then
+ * store under `filesDir`), then routes by format ([detectFormat], extension hint
+ * + magic bytes):
  *  - **PDF** → [PdfPagerScreen] — scrolls to [EXTRA_START_PAGE], per-page pinch-zoom.
  *  - **Image** → [ImageZoomScreen] — Coil + pinch-zoom.
  *  - **External** (Office, unknown) → `Intent.ACTION_VIEW` to the device
  *    browser (online only), then `finish()`.
  *
- * Used by both the chat citation chips and the Knowledge section. The cached
- * file is keyed on the stable `sourceDocumentId`, so a once-opened document
- * opens again **offline**. The presigned URL itself is still short-lived and
- * re-fetched only on a cache miss while online.
+ * The cached file is keyed on the stable `sourceDocumentId`, so a once-opened
+ * document opens again **offline**. The presigned URL is short-lived and can only
+ * be refreshed by another sync, so an uncached document whose URL has lapsed
+ * reports unavailable until then.
  */
 class DocumentPreviewActivity : ComponentActivity() {
 
     internal sealed interface PreviewState {
         object Loading : PreviewState
-        data class LoadedPdf(val file: File, val startPage: Int?) : PreviewState
+        data class LoadedPdf(val file: File, val startPage: Int?, val selectedPage: Int?) : PreviewState
         data class LoadedImage(val file: File) : PreviewState
         /** Streamable media (video/audio) — played by ExoPlayer from the presigned [url]. */
         data class LoadedMedia(val url: String) : PreviewState
         object HandedOffExternal : PreviewState
-        /** Generic failure (offline miss, network error, presign failure). */
-        data class Error(val hasExternalUrl: Boolean = false) : PreviewState
+        /**
+         * Failure. [offline] = the device has no connectivity and the document
+         * isn't in the local cache — surfaced as "connect to download" rather
+         * than a generic unavailable message.
+         */
+        data class Error(
+            val hasExternalUrl: Boolean = false,
+            val offline: Boolean = false,
+        ) : PreviewState
         /** Device is out of disk space — download cannot complete. */
         data class StorageFull(val hasExternalUrl: Boolean = false) : PreviewState
         /** File downloaded but not a PDF or image — offer to open with another app. */
@@ -91,7 +101,10 @@ class DocumentPreviewActivity : ComponentActivity() {
     /** Last presigned URL we resolved; used by toolbar / failure-fallback to escape to a browser. */
     @Volatile private var lastUrl: String? = null
 
-    /** Last `storage_path` from the presigned entry — the online format-detection hint. */
+    /**
+     * Format-detection hint. The catalogue supplies no storage path, so this stays
+     * null and [detectFormat] falls back to the original filename and magic bytes.
+     */
     @Volatile private var lastStoragePath: String? = null
 
     /** Local cached file — set once the asset resolves; used for FileProvider sharing when offline. */
@@ -100,11 +113,20 @@ class DocumentPreviewActivity : ComponentActivity() {
     /** MIME type inferred from the original filename extension; used when opening via FileProvider. */
     @Volatile private var localFileMime: String? = null
 
+    /**
+     * True once this view has been reported. Restored from saved instance state so
+     * a rotation (fresh Activity, same view) and an in-place [retryResolve] both
+     * stay at one event; a genuinely new open has no saved state and counts again.
+     */
+    private var viewRecorded = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        viewRecorded = savedInstanceState?.getBoolean(STATE_VIEW_RECORDED) == true
         val sourceDocumentId = intent.getStringExtra(EXTRA_DOCUMENT_ID).orEmpty()
         val titleArg = intent.getStringExtra(EXTRA_TITLE).orEmpty()
         val startPage = intent.getIntExtra(EXTRA_START_PAGE, -1).takeIf { it > 0 }
+        val selectedPage = intent.getIntExtra(EXTRA_SELECTED_PAGE, -1).takeIf { it > 0 }
         val originalFilename = intent.getStringExtra(EXTRA_ORIGINAL_FILENAME)
 
         if (sourceDocumentId.isBlank()) {
@@ -127,15 +149,57 @@ class DocumentPreviewActivity : ComponentActivity() {
                     state = current,
                     onBack = ::finish,
                     onOpenExternal = ::openLastUrlExternally,
-                    onRetry = { retryResolve(sourceDocumentId, startPage, originalFilename) },
+                    onRetry = { retryResolve(sourceDocumentId, startPage, selectedPage, originalFilename) },
                 )
             }
         }
 
-        resolveAndRoute(sourceDocumentId, startPage, originalFilename)
+        resolveAndRoute(sourceDocumentId, startPage, selectedPage, originalFilename)
     }
 
-    private fun resolveAndRoute(sourceDocumentId: String, startPage: Int?, originalFilename: String? = null) {
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putBoolean(STATE_VIEW_RECORDED, viewRecorded)
+    }
+
+    /**
+     * Emit the document-view event for this open, at most once.
+     *
+     * Called only once the document has resolved to something the user can act on
+     * — an offline cache miss or a storage-full failure is not a view. Opt-in via
+     * [EXTRA_RECORD_VIEW] so only the Knowledge library counts and a chat
+     * citation tap doesn't inflate library-usage analytics.
+     *
+     * Fire-and-forget on IO: telemetry must never break the preview.
+     */
+    private fun recordDocumentViewOnce(sourceDocumentId: String) {
+        if (viewRecorded || !intent.getBooleanExtra(EXTRA_RECORD_VIEW, false)) return
+        val sdk = runCatching { MicroCoachingSDK.getInstance() }.getOrNull() ?: return
+        // Without a CHW id the whole outbound queue is deferred, so recording now
+        // would only enqueue an unattributable row.
+        val chwId = sdk.currentCHWId
+        if (chwId.isNullOrBlank()) {
+            Log.w(TAG, "Skipping document_viewed — no CHW id yet")
+            return
+        }
+        viewRecorded = true
+        lifecycleScope.launch(Dispatchers.IO) {
+            runCatching {
+                EventRecorder(
+                    dao = sdk.database.coachingEventDao(),
+                    sessionId = sdk.coachingSessionId,
+                    chwId = chwId,
+                ).recordDocumentViewed(sourceDocumentId)
+            }.onFailure { Log.w(TAG, "Failed to record document_viewed: ${it.message}") }
+        }
+    }
+
+    private fun resolveAndRoute(
+        sourceDocumentId: String,
+        startPage: Int?,
+        selectedPage: Int?,
+        originalFilename: String? = null,
+    ) {
         val sdk = runCatching { MicroCoachingSDK.getInstance() }.getOrNull()
         if (sdk == null) {
             Log.w(TAG, "MicroCoachingSDK not initialised — cannot open document")
@@ -148,13 +212,17 @@ class DocumentPreviewActivity : ComponentActivity() {
             // Detected from the original filename's extension before any download.
             val hintFormat = formatFromExtension(originalFilename)
             if (hintFormat == DocumentFormat.Video || hintFormat == DocumentFormat.Audio) {
-                val url = fetchPresignedUrl(sdk, sourceDocumentId)
+                val url = fetchPresignedUrl(sourceDocumentId)
                 if (url != null) {
                     Log.i(TAG, "Routing → media stream ($hintFormat)")
+                    recordDocumentViewOnce(sourceDocumentId)
                     _state.value = PreviewState.LoadedMedia(url)
                 } else {
                     Log.w(TAG, "Media stream unavailable (offline / fetch failed) for $sourceDocumentId")
-                    _state.value = PreviewState.Error(hasExternalUrl = false)
+                    _state.value = PreviewState.Error(
+                        hasExternalUrl = false,
+                        offline = !sdk.isNetworkAvailable(),
+                    )
                 }
                 return@launch
             }
@@ -164,7 +232,7 @@ class DocumentPreviewActivity : ComponentActivity() {
                 // network); online miss fetches a presigned URL, downloads & stores
                 // it under filesDir. Offline miss → null → "unavailable".
                 sdk.assetCache.localFile(sourceDocumentId, AssetKind.DOCUMENT) {
-                    fetchPresignedUrl(sdk, sourceDocumentId)
+                    fetchPresignedUrl(sourceDocumentId)
                 }
             } catch (e: InsufficientStorageException) {
                 Log.w(TAG, "Insufficient storage for $sourceDocumentId")
@@ -173,17 +241,26 @@ class DocumentPreviewActivity : ComponentActivity() {
             }
             if (file == null) {
                 Log.w(TAG, "Document unavailable (offline miss / fetch failed) for $sourceDocumentId")
-                _state.value = PreviewState.Error(hasExternalUrl = lastUrl != null)
+                // Offline cache miss is the common field case — tell the CHW the
+                // document just needs a connection to download, not that it's gone.
+                _state.value = PreviewState.Error(
+                    hasExternalUrl = lastUrl != null,
+                    offline = !sdk.isNetworkAvailable(),
+                )
                 return@launch
             }
             // Stash the resolved file so openLastUrlExternally() can fall back to
             // FileProvider sharing when no presigned URL is available (cache hit, offline).
             localFile = file
             localFileMime = mimeFromFilename(originalFilename ?: lastStoragePath)
+            // The file resolved, so the user has the document whichever surface
+            // renders it below — including CannotPreview, which hands off to
+            // another app. Counted here so every route shares one call.
+            recordDocumentViewOnce(sourceDocumentId)
             when (detectFormat(file, lastStoragePath ?: originalFilename)) {
                 DocumentFormat.Pdf -> {
-                    Log.i(TAG, "Routing → PDF viewer (startPage=$startPage)")
-                    _state.value = PreviewState.LoadedPdf(file, startPage)
+                    Log.i(TAG, "Routing → PDF viewer (startPage=$startPage, selectedPage=$selectedPage)")
+                    _state.value = PreviewState.LoadedPdf(file, startPage, selectedPage)
                 }
                 DocumentFormat.Image -> {
                     Log.i(TAG, "Routing → Image viewer")
@@ -206,37 +283,34 @@ class DocumentPreviewActivity : ComponentActivity() {
         }
     }
 
-    private fun retryResolve(sourceDocumentId: String, startPage: Int?, originalFilename: String? = null) {
+    private fun retryResolve(
+        sourceDocumentId: String,
+        startPage: Int?,
+        selectedPage: Int?,
+        originalFilename: String? = null,
+    ) {
         _state.value = PreviewState.Loading
-        resolveAndRoute(sourceDocumentId, startPage, originalFilename)
+        resolveAndRoute(sourceDocumentId, startPage, selectedPage, originalFilename)
     }
 
     /**
-     * Fetches a fresh presigned GET URL for [sourceDocumentId], stashing
-     * `storagePath` (format hint) and the URL (browser fallback). Returns null
-     * on any failure / missing id, which [com.medtroniclabs.microcoaching.data.asset.AssetCache]
-     * treats as a cache miss.
+     * The presigned GET URL the catalogue sync stored for [sourceDocumentId], also
+     * stashed in [lastUrl] for the "open externally" fallback. Returns null when
+     * none is still valid, which
+     * [com.medtroniclabs.microcoaching.data.asset.AssetCache] treats as a cache
+     * miss and the media branch reports as unavailable.
+     *
+     * The catalogue carries no storage path, so [lastStoragePath] stays null here
+     * and format detection falls back to the original filename.
      */
-    private suspend fun fetchPresignedUrl(sdk: MicroCoachingSDK, sourceDocumentId: String): String? {
-        val response = runCatching {
-            sdk.apiService.getSourceDocumentPresignedUrls(
-                SourceDocumentPresignedUrlRequest(listOf(sourceDocumentId)),
-            )
-        }.getOrNull()
-        if (response == null || !response.isSuccessful) {
-            Log.w(TAG, "Presigned URL fetch failed: code=${response?.code()}")
+    private suspend fun fetchPresignedUrl(sourceDocumentId: String): String? {
+        val url = SourceDocumentUrlStore.presignedUrlFor(sourceDocumentId)
+        if (url == null) {
+            Log.w(TAG, "No cached presigned URL for $sourceDocumentId")
             return null
         }
-        val body = response.body()
-        val entry = body?.urls?.firstOrNull { it.sourceDocumentId == sourceDocumentId }
-        if (entry == null || entry.presignedUrl.isBlank()) {
-            Log.w(TAG, "Presigned URL not in response (missing_ids=${body?.missingIds}) for $sourceDocumentId")
-            return null
-        }
-        lastStoragePath = entry.storagePath
-        lastUrl = entry.presignedUrl
-        Log.i(TAG, "Resolved presigned URL for $sourceDocumentId (expires in ${entry.expiresSeconds}s)")
-        return entry.presignedUrl
+        lastUrl = url
+        return url
     }
 
     /**
@@ -312,7 +386,10 @@ class DocumentPreviewActivity : ComponentActivity() {
         private const val EXTRA_DOCUMENT_ID = "extra_source_document_id"
         private const val EXTRA_TITLE = "extra_title"
         private const val EXTRA_START_PAGE = "extra_start_page"
+        private const val EXTRA_SELECTED_PAGE = "extra_selected_page"
         private const val EXTRA_ORIGINAL_FILENAME = "extra_original_filename"
+        private const val EXTRA_RECORD_VIEW = "extra_record_view"
+        private const val STATE_VIEW_RECORDED = "state_view_recorded"
 
         /**
          * Launch the preview for a single source document.
@@ -322,6 +399,13 @@ class DocumentPreviewActivity : ComponentActivity() {
          *   empty during the fetch.
          * @param startPage 1-indexed PDF page to land on. Ignored for image
          *   and external formats. Null falls back to page 1.
+         * @param selectedPage 1-indexed PDF page to show in isolation. When set,
+         *   ONLY that page is rendered — no scroll to or nav toward the rest of the
+         *   document — and [startPage] is ignored. Null = normal full-document view.
+         * @param recordView Emit a document-view telemetry event once the document
+         *   resolves. True only for the Knowledge library, whose opens are what the
+         *   document-usage analytics measure; chat citation chips reach the same
+         *   screen but are not library usage.
          */
         fun start(
             context: Context,
@@ -329,11 +413,15 @@ class DocumentPreviewActivity : ComponentActivity() {
             title: String,
             startPage: Int? = null,
             originalFilename: String? = null,
+            selectedPage: Int? = null,
+            recordView: Boolean = false,
         ) {
             val intent = Intent(context, DocumentPreviewActivity::class.java).apply {
                 putExtra(EXTRA_DOCUMENT_ID, sourceDocumentId)
                 putExtra(EXTRA_TITLE, title)
+                if (recordView) putExtra(EXTRA_RECORD_VIEW, true)
                 if (startPage != null && startPage > 0) putExtra(EXTRA_START_PAGE, startPage)
+                if (selectedPage != null && selectedPage > 0) putExtra(EXTRA_SELECTED_PAGE, selectedPage)
                 if (!originalFilename.isNullOrBlank()) putExtra(EXTRA_ORIGINAL_FILENAME, originalFilename)
                 if (context !is android.app.Activity) addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
@@ -351,9 +439,9 @@ private fun DocumentPreviewScreen(
     onRetry: () -> Unit,
 ) {
     // Trailing toolbar action — "Open in browser" — visible once a URL has
-    // resolved. Lets the user escape to Chrome for features the in-app viewer
-    // doesn't have yet (zoom, search, etc.). Hidden during loading / error so
-    // it doesn't appear over an empty surface.
+    // resolved. Lets the user escape to a browser for what the in-app viewer has
+    // no equivalent of, such as text search. Hidden during loading / error so it
+    // doesn't appear over an empty surface.
     val showOpenExternal = state is DocumentPreviewActivity.PreviewState.LoadedPdf ||
         state is DocumentPreviewActivity.PreviewState.LoadedImage
     Scaffold(
@@ -389,11 +477,15 @@ private fun DocumentPreviewScreen(
                     file = state.file,
                     startPage = state.startPage,
                     externalFallback = onOpenExternal,
+                    selectedPage = state.selectedPage,
                 )
                 is DocumentPreviewActivity.PreviewState.LoadedImage -> ImageZoomScreen(file = state.file)
                 is DocumentPreviewActivity.PreviewState.LoadedMedia -> ExoPlayerSurface(url = state.url)
                 is DocumentPreviewActivity.PreviewState.Error -> ErrorContent(
-                    message = stringResource(R.string.chat_source_unavailable),
+                    message = stringResource(
+                        if (state.offline) R.string.doc_error_offline_not_downloaded
+                        else R.string.chat_source_unavailable,
+                    ),
                     onRetry = onRetry,
                     onOpenExternal = if (state.hasExternalUrl) onOpenExternal else null,
                 )

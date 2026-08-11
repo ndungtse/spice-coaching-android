@@ -10,7 +10,7 @@ import android.content.Context
  */
 object OnboardingPrefs {
 
-    private const val PREFS_NAME = "mc_coaching_prefs"
+    private const val PREFS_NAME = com.medtroniclabs.microcoaching.util.PrefsNames.ONBOARDING
     private const val KEY_ONBOARDED = "mc_onboarded_v1"
     private const val KEY_INITIAL_ASSESSMENT_DONE = "mc_initial_assessment_done_v1"
 

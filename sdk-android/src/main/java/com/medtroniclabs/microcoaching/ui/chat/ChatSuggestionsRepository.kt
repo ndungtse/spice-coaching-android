@@ -39,7 +39,7 @@ internal class ChatSuggestionsRepository(
     private val prefs: SharedPreferences =
         appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
-    private val json = Json { ignoreUnknownKeys = true; isLenient = true }
+    private val json = com.medtroniclabs.microcoaching.util.LenientJson
 
     /**
      * Returns up to [BATCH_SIZE] quiz-question suggestions, each sourced from
@@ -71,13 +71,24 @@ internal class ChatSuggestionsRepository(
         return batch
     }
 
-    /** Persists the English text of a tapped suggestion so it never re-appears. */
+    /**
+     * Persists the English text of a tapped suggestion so it never re-appears.
+     * The set is capped: it previously accumulated full question texts forever.
+     * On hitting the cap it resets to just the newest entry — old suggestions
+     * become eligible again, which beats unbounded prefs growth for a finite
+     * question pool.
+     */
     fun markUsed(suggestion: SuggestedQuestion) {
         if (suggestion.question.isBlank()) return
         val existing = prefs.getStringSet(KEY_USED, emptySet()).orEmpty()
         if (suggestion.question in existing) return
+        val next = if (existing.size >= MAX_USED_QUESTIONS) {
+            setOf(suggestion.question)
+        } else {
+            existing + suggestion.question
+        }
         prefs.edit()
-            .putStringSet(KEY_USED, existing + suggestion.question)
+            .putStringSet(KEY_USED, next)
             .apply()
     }
 
@@ -117,8 +128,11 @@ internal class ChatSuggestionsRepository(
 
     private companion object {
         const val TAG = "ChatSuggestionsRepo"
-        const val PREFS_NAME = "microcoaching_chat_suggestions"
+        const val PREFS_NAME = com.medtroniclabs.microcoaching.util.PrefsNames.CHAT_SUGGESTIONS
         const val KEY_USED = "used_question_keys"
         const val BATCH_SIZE = 3
+
+        /** Cap on [KEY_USED] — see [markUsed]. */
+        const val MAX_USED_QUESTIONS = 500
     }
 }

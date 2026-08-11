@@ -25,19 +25,15 @@ sealed class ModelProvider {
     object Backend : ModelProvider()
 
     /**
-     * Downloads from HuggingFace Hub.
-     * Default model: Gemma3-1B-IT INT4 in `.task` format (~560 MB).
+     * Downloads the selected [ModelVariant] from HuggingFace Hub (the variant's
+     * `downloadUrl`, or [com.medtroniclabs.microcoaching.MicroCoachingConfig.huggingFaceModelUrl]
+     * when set).
      *
-     * **The default `Gemma3-1B-IT` repo is gated** — a HuggingFace token must be
-     * supplied via [com.medtroniclabs.microcoaching.MicroCoachingConfig.huggingFaceToken]
-     * for the download to succeed. The SDK does not bake in a default token, so
-     * the published .aar requires every adopter to provide their own. The worker
-     * only attaches the `Authorization` header when a token is supplied — point
-     * at a non-gated model (e.g. an internal mirror or one of HuggingFace's
-     * public Gemma variants) to download anonymously.
-     *
-     * Override the URL via [com.medtroniclabs.microcoaching.MicroCoachingConfig.huggingFaceModelUrl]
-     * if you want to target a different model file or revision.
+     * A token is only needed for a gated repo ([ModelVariant.requiresAccessToken]); the
+     * worker attaches the `Authorization` header only when one is supplied via
+     * [com.medtroniclabs.microcoaching.MicroCoachingConfig.huggingFaceToken]. The SDK bakes
+     * in no default token. The catalog default is a non-gated repo, so it downloads
+     * anonymously; the gated 1B variant needs a token.
      */
     object HuggingFace : ModelProvider()
 
@@ -57,20 +53,14 @@ sealed class ModelProvider {
     }
 
     companion object {
-        /**
-         * MediaPipe `.task` download URL — Gemma3-1B-IT INT4 (~560 MB).
-         * Broad device compatibility (any arm64 API 24+) via MediaPipe.
-         */
+        /** Download URL for the gated Gemma3-1B-IT INT4 `.task` variant in [ModelCatalog]. */
         const val HF_TASK_MODEL_URL =
             "https://huggingface.co/litert-community/Gemma3-1B-IT/resolve/main/gemma3-1b-it-int4.task"
 
-        /** Default MediaPipe download URL. */
+        // Legacy 1B aliases — kept for source compatibility; [ModelCatalog] is the
+        // source of truth for a variant's URL and filename.
         const val DEFAULT_HF_MODEL_URL = HF_TASK_MODEL_URL
-
-        /** Filename for the `.task` (MediaPipe) model variant. */
         const val HF_TASK_MODEL_FILENAME = "gemma3-1b-it-int4.task"
-
-        /** Filename for the default model on device. */
         const val DEFAULT_HF_MODEL_FILENAME = HF_TASK_MODEL_FILENAME
 
 

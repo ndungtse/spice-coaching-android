@@ -24,6 +24,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import com.medtroniclabs.microcoaching.ui.theme.ErrorRed
+import com.medtroniclabs.microcoaching.ui.theme.ErrorRedContainer
+import com.medtroniclabs.microcoaching.ui.theme.ErrorRedDark
+import com.medtroniclabs.microcoaching.ui.theme.SpiceGreen
+import com.medtroniclabs.microcoaching.ui.theme.SpiceGreenContainer
+import com.medtroniclabs.microcoaching.ui.theme.SpiceGreenDark
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -68,8 +74,8 @@ fun AnswerCard(
         targetValue = when (state) {
             AnswerCardState.Unselected -> unselectedContainerColor
             AnswerCardState.Selected -> MaterialTheme.colorScheme.primaryContainer
-            AnswerCardState.CorrectRevealed -> Color(0xFFD7F0E5)
-            AnswerCardState.WrongRevealed -> Color(0xFFFFEBEE)
+            AnswerCardState.CorrectRevealed -> SpiceGreenContainer
+            AnswerCardState.WrongRevealed -> ErrorRedContainer
         },
         animationSpec = tween(durationMillis = 250),
         label = "answer_card_bg",
@@ -79,8 +85,8 @@ fun AnswerCard(
         targetValue = when (state) {
             AnswerCardState.Unselected -> Color(0xFFDDDDDD)
             AnswerCardState.Selected -> MaterialTheme.colorScheme.primary
-            AnswerCardState.CorrectRevealed -> Color(0xFF1B6B4A)
-            AnswerCardState.WrongRevealed -> Color(0xFFB00020)
+            AnswerCardState.CorrectRevealed -> SpiceGreen
+            AnswerCardState.WrongRevealed -> ErrorRed
         },
         animationSpec = tween(durationMillis = 250),
         label = "answer_card_border",
@@ -89,8 +95,8 @@ fun AnswerCard(
     val textColor = when (state) {
         AnswerCardState.Unselected -> Color(0xFF1A1A1A)
         AnswerCardState.Selected -> MaterialTheme.colorScheme.onPrimaryContainer
-        AnswerCardState.CorrectRevealed -> Color(0xFF0A3D27)
-        AnswerCardState.WrongRevealed -> Color(0xFF7F0014)
+        AnswerCardState.CorrectRevealed -> SpiceGreenDark
+        AnswerCardState.WrongRevealed -> ErrorRedDark
     }
 
     Card(
@@ -130,16 +136,16 @@ private fun AnswerLetterBadge(index: Int, state: AnswerCardState) {
     val letter = ('A' + index).toString()
 
     val badgeBg = when (state) {
-        AnswerCardState.CorrectRevealed -> Color(0xFF1B6B4A)
-        AnswerCardState.WrongRevealed -> Color(0xFFB00020)
+        AnswerCardState.CorrectRevealed -> SpiceGreen
+        AnswerCardState.WrongRevealed -> ErrorRed
         AnswerCardState.Selected -> MaterialTheme.colorScheme.primary
         AnswerCardState.Unselected -> Color.Transparent
     }
     val badgeBorderColor = when (state) {
         AnswerCardState.Unselected -> Color(0xFFAAAAAA)
         AnswerCardState.Selected -> MaterialTheme.colorScheme.primary
-        AnswerCardState.CorrectRevealed -> Color(0xFF1B6B4A)
-        AnswerCardState.WrongRevealed -> Color(0xFFB00020)
+        AnswerCardState.CorrectRevealed -> SpiceGreen
+        AnswerCardState.WrongRevealed -> ErrorRed
     }
     val letterColor = when (state) {
         AnswerCardState.Unselected -> Color(0xFF555555)

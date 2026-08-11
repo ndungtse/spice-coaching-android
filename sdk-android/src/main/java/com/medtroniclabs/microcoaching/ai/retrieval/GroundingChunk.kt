@@ -6,9 +6,10 @@ package com.medtroniclabs.microcoaching.ai.retrieval
  *
  * Chunks are built from module cards only. The carrier is intentionally untyped
  * beyond [source] so the validator and refusal layers (B4) can treat them
- * uniformly. The English half (`titleEn` / `bodyEn`) is what goes into the LLM
- * prompt; the Bangla half is kept for refusal-path fallback (L4 serves card
- * `bodyBn` verbatim when the LLM's answer is rejected).
+ * uniformly. Both language halves are retained: [referenceText] feeds the LLM
+ * prompt (preferring the English side, falling back to Bengali), and the
+ * refusal/fallback path serves the card body in the SDK language, translating the
+ * other side when only it is present.
  */
 data class GroundingChunk(
     val source: Source,
@@ -52,6 +53,9 @@ data class GroundingChunk(
 
     /** First positive page number (document id ignored) — for callers that only need a page anchor. */
     val firstPageNumber: Int? get() = sourcePages?.firstOrNull { it.pageNumber > 0 }?.pageNumber
+
+    /** True when a linked quiz explanation is present on either language side. */
+    fun hasExplanation(): Boolean = !explanationEn.isNullOrBlank() || !explanationBn.isNullOrBlank()
 
     /** English text injected into the LLM reference block. Falls back to BN if no EN side. */
     fun referenceText(): String = when {

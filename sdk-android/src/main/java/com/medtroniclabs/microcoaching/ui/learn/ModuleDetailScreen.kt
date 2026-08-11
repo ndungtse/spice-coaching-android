@@ -28,6 +28,7 @@ import androidx.compose.material.icons.outlined.HearingDisabled
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -77,6 +78,7 @@ fun ModuleDetailScreen(
     onToggleAutoSpeak: () -> Unit = {},
     onHome: () -> Unit = {},
     onReadAgain: () -> Unit = {},
+    quizEnabled: Boolean = true,
 ) {
     // Keep the last-known module visible while the back transition is animating.
     // Without this, popToModuleList() flips state to ModuleList before navController
@@ -86,10 +88,26 @@ fun ModuleDetailScreen(
     LaunchedEffect(currentModule) {
         if (currentModule != null) cachedModule = currentModule
     }
-    val module = currentModule ?: cachedModule ?: return
+    val module = currentModule ?: cachedModule
+    if (module == null) {
+        // Never compose NOTHING — a bare `return` painted the route white when
+        // both the live and cached module were unavailable.
+        Box(
+            modifier = Modifier.fillMaxSize().background(Color.White),
+            contentAlignment = Alignment.Center,
+        ) {
+            CircularProgressIndicator()
+        }
+        return
+    }
 
-    val cards = parseLessonCards(module.cardsJson)
-    val questionCount = module.inlineQuestions?.size ?: 0
+    // Parsed once per blob, not on every recomposition: JSON parsing has no business
+    // running inside composition (Compose can't contain a throw from there), and this also
+    // drops a per-frame parse cost.
+    val cards = remember(module.cardsJson) { parseLessonCards(module.cardsJson) }
+    // questionCount is always populated (even on the slim list model); the active
+    // module here is hydrated with its cards blob for the card list above.
+    val questionCount = module.questionCount
     val hasQuiz = questionCount > 0
 
     Column(
@@ -129,6 +147,27 @@ fun ModuleDetailScreen(
                 style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold, fontSize = 20.sp),
                 color = TitleColor,
             )
+
+            // Content-domain tag (Med-I617): Clinical / Digital / Operational.
+            Spacer(Modifier.height(8.dp))
+            com.medtroniclabs.microcoaching.ui.learn.modules.components.ContentDomainTag(
+                contentDomain = module.contentDomain,
+            )
+
+            // Assignment date — only for modules reached via the assigned-training
+            // list (assignedAtMs is null otherwise), shown as a friendly date under
+            // the title.
+            module.assignedAtMs?.let { assignedAtMs ->
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = stringResource(
+                        R.string.module_detail_assigned_on,
+                        com.medtroniclabs.microcoaching.util.friendlyDateLabel(assignedAtMs),
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
 
             Spacer(Modifier.height(16.dp))
 
@@ -234,6 +273,8 @@ fun ModuleDetailScreen(
                 onStartCourse = onStartCourse,
                 onContinueToQuiz = onContinueToQuiz,
                 hasCards = cards.isNotEmpty(),
+                hasQuiz = hasQuiz,
+                quizEnabled = quizEnabled,
             )
         }
     }
@@ -398,6 +439,8 @@ private fun CtaRow(
     onStartCourse: () -> Unit,
     onContinueToQuiz: () -> Unit,
     hasCards: Boolean,
+    hasQuiz: Boolean,
+    quizEnabled: Boolean,
 ) {
     Row(
         modifier = Modifier
@@ -427,12 +470,18 @@ private fun CtaRow(
                 )
             }
         }
-        OutlinedButton(
-            onClick = onContinueToQuiz,
-            modifier = Modifier.weight(1f),
-            shape = RoundedCornerShape(28.dp),
-        ) {
-            Text(stringResource(R.string.module_detail_action_do_quiz))
+        // Quiz CTA is only meaningful when the module actually has questions.
+        // Modules with 0 questions finish at the cards-completion screen instead
+        // of dead-ending in an empty quiz.
+        if (hasQuiz) {
+            OutlinedButton(
+                onClick = onContinueToQuiz,
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(28.dp),
+                enabled = quizEnabled,
+            ) {
+                Text(stringResource(R.string.module_detail_action_do_quiz))
+            }
         }
     }
 }

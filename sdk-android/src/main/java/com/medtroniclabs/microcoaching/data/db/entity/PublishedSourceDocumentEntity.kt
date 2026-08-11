@@ -11,7 +11,7 @@ import androidx.room.PrimaryKey
  * module references it (the prior list was derived from `module_cache`).
  *
  * The whole table is atomically replaced on each inbound sync
- * ([com.medtroniclabs.microcoaching.sync.SyncApi.pullPublishedSourceDocuments]),
+ * ([com.medtroniclabs.microcoaching.sync.pullSourceDocuments]),
  * so [rank] preserves the server's ordering and presigned URLs are refreshed
  * every cycle before they lapse.
  *

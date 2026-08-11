@@ -63,15 +63,6 @@ internal class OnDeviceQuizStateEngine(
         return states
     }
 
-    private fun outcomeOf(event: CoachingEventEntity): GapOutcome {
-        event.isCorrect?.let { return if (it) GapOutcome.CORRECT else GapOutcome.INCORRECT }
-        return when (event.outcome?.lowercase()) {
-            "correct" -> GapOutcome.CORRECT
-            "wrong", "incorrect" -> GapOutcome.INCORRECT
-            else -> GapOutcome.UNKNOWN
-        }
-    }
-
     private fun ChwQuizQuestionStateEntity.toQuizState() = QuizState(
         quizId = quizId,
         moduleId = moduleId,

@@ -29,12 +29,21 @@ sealed interface RichBlock {
     /** One list item — itself a sequence of blocks (paragraphs, nested lists, media…). */
     data class ListItem(val blocks: List<RichBlock>) : RichBlock
 
-    /** An image. Exactly one of [src] / [objectName] is expected to be present. */
+    /**
+     * An image. Exactly one of [src] / [objectName] is expected to be present.
+     *
+     * [width] / [height] are the authored intrinsic pixel dimensions (TipTap
+     * `attrs.width` / `attrs.height`). When **both** are present and positive the
+     * renderer sizes the image to that aspect ratio (capped to the available
+     * width); when either is missing it falls back to the default full-width box.
+     */
     data class Image(
         val src: String? = null,
         val objectName: String? = null,
         val caption: String? = null,
         val alt: String? = null,
+        val width: Int? = null,
+        val height: Int? = null,
     ) : RichBlock
 
     /** A video. Exactly one of [src] / [objectName] is expected to be present. */

@@ -161,7 +161,7 @@ class ScopeClassifierTest {
             "zero genuine clinical overlap must refuse — 'and' no longer counts",
             OffTopicGuard.isClearlyUnanswerable(
                 query = "How can Breast Engorgement and Pain be managed?",
-                topHit = newbornWarmthChunk,
+                hits = listOf(newbornWarmthChunk),
                 clinicalTerms = classifier.scopeTerms(),
             ),
         )
@@ -175,6 +175,7 @@ class ScopeClassifierTest {
         assertTrue(classifier.isOutOfScope("ফুটবল খেলার নিয়ম"))
         assertTrue(classifier.isOutOfScope("cricket world cup"))
         assertTrue(classifier.isOutOfScope("python programming tutorial"))
+        assertTrue(classifier.isOutOfScope("how do I cook rice"))
     }
 
     @Test
@@ -207,6 +208,7 @@ class ScopeClassifierTest {
         assertFalse("'history' must not trip 'story'", classifier.isOutOfScope("take the patient history"))
         assertFalse("'write a referral' must not be denied", classifier.isOutOfScope("write a referral note"))
         assertFalse(classifier.isOutOfScope("রোগীর হিস্ট্রি নিন"))
+        assertFalse("'cookbook' must not trip the deny-list token 'cook'", classifier.isOutOfScope("read a cookbook summary"))
     }
 
     // ── Tier 3b: generic structural words are not harvested as scope terms ───

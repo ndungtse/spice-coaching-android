@@ -34,7 +34,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.ui.learn.LearnModule
-import com.medtroniclabs.microcoaching.ui.learn.parseLessonCards
 import kotlinx.coroutines.launch
 
 private const val TAG = "RefresherList"
@@ -227,7 +226,7 @@ private fun RefresherTileItem(module: LearnModule, onSelect: (LearnModule) -> Un
     // questions" while the quiz has N. Fall back to the total when not computed yet
     // or when it resolves to 0.
     val count = module.reinforceQuestionCount?.takeIf { it > 0 }
-        ?: module.inlineQuestions?.size ?: 0
+        ?: module.questionCount
     RefresherTile(
         category = stringResource(refresherTypeLabelFor(module)),
         title = module.title,
@@ -247,8 +246,9 @@ private fun RefresherTileItem(module: LearnModule, onSelect: (LearnModule) -> Un
  * Microcoaching, but the cards-only / quiz-only shapes are handled too.)
  */
 private fun refresherTypeLabelFor(module: LearnModule): Int {
-    val hasCards = parseLessonCards(module.cardsJson).isNotEmpty()
-    val hasQuiz = module.inlineQuestions?.isNotEmpty() == true
+    // Counts only — list tiles must not parse the (now-slim) blobs. See LearnModule.
+    val hasCards = module.cardCount > 0
+    val hasQuiz = module.questionCount > 0
     return when {
         hasCards && hasQuiz -> R.string.refresher_type_microcoaching
         hasCards -> R.string.refresher_type_learning_card

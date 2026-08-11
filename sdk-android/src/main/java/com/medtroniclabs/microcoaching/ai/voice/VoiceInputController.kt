@@ -41,6 +41,16 @@ interface VoiceInputController {
     /** Cancel any in-flight capture. Safe to call when not capturing. */
     fun stopListening()
 
+    /**
+     * Release any engines, executor threads, or service bindings this controller
+     * holds. Called by [com.medtroniclabs.microcoaching.MicroCoachingSDK.shutdown]
+     * when the SDK instance is replaced, so long-lived native resources (e.g. a
+     * loaded sherpa-onnx recognizer) don't outlive the instance that created
+     * them. Default is a no-op for stateless controllers; the controller is not
+     * expected to be usable afterwards.
+     */
+    fun release() {}
+
     interface TranscriptionListener {
         fun onPartial(transcript: String) {}
         fun onResult(transcript: String)

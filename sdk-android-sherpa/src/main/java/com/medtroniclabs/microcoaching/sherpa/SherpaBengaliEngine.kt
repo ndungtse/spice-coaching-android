@@ -161,8 +161,12 @@ class SherpaBengaliEngine(
         captureScope = null
     }
 
-    /** Release the loaded recognizer. Called when the host tears down the SDK. */
-    fun release() {
+    /**
+     * Release the loaded recognizer (~90 MB of ONNX weights once Bengali
+     * dictation has run). Invoked via the [VoiceInputController.release] chain
+     * from `MicroCoachingSDK.shutdown()` when the SDK instance is replaced.
+     */
+    override fun release() {
         captureScope?.cancel()
         captureScope = null
         synchronized(recognizerLock) {

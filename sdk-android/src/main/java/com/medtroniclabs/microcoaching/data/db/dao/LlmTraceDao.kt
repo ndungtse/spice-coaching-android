@@ -15,6 +15,14 @@ interface LlmTraceDao {
     @Query("SELECT * FROM llm_trace WHERE sync_status = 'pending' ORDER BY timestamp_local ASC")
     suspend fun getPending(): List<LlmTraceEntity>
 
+    /**
+     * Oldest pending traces, capped at [limit]. Traces carry full prompt and
+     * response text, so outbound sync pages these instead of loading the whole
+     * backlog into one in-memory batch.
+     */
+    @Query("SELECT * FROM llm_trace WHERE sync_status = 'pending' ORDER BY timestamp_local ASC LIMIT :limit")
+    suspend fun getPending(limit: Int): List<LlmTraceEntity>
+
     @Query("UPDATE llm_trace SET sync_status = 'synced', synced_at = :syncedAt WHERE id IN (:ids)")
     suspend fun markSynced(ids: List<String>, syncedAt: Long = System.currentTimeMillis())
 
@@ -43,6 +51,15 @@ interface LlmTraceDao {
 
     @Query("DELETE FROM llm_trace WHERE sync_status = 'synced'")
     suspend fun deleteSynced()
+
+    /**
+     * Age-guarded retention cleanup: drop synced traces older than [cutoffMs].
+     * Traces carry full prompt/response text and exist purely to be shipped —
+     * without pruning the table grows unboundedly over months of field use.
+     * Returns the number of rows deleted.
+     */
+    @Query("DELETE FROM llm_trace WHERE sync_status = 'synced' AND synced_at IS NOT NULL AND synced_at < :cutoffMs")
+    suspend fun deleteSyncedOlderThan(cutoffMs: Long): Int
 
     @Query("DELETE FROM llm_trace")
     suspend fun deleteAll()

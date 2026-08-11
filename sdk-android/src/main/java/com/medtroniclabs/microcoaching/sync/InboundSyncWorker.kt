@@ -6,18 +6,17 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.medtroniclabs.microcoaching.MicroCoachingSDK
 import com.medtroniclabs.microcoaching.data.db.MicroCoachingDatabase
-import com.medtroniclabs.microcoaching.network.NetworkModule
+import com.medtroniclabs.microcoaching.ui.chat.ChatFaqRepository
+import kotlinx.coroutines.sync.withLock
 
 /**
- * WorkManager worker that fetches updated scenarios and quiz questions from the backend.
+ * WorkManager worker that pulls every inbound resource — modules, source
+ * documents, gaps, triggers, config, chat FAQs and morning cards.
  *
- * Calls `GET /scenarios/sync?since_version={cursor}` where the cursor is the last
- * successfully received bundle version (stored in [SyncPrefs.lastSyncVersion]).
- * The backend returns only records newer than the cursor, enabling incremental updates.
- *
- * On success: upserts rows to Room and advances the [SyncPrefs] version cursor.
- * On network failure: returns [Result.retry()]; cursor is NOT advanced, so the
- * next attempt re-fetches from the same version.
+ * Each pull is independent and non-fatal, so one failing endpoint doesn't block
+ * the rest; each reports its own verdict so a UI section can scope its error to
+ * the table it reads. Watermark-driven pulls advance their cursor in [SyncPrefs]
+ * only on success, so a failure re-fetches from the same point.
  *
  * Scheduled by [SyncCoordinator]:
  *   - Periodic: every 15 minutes when network is available
@@ -44,27 +43,52 @@ class InboundSyncWorker(
 
         val db = MicroCoachingDatabase.getInstance(applicationContext)
         val syncPrefs = SyncPrefs(applicationContext)
-        val apiService = NetworkModule.createApiService(config)
-        // chwId is only used for logging here — the per-call chwId is forwarded
-        // explicitly to pullGaps below as a nullable param so the backend can
-        // return taxonomy-only when no CHW is signed in.
+        // chwId scopes the per-CHW writes these pulls make; the backend derives
+        // the CHW it returns data for from the auth token, not from us.
+        // apiService is the SDK's cached instance — a per-run client would add a
+        // thread pool and connection pool per 15-minute tick.
         val syncApi = SyncApi(
-            apiService = apiService,
+            apiService = sdk.apiService,
             db = db,
             sessionId = "inbound-sync",
             chwId = sdk.currentCHWId.orEmpty(),
             syncPrefs = syncPrefs,
         )
 
-        // v3 sync — four independent resource pulls. Each is non-fatal so one
-        // 404/500 doesn't block the others. Worker returns retry only if every
-        // pull failed and every failure was a transient network error — see
-        // shouldRetryInbound below for the rationale.
+        // Single-flight: the periodic and chained inbound work names don't dedupe
+        // against each other — serialize so two workers can't each deserialize the
+        // full catalogue (and race the watermark writes) at once. See [SyncGate].
+        return SyncGate.inbound.withLock { runInboundSync(sdk, syncApi, syncPrefs) }
+    }
+
+    private suspend fun runInboundSync(
+        sdk: MicroCoachingSDK,
+        syncApi: SyncApi,
+        syncPrefs: SyncPrefs,
+    ): Result {
+        val config = sdk.config
+        val db = MicroCoachingDatabase.getInstance(applicationContext)
+
+        // Each pull is non-fatal so one 404/500 doesn't block the others. The
+        // worker returns retry only if every core pull failed and every failure
+        // was a transient network error — see shouldRetryInbound below.
         // Periodically force a full-catalogue fetch so terminally-retired modules
         // get reconciled out of the cache — an incremental delta can never carry a
         // retirement (the family just stops appearing). Bounded to once per
         // interval so steady-state syncs stay incremental / low-bandwidth.
         val now = System.currentTimeMillis()
+        val startedAt = now
+
+        // Each pull's verdict, published once at the end so UI sections can scope their
+        // error state to the table they read (see SyncStatusStore).
+        val outcomes = LinkedHashMap<SyncDomain, SyncOutcome>()
+        fun record(domain: SyncDomain, result: SyncResult) {
+            if (!result.success) {
+                Log.w(TAG, "$domain sync failed (non-fatal): ${result.error}")
+            }
+            outcomes[domain] = result.toOutcome(System.currentTimeMillis())
+        }
+
         val reconcileDue = now - syncPrefs.lastModulesReconcileAt >= MODULES_RECONCILE_INTERVAL_MS
         val modulesResult = syncApi.pullModules(
             syncPrefs.modulesWatermark,
@@ -76,32 +100,19 @@ class InboundSyncWorker(
             if (modulesResult.prunedCount > 0) {
                 Log.i(TAG, "Modules reconcile pruned ${modulesResult.prunedCount} stale row(s).")
             }
-        } else {
-            Log.w(TAG, "Modules sync failed (non-fatal): ${modulesResult.error}")
         }
+        record(SyncDomain.MODULES, modulesResult)
 
-        // Refresh presigned thumbnail URLs immediately after modules so any
-        // freshly-created/REPLACEd module row gets its thumbnail repopulated in
-        // the same pass. Non-fatal and not part of the retry predicate below.
-        val thumbnailsResult = syncApi.pullModuleThumbnails()
-        if (!thumbnailsResult.success) {
-            Log.w(TAG, "Module thumbnails sync failed (non-fatal): ${thumbnailsResult.error}")
-        }
+        // Source-document catalogue — one call backing both the Knowledge section
+        // and the Training sub-tab, so it reports into two domains. Non-fatal and
+        // not part of the retry predicate: on failure the previous contents stay
+        // intact so both still render offline. The video half is skipped
+        // automatically when no CHW is signed in.
+        val sourceDocsResult = syncApi.pullSourceDocuments()
+        record(SyncDomain.PUBLISHED_DOCS, sourceDocsResult.published)
+        record(SyncDomain.ASSIGNED_VIDEOS, sourceDocsResult.assignedVideos)
 
-        val docThumbnailsResult = syncApi.pullSourceDocumentThumbnails()
-        if (!docThumbnailsResult.success) {
-            Log.w(TAG, "Source-doc thumbnails sync failed (non-fatal): ${docThumbnailsResult.error}")
-        }
-
-        // Published source-document catalogue — backs the Knowledge section.
-        // Non-fatal and not part of the retry predicate: on failure the previous
-        // catalogue stays intact so the grid still renders offline.
-        val publishedDocsResult = syncApi.pullPublishedSourceDocuments()
-        if (!publishedDocsResult.success) {
-            Log.w(TAG, "Published source-docs sync failed (non-fatal): ${publishedDocsResult.error}")
-        }
-
-        val gapsResult = syncApi.pullGaps(syncPrefs.gapsWatermark, chwId = sdk.currentCHWId)
+        val gapsResult = syncApi.pullGaps(syncPrefs.gapsWatermark)
         if (gapsResult.success) {
             gapsResult.newWatermark?.let { syncPrefs.gapsWatermark = it }
             // Partial-completion rows feed the to-reinforce set used by the
@@ -110,27 +121,40 @@ class InboundSyncWorker(
             if (gapsResult.partialUpserted > 0) {
                 sdk.currentCHWId?.let { chwId -> sdk.refilterMorningModules(chwId) }
             }
-        } else {
-            Log.w(TAG, "Gaps sync failed (non-fatal): ${gapsResult.error}")
         }
+        record(SyncDomain.GAPS, gapsResult)
 
         val triggersResult = syncApi.pullTriggers(syncPrefs.triggersWatermark)
         if (triggersResult.success) {
             triggersResult.newWatermark?.let { syncPrefs.triggersWatermark = it }
-        } else {
-            Log.w(TAG, "Triggers sync failed (non-fatal): ${triggersResult.error}")
         }
+        record(SyncDomain.TRIGGERS, triggersResult)
 
         val configResult = syncApi.pullConfig()
         if (configResult.success) {
             configResult.newWatermark?.let { syncPrefs.configWatermark = it }
-        } else {
-            Log.w(TAG, "Config sync failed (non-fatal): ${configResult.error}")
         }
+        record(SyncDomain.CONFIG, configResult)
+
+        // Chat FAQ suggestions — non-fatal and not in the retry predicate; on
+        // failure the previous cache stays intact so suggestions still render.
+        val chatFaqsResult = syncApi.pullChatFaqs(syncPrefs.chatFaqsWatermark)
+        if (chatFaqsResult.success) {
+            chatFaqsResult.newWatermark?.let { syncPrefs.chatFaqsWatermark = it }
+            // Backfill English on-device now that the (possibly new) FAQs are
+            // cached: ensures the pack (downloading if needed) then translates
+            // bn→en. Non-fatal — a passthrough or failure is retried on chat open.
+            runCatching { ChatFaqRepository(db.chatFaqDao()).translatePending(sdk.translator) }
+                .onFailure { Log.w(TAG, "Chat FAQ translation failed (non-fatal): ${it.message}") }
+        }
+        record(SyncDomain.CHAT_FAQS, chatFaqsResult)
 
         val pulls = listOf(modulesResult, gapsResult, triggersResult, configResult)
         if (shouldRetryInbound(pulls)) {
-            Log.w(TAG, "All v3 sync pulls failed with transient network errors — retrying.")
+            Log.w(TAG, "All core sync pulls failed with transient network errors — retrying.")
+            sdk.syncStatus.publishRun(
+                InboundRunSummary(startedAt, System.currentTimeMillis(), outcomes),
+            )
             return Result.retry()
         }
         val anyPermanentFailure = pulls.any { !it.success && it.errorKind != SyncErrorKind.NETWORK }
@@ -138,28 +162,29 @@ class InboundSyncWorker(
             // Permanent failures (HTTP 4xx, deserialization) won't fix themselves on
             // backoff retries — let the next periodic worker run try again instead of
             // burning battery here.
-            Log.w(TAG, "Some v3 sync pulls failed permanently — deferring to next scheduled run.")
+            Log.w(TAG, "Some core sync pulls failed permanently — deferring to next scheduled run.")
         }
 
         // Morning cards — non-fatal; on failure the previous cache stays intact.
-        val morningResult = syncApi.pullMorningCards(
-            chwId = sdk.currentCHWId,
-            tenantId = config.tenantId.takeIf { it.isNotBlank() },
-        )
-        if (!morningResult.success) {
-            Log.w(TAG, "Morning cards sync failed (non-fatal): ${morningResult.error}")
-        }
+        val morningResult = syncApi.pullMorningCards()
+        record(SyncDomain.MORNING_CARDS, morningResult)
 
-        syncPrefs.lastInboundSyncAt = System.currentTimeMillis()
+        val finishedAt = System.currentTimeMillis()
+        val summary = InboundRunSummary(startedAt, finishedAt, outcomes)
+        // "Last synced" must mean "everything landed". Advancing it after a partial failure
+        // is what made a failed pull-to-refresh look successful.
+        if (summary.allSucceeded) syncPrefs.lastInboundSyncAt = finishedAt
+        sdk.syncStatus.publishRun(summary)
         Log.i(
             TAG,
             "Inbound sync complete. modules=${modulesResult.upsertedCount}, " +
                 "assigned=${modulesResult.assignedCount}, " +
-                "thumbnails=${thumbnailsResult.updatedCount}, " +
-                "publishedDocs=${publishedDocsResult.count}, " +
+                "publishedDocs=${sourceDocsResult.published.count}, " +
+                "assignedVideos=${sourceDocsResult.assignedVideos.count}, " +
                 "gaps=${gapsResult.upsertedCount}, " +
                 "triggers=${triggersResult.triggerCount} bindings=${triggersResult.bindingCount}, " +
-                "config=${configResult.upsertedCount}, morningCards=${morningResult.count}.",
+                "config=${configResult.upsertedCount}, chatFaqs=${chatFaqsResult.upsertedCount}, " +
+                "morningCards=${morningResult.count}.",
         )
         return Result.success()
     }

@@ -42,7 +42,14 @@ class ScopeClassifier(private val terms: Set<String>) {
     fun isOutOfScope(query: String): Boolean {
         if (query.isBlank()) return false
         val lower = query.lowercase()
-        return DENY_TERMS.any { it in lower }
+        val tokens = BanglaTokenizer.tokenize(query).toSet()
+        return DENY_TERMS.any { term ->
+            when {
+                term.isBlank() -> false
+                term.contains(' ') -> lower.contains(term)
+                else -> term in tokens
+            }
+        }
     }
 
     /**
@@ -160,7 +167,7 @@ class ScopeClassifier(private val terms: Set<String>) {
             "business", "stock market", "cryptocurrency", "bitcoin",
             "কৃষি", "ব্যবসা",
             // Misc casual
-            "recipe", "cooking", "restaurant",
+            "recipe", "cook", "cooking", "restaurant",
             "রান্না", "রেসিপি",
         )
 
@@ -229,7 +236,7 @@ class ScopeClassifier(private val terms: Set<String>) {
             return ScopeClassifier(all)
         }
 
-        private val scopeJson = Json { ignoreUnknownKeys = true; isLenient = true }
+        private val scopeJson = com.medtroniclabs.microcoaching.util.LenientJson
 
         /**
          * Pull the concise clinical terms out of a module's raw `search_metadata`

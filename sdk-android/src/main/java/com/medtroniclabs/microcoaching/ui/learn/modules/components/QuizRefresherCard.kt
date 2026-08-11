@@ -37,6 +37,8 @@ import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueDark
  * Renamed from `QuickLearnCard` (v0.3.2). Tap opens [RefresherBottomSheet]
  * in question-first mode (1 question → lesson cards).
  *
+ * Dormant since the sub-tab split.
+ *
  * @param questionText The first quiz question text from the selected module.
  * @param participantCount Placeholder count (backend endpoint deferred).
  * @param xpReward XP display label — display only.
@@ -46,6 +48,7 @@ import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueDark
  * @param dismissKey Identity of the shown question; resets the swipe offset when
  *   the banner advances to a different module.
  */
+@Deprecated("Dormant: the featured refresher banner is gone from the coaching tab (and the host home banner was removed) — refreshers now surface in the Practice Zone (RefresherSubTab) — see docs/_coaching/01_navigation_and_screens.md")
 @Composable
 fun QuizRefresherCard(
     questionText: String,
