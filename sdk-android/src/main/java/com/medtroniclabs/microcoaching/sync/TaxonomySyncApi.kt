@@ -14,6 +14,7 @@ import com.medtroniclabs.microcoaching.data.mapper.parseIsoMillis
 import com.medtroniclabs.microcoaching.data.mapper.toConfigEntities
 import com.medtroniclabs.microcoaching.data.mapper.toEntity
 import com.medtroniclabs.microcoaching.data.mapper.toPayload
+import com.medtroniclabs.microcoaching.domain.telemetry.sha256Short
 import com.medtroniclabs.microcoaching.data.db.entity.MorningCardCacheEntity
 import com.medtroniclabs.microcoaching.network.CoachingApiService
 import com.medtroniclabs.microcoaching.data.db.entity.SourceDocumentThumbnailEntity
@@ -52,7 +53,7 @@ suspend fun SyncApi.pullGaps(sinceWatermark: String?, chwId: String? = null): Ga
             val reason = when {
                 gapsEmpty && completionsEmpty -> "gaps + completions empty"
                 gapsEmpty -> "gaps cache empty"
-                else -> "completions cache empty for chw=$chwId"
+                else -> "completions cache empty for chw=${chwId?.sha256Short()}"
             }
             Log.i(TAG, "Forcing full /sync/gaps bundle — $reason (ignoring stored watermark $sinceWatermark).")
         }
