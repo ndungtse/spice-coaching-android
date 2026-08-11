@@ -1,5 +1,6 @@
 package com.medtroniclabs.microcoaching.domain.triggers
 
+import com.medtroniclabs.microcoaching.progress.buildModuleCompletion
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull

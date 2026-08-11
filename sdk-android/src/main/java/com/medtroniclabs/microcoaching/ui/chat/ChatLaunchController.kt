@@ -26,7 +26,7 @@ import com.medtroniclabs.microcoaching.MicroCoachingSDK
  * (Toast only). Both should converge so the chat sheet is the *only* place
  * where download progress is visible — removing the "tap Download → see Toast
  * → tap FAB again → see Download button with no progress" race called out in
- * QA. The race itself is fixed in [ChatViewModel.currentModelNotReadyState];
+ * QA. The race itself is fixed in [ChatViewModel.currentSetupRequiredState];
  * this controller just makes sure every entry point arrives at the right
  * surface.
  */

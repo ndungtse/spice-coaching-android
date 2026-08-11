@@ -5,6 +5,7 @@ import com.medtroniclabs.microcoaching.data.db.dao.ChwQuizQuestionStateDao
 import com.medtroniclabs.microcoaching.data.db.dao.CoachingEventDao
 import com.medtroniclabs.microcoaching.data.db.entity.ChwQuizQuestionStateEntity
 import com.medtroniclabs.microcoaching.data.db.entity.CoachingEventEntity
+import com.medtroniclabs.microcoaching.domain.telemetry.sha256Short
 
 /**
  * Computes effective **per-quiz-question** refresher state with the same
@@ -37,7 +38,7 @@ internal class OnDeviceQuizStateEngine(
         val events = eventDao.getUnsyncedQuizAttempts(chwId)
         Log.i(
             TAG,
-            "quizEngine: chw=$chwId baselineQuizzes=${states.size} baselineActive=${baselineActive.size} " +
+            "quizEngine: chw=${chwId.sha256Short()} baselineQuizzes=${states.size} baselineActive=${baselineActive.size} " +
                 "replayEvents=${events.size}",
         )
 
@@ -61,15 +62,6 @@ internal class OnDeviceQuizStateEngine(
         val active = states.filterValues { it.status == GapStatus.ACTIVE && it.failedAttemptsCount > 0 }.keys
         Log.i(TAG, "quizEngine: effectiveActive=${active.size} (replayed=$replayed)")
         return states
-    }
-
-    private fun outcomeOf(event: CoachingEventEntity): GapOutcome {
-        event.isCorrect?.let { return if (it) GapOutcome.CORRECT else GapOutcome.INCORRECT }
-        return when (event.outcome?.lowercase()) {
-            "correct" -> GapOutcome.CORRECT
-            "wrong", "incorrect" -> GapOutcome.INCORRECT
-            else -> GapOutcome.UNKNOWN
-        }
     }
 
     private fun ChwQuizQuestionStateEntity.toQuizState() = QuizState(

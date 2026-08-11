@@ -28,11 +28,10 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import com.medtroniclabs.microcoaching.content.richtext.bodyToSpokenText
 import com.medtroniclabs.microcoaching.ui.markdown.MarkdownDefaults
 import com.medtroniclabs.microcoaching.ui.richtext.RichCardBody
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -95,12 +94,19 @@ fun LessonPlayerScreen(
     onHome: () -> Unit = {},
     readOnly: Boolean = false,
     onFinishReading: () -> Unit = onStartQuiz,
+    hasQuiz: Boolean = true,
+    onFinishCards: () -> Unit = onFinishReading,
 ) {
     if (cards.isEmpty()) {
-        // No content — exit straight away. In read-only mode this lands on
-        // the modules list; in quiz mode the existing quiz transition fires.
+        // No content — exit straight away. Read-only revisit lands on the modules
+        // list; a quiz-less module goes to the cards-completion screen; otherwise
+        // the existing quiz transition fires.
         LaunchedEffect(Unit) {
-            if (readOnly) onFinishReading() else onStartQuiz()
+            when {
+                readOnly -> onFinishReading()
+                !hasQuiz -> onFinishCards()
+                else -> onStartQuiz()
+            }
         }
         return
     }
@@ -128,29 +134,19 @@ fun LessonPlayerScreen(
     // cancels the previous utterance and immediately starts the new card.
     val currentTitle = translatedText(bn = card.titleBn, en = card.titleEn)
     val currentBody = translatedText(bn = card.bodyBn, en = card.bodyEn)
-    LaunchedEffect(currentIndex, autoSpeakEnabled) {
-        if (autoSpeakEnabled) {
-            // Prepend the title so TTS announces "<title>. <body>" — the period
-            // gives the engine a natural pause between the two.
-            val spokenBody = bodyToSpokenText(currentBody)
-            val spoken =
-                if (currentTitle.isBlank()) spokenBody
-                else "$currentTitle. $spokenBody"
-            if (spoken.isNotBlank()) {
-                onSpeak(spoken) {
-                    // Auto-advance only if we're not on the last card. On the last card,
-                    // stop and let the user manually tap "Start Quiz".
-                    if (currentIndex < cards.lastIndex) currentIndex++
-                }
-            }
-        } else {
-            onStopSpeak()
-        }
-    }
-
-    DisposableEffect(Unit) {
-        onDispose { onStopSpeak() }
-    }
+    // Auto-speak the current card; advance on completion (except the last card,
+    // where the CHW manually taps "Start Quiz"). Shared with the refresher
+    // sheet's card slide — see [LessonCardAutoSpeak].
+    LessonCardAutoSpeak(
+        cardIndex = currentIndex,
+        titleText = currentTitle,
+        bodyText = currentBody,
+        isLastCard = isLast,
+        autoSpeakEnabled = autoSpeakEnabled,
+        onSpeak = onSpeak,
+        onStopSpeak = onStopSpeak,
+        onAutoAdvance = { currentIndex++ },
+    )
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -262,7 +258,11 @@ fun LessonPlayerScreen(
             Button(
                 onClick = {
                     if (isLast) {
-                        if (readOnly) onFinishReading() else onStartQuiz()
+                        when {
+                            readOnly -> onFinishReading()
+                            !hasQuiz -> onFinishCards()
+                            else -> onStartQuiz()
+                        }
                     } else currentIndex++
                 },
                 modifier = Modifier.weight(1f),
@@ -272,8 +272,11 @@ fun LessonPlayerScreen(
                 Text(
                     text = if (isLast) {
                         stringResource(
-                            if (readOnly) R.string.lesson_player_back_to_modules
-                            else R.string.lesson_player_start_quiz,
+                            when {
+                                readOnly -> R.string.lesson_player_back_to_modules
+                                !hasQuiz -> R.string.lesson_player_finish
+                                else -> R.string.lesson_player_start_quiz
+                            },
                         )
                     } else {
                         stringResource(R.string.lesson_player_next)
@@ -311,10 +314,14 @@ fun LessonPlayerScreen(
     onHome: () -> Unit = {},
     readOnly: Boolean = false,
     onFinishReading: () -> Unit = onStartQuiz,
+    hasQuiz: Boolean = module.questionCount > 0,
+    onFinishCards: () -> Unit = onFinishReading,
 ) {
     val lang = if (MicroCoachingSDK.getInstance().config.language == Language.ENGLISH) "en" else "bn"
+    // Parsed once per blob — keep JSON parsing out of composition (see ModuleDetailScreen).
+    val cards = remember(module.cardsJson) { parseLessonCards(module.cardsJson) }
     LessonPlayerScreen(
-        cards = parseLessonCards(module.cardsJson),
+        cards = cards,
         initialIndex = initialIndex,
         lang = lang,
         onBack = onBack,
@@ -327,5 +334,7 @@ fun LessonPlayerScreen(
         onHome = onHome,
         readOnly = readOnly,
         onFinishReading = onFinishReading,
+        hasQuiz = hasQuiz,
+        onFinishCards = onFinishCards,
     )
 }

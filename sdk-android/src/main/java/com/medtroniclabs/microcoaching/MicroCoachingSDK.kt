@@ -13,13 +13,22 @@ import com.medtroniclabs.microcoaching.data.db.entity.ModuleEntity
 import com.medtroniclabs.microcoaching.data.db.entity.sortedForDisplay
 import com.medtroniclabs.microcoaching.data.db.entity.MorningCardCacheEntity
 import com.medtroniclabs.microcoaching.sync.SyncPrefs
+import com.medtroniclabs.microcoaching.sync.SyncStatusStore
 import com.medtroniclabs.microcoaching.domain.gaps.ondevice.ActionGapLink
 import com.medtroniclabs.microcoaching.domain.gaps.ondevice.GapStateConfig
 import com.medtroniclabs.microcoaching.domain.gaps.ondevice.MorningSourcesConfig
 import com.medtroniclabs.microcoaching.domain.gaps.ondevice.OnDeviceMorningGenerator
 import com.medtroniclabs.microcoaching.domain.morning.MorningModuleResolver
 import com.medtroniclabs.microcoaching.domain.triggers.TriggerEvaluator
-import com.medtroniclabs.microcoaching.domain.triggers.buildModuleCompletion
+import com.medtroniclabs.microcoaching.progress.buildModuleCompletion
+import com.medtroniclabs.microcoaching.sdk.chat.ChatKnowledgeIndexBootstrap
+import com.medtroniclabs.microcoaching.sdk.context.ChwContextStore
+import com.medtroniclabs.microcoaching.sdk.hooks.handleAssessmentSubmitted
+import com.medtroniclabs.microcoaching.sdk.hooks.handleReferralSubmitted
+import com.medtroniclabs.microcoaching.sdk.morning.MorningSurfaceCoordinator
+import com.medtroniclabs.microcoaching.sdk.morning.PersonaPolicy
+import com.medtroniclabs.microcoaching.sdk.morning.SkippedRefresherStore
+import com.medtroniclabs.microcoaching.sdk.runtime.SdkNetworkMonitor
 import com.medtroniclabs.microcoaching.ai.model.ModelCatalog
 import com.medtroniclabs.microcoaching.ai.model.ModelProvider
 import com.medtroniclabs.microcoaching.ai.model.ModelVariant
@@ -47,19 +56,28 @@ import com.medtroniclabs.microcoaching.domain.telemetry.EventRecorder
 import com.medtroniclabs.microcoaching.domain.telemetry.PatientIdHasher
 import com.medtroniclabs.microcoaching.domain.telemetry.TelemetryManager
 import com.medtroniclabs.microcoaching.sync.SyncCoordinator
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import okhttp3.OkHttpClient
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.util.UUID
@@ -68,7 +86,6 @@ import  com.medtroniclabs.microcoaching.ai.voice.stt.SttModelManager
 import com.medtroniclabs.microcoaching.ai.voice.VoiceInputController
 import com.medtroniclabs.microcoaching.ai.retrieval.ModuleKnowledgeIndex
 import com.medtroniclabs.microcoaching.ai.retrieval.RetrievalHintOverlay
-import com.medtroniclabs.microcoaching.ai.model.ModelState
 import com.medtroniclabs.microcoaching.ai.translation.TranslationModelState
 import com.medtroniclabs.microcoaching.ai.voice.OfflineSttEngine
 import com.medtroniclabs.microcoaching.ai.voice.AndroidSpeechRecognizerEngine
@@ -76,37 +93,10 @@ import com.medtroniclabs.microcoaching.ai.voice.ChatVoiceInputController
 import com.medtroniclabs.microcoaching.domain.system.DeviceCapability
 import com.medtroniclabs.microcoaching.domain.refresher.CoachingModuleStore
 import com.medtroniclabs.microcoaching.domain.config.LearningPoints
+import com.medtroniclabs.microcoaching.ui.learn.QuizRetryGate
 
 
 
-/**
- * Singleton entry point for the MicroCoaching SDK.
- *
- * Initialize once in your Application.onCreate():
- * ```kotlin
- * MicroCoachingSDK.Builder(this)
- *     .language(Language.BANGLA)
- *     .backendUrl(BuildConfig.COACHING_BACKEND_URL)
- *     .authToken(SecuredPreference.getToken())
- *     .otelEndpoint(BuildConfig.OTEL_ENDPOINT)
- *     .otelHeaders(mapOf("signoz-access-token" to BuildConfig.SIGNOZ_TOKEN))
- *     .enableTelemetry(BuildConfig.ENABLE_COACHING_TELEMETRY)
- *     .enableChat(true)
- *     .build()
- * ```
- *
- * Then retrieve the singleton from anywhere:
- * ```kotlin
- * val sdk = MicroCoachingSDK.getInstance()
- * ```
- *
- * Or inject [CoachingDataRepository] via Hilt:
- * ```kotlin
- * @Provides @Singleton
- * fun provideCoachingDataRepository(): CoachingDataRepository =
- *     MicroCoachingSDK.getInstance().dataRepository
- * ```
- */
 /** Startup health snapshot returned by [MicroCoachingSDK.checkHealth]. */
 data class SdkHealthReport(
     val isModelPresent: Boolean,
@@ -115,32 +105,35 @@ data class SdkHealthReport(
     val morningCardCount: Int,
 )
 
+/**
+ * Singleton entry point for the SDK. Build once in `Application.onCreate()` via
+ * [Builder], then read it anywhere with [getInstance]. Hosts can also inject
+ * [dataRepository] ([CoachingDataRepository]).
+ */
 class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
 
-    private val sdkScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    // CoroutineExceptionHandler: an uncaught exception in SDK background work
+    // must never take the HOST app down. Without it, a transient failure in an
+    // init-block collector (e.g. a DB read racing a sync delete) propagated as
+    // a fatal crash on a worker thread — an SDK is a guest in the host process.
+    internal val sdkScope = CoroutineScope(
+        SupervisorJob() + Dispatchers.IO +
+            CoroutineExceptionHandler { _, throwable ->
+                Log.e(TAG, "Uncaught error in SDK background scope", throwable)
+            },
+    )
 
     /**
-     * One coaching session id per app process. Every learn-flow event
-     * ([EventRecorder.recordCoachingEvent] writes through here via the
-     * `LearnViewModel` recorder) is tagged with this id so the backend's
-     * session inspector groups a CHW's module + quiz interactions together.
-     *
-     * Process-static (generated once with the SDK singleton) — identical to the
-     * former `LearnViewModel.sessionId` companion. It is intentionally NOT reset
-     * on logout / CHW switch; per-login sessions would be a separate change.
+     * One coaching session id per app process (generated once with the singleton;
+     * not reset on logout / CHW switch). Tags every learn-flow event so the backend
+     * groups a CHW's module + quiz interactions together.
      */
     val coachingSessionId: String = UUID.randomUUID().toString()
 
     /**
-     * `true` when this device falls below the 3 GB-RAM threshold and therefore
-     * cannot host the on-device Gemma model. The chat runs in retrieval-only
-     * mode on these devices — BM25 lookup over the indexed module corpus,
-     * pre-authored Bangla card body served verbatim, no LLM round-trip.
-     *
-     * Probed once at construction via
-     * [com.medtroniclabs.microcoaching.domain.system.DeviceCapability]. Hosts
-     * can override the auto-detection via [MicroCoachingConfig.forceLowEndMode]
-     * — useful for QA on capable hardware.
+     * `true` below the 3 GB-RAM threshold: too small for the on-device Gemma model,
+     * so chat runs retrieval-only (BM25 over the module corpus, no LLM). Probed once
+     * via [DeviceCapability]; overridable with [MicroCoachingConfig.forceLowEndMode] (QA).
      */
     val isLowEndDevice: Boolean =
         config.forceLowEndMode
@@ -148,34 +141,30 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
                 .isLowEndDevice(config.context)
 
     /**
-     * Active language for SDK UI and LLM prompts.
-     *
-     * Set once via [Builder.language] at init time. Can be changed at runtime via
-     * [setLanguage] — the new value takes effect the next time any SDK screen is
-     * opened (Compose roots re-wrap their locale context on entry).
+     * Active language for SDK UI and LLM prompts. Set via [Builder.language];
+     * changeable at runtime with [setLanguage] (takes effect on the next SDK screen open).
      */
     @Volatile
     var language: Language = config.language
         private set
 
-    /**
-     * Change the coaching language at runtime without rebuilding the SDK.
-     *
-     * The new language takes effect immediately for LLM prompts and the next time
-     * any SDK-owned screen (CoachingFlowActivity, CoachingChatFragment,
-     * CoachingCardFragment) is opened or restarted — they each re-wrap their locale
-     * context from this value on entry.
-     *
-     * Example — switch to English after login:
-     * ```kotlin
-     * MicroCoachingSDK.getInstance().setLanguage(Language.ENGLISH)
-     * ```
-     */
+    /** Change language at runtime without rebuilding. Applies to LLM prompts now, UI on next screen open. */
     fun setLanguage(language: Language) {
         this.language = language
-        if (language == Language.BANGLA) {
-            sdkScope.launch { translator.ensureModelReady() }
-        }
+        // The EN↔BN pack is needed in both languages (BN for the Gemma round-trip,
+        // EN to translate chat to/from the bn-only backend), so ensure it either way.
+        sdkScope.launch { translator.ensureModelReady() }
+    }
+
+    /**
+     * Update the bearer token for all backend calls without rebuilding. The auth
+     * interceptor reads it per request, so it applies from the next call. Prefer this
+     * over [Builder.build] on login / token refresh (a rebuild reconstructs every
+     * service; this is one volatile write).
+     */
+    fun updateAuthToken(token: String) {
+        config.authToken = token
+        Log.i(TAG, "Auth token updated (length=${token.length}).")
     }
 
     private val _morningModules = MutableStateFlow<List<ModuleEntity>>(emptyList())
@@ -197,85 +186,67 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
 
     private val _morningCardsItems = MutableStateFlow<List<MorningCardCacheEntity>>(emptyList())
     /**
-     * Last-known backend-prioritised morning-card list. Populated after a successful
-     * `GET /morning/cards` call in [onHomeScreenShown] / [onMorningOpen] / [InboundSyncWorker].
-     *
-     * Consumed by [QuickLearnViewModel] and [LearnViewModel] to attach [MorningCardCacheEntity.behaviouralGapId]
-     * and [MorningCardCacheEntity.source] to each surfaced module.
+     * Last-known backend-prioritised morning-card list (populated after a
+     * `GET /morning/cards`). [QuickLearnViewModel] / [LearnViewModel] read it to
+     * attach each module's `behaviouralGapId` / `source`.
      */
     val morningCardsItems: StateFlow<List<MorningCardCacheEntity>> = _morningCardsItems.asStateFlow()
 
-    // ── Skipped-refresher set (persisted per CHW) ─────────────────────────────
-    // Family ids of refreshers the CHW skipped — via the MorningCard Skip button /
-    // swipe, or by swiping away the QuizRefresherCard. Persisted to chwPrefs keyed by
-    // CHW id, so a skipped refresher **stays skipped** across app restarts / re-login:
-    // it's kept OUT of the morning card stack/banner but **remains in the Refresher
-    // list** (still accessible to take). A skip is cleared only when the CHW actually
-    // completes that refresher (see RefresherContent), not by a later wrong answer;
-    // [retainActiveSkippedRefreshers] also prunes ids no longer in the active pool.
-    private val _skippedRefresherFamilyIds = MutableStateFlow<Set<String>>(emptySet())
+    // ── Skipped-refresher set (persisted per CHW) — owned by [SkippedRefresherStore] ──
+    // `chwPrefs` is passed as a provider so the store never forces that lazy at construction.
+    private val skippedRefresherStore = SkippedRefresherStore(sdkScope, { chwPrefs }, { currentCHWId })
 
     /** The skipped-refresher family-id set (used by [QuickLearnViewModel] to hide skipped banners). */
-    internal val skippedRefresherFamilyIds: StateFlow<Set<String>> = _skippedRefresherFamilyIds.asStateFlow()
+    internal val skippedRefresherFamilyIds: StateFlow<Set<String>> = skippedRefresherStore.familyIds
 
     /**
-     * Number of refreshers the CHW skipped this home session. The SPICE host
-     * observes this to render a count badge on the "Coaching" home-grid tile.
+     * Number of refreshers the CHW skipped this home session. The SPICE host observes this to
+     * render a count badge on the "Coaching" home-grid tile.
      */
-    val skippedRefresherCount: StateFlow<Int> =
-        _skippedRefresherFamilyIds
-            .map { it.size }
-            .stateIn(sdkScope, SharingStarted.Eagerly, 0)
+    val skippedRefresherCount: StateFlow<Int> = skippedRefresherStore.count
+
+    // ── Home-tile assignment indicators (MED-I629) ────────────────────────────
+    // Two independent booleans the SPICE "Coaching" tile overlays as corner
+    // icons (video play + notification bell). Both are `Eagerly` so the tile
+    // never flashes a stale `false` before a collector attaches.
+
+    /** Backs [hasIncompleteAssignedVideos]; updated at the single [currentCHWId] write site. */
+    private val _currentChwIdFlow = MutableStateFlow<String?>(null)
+
+    /**
+     * Home-tile video indicator: true while the current CHW has at least one
+     * assigned video not yet completed. Re-subscribes to the new CHW's row set
+     * on a user switch; an EXISTS query keeps this off the hot path (no rows
+     * loaded). Emits `false` until a CHW is known / when none is set.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val hasIncompleteAssignedVideos: StateFlow<Boolean> =
+        _currentChwIdFlow
+            .flatMapLatest { id ->
+                if (id.isNullOrBlank()) flowOf(false)
+                else database.assignedVideoDao().hasIncompleteFlow(id)
+            }
+            .distinctUntilChanged()
+            .stateIn(sdkScope, SharingStarted.Eagerly, false)
+
+    /**
+     * Home-tile module indicator: true while the current CHW has incomplete
+     * assigned Training modules. Passthrough of the store's `Eagerly` projection.
+     */
+    val hasIncompleteTrainingModules: StateFlow<Boolean>
+        get() = coachingModuleStore.hasIncompleteTrainingModules
 
     /** Record that the CHW skipped a refresher (Skip button or swipe-away). Persisted per CHW. */
-    fun markRefresherSkipped(moduleFamilyId: String) {
-        if (moduleFamilyId.isBlank()) return
-        _skippedRefresherFamilyIds.update { it + moduleFamilyId }
-        persistSkippedRefreshers()
-    }
+    fun markRefresherSkipped(moduleFamilyId: String) = skippedRefresherStore.markSkipped(moduleFamilyId)
 
     /** Drop a refresher from the skipped set once the CHW has completed it. */
-    fun clearRefresherSkipped(moduleFamilyId: String) {
-        if (moduleFamilyId.isBlank()) return
-        if (moduleFamilyId !in _skippedRefresherFamilyIds.value) return
-        _skippedRefresherFamilyIds.update { it - moduleFamilyId }
-        persistSkippedRefreshers()
-    }
+    fun clearRefresherSkipped(moduleFamilyId: String) = skippedRefresherStore.clearSkipped(moduleFamilyId)
 
-    /**
-     * Keep only the skipped ids that are still **active refreshers**. Called with
-     * the current refresher pool (from the modules screen) so the badge counts
-     * unique, still-pending skipped refreshers — completed/mastered ones that
-     * left the pool stop counting.
-     */
-    fun retainActiveSkippedRefreshers(activeFamilyIds: Set<String>) {
-        val before = _skippedRefresherFamilyIds.value
-        val after = before intersect activeFamilyIds
-        if (after != before) {
-            _skippedRefresherFamilyIds.value = after
-            persistSkippedRefreshers()
-        }
-    }
+    /** Keep only skipped ids still in the active refresher pool. See [SkippedRefresherStore.retainActive]. */
+    fun retainActiveSkippedRefreshers(activeFamilyIds: Set<String>) =
+        skippedRefresherStore.retainActive(activeFamilyIds)
 
-    private fun skippedRefreshersKey(chwId: String) = "skipped_refreshers_$chwId"
-
-    /** Persist the skipped set for the current CHW (survives restart; scoped per user). */
-    private fun persistSkippedRefreshers() {
-        val chwId = currentCHWId ?: return
-        chwPrefs.edit()
-            .putString(skippedRefreshersKey(chwId), Json.encodeToString(_skippedRefresherFamilyIds.value))
-            .apply()
-    }
-
-    /** Load [chwId]'s persisted skipped set into the in-memory flow (empty if none/undecodable). */
-    private fun loadSkippedRefreshers(chwId: String) {
-        val json = chwPrefs.getString(skippedRefreshersKey(chwId), null)
-        _skippedRefresherFamilyIds.value = if (json == null) {
-            emptySet()
-        } else {
-            runCatching { Json.decodeFromString<Set<String>>(json) }.getOrDefault(emptySet())
-        }
-    }
+    private fun loadSkippedRefreshers(chwId: String) = skippedRefresherStore.load(chwId)
 
     private val _latestModule = MutableStateFlow<ModuleEntity?>(null)
     /**
@@ -285,57 +256,60 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
      */
     val latestModule: StateFlow<ModuleEntity?> = _latestModule.asStateFlow()
 
-    private val triggerEvaluator: TriggerEvaluator by lazy {
-        TriggerEvaluator(
-            triggerDao = database.triggerDefinitionDao(),
-            bindingDao = database.moduleTriggerBindingDao(),
-            moduleDao = database.moduleDao(),
-            gapProfileDao = database.chwGapProfileDao(),
-            behaviouralGapDao = database.behaviouralGapDao(),
-            configDao = database.configThresholdDao(),
-            config = config,
-        )
-    }
+    // ── Service graph (declared leaf → dependent) ─────────────────────────────
+    // `database` heads the graph and is eager: every domain object below and the
+    // init-block collectors touch it, so constructing it first (before init{})
+    // makes a null-delegate NPE structurally impossible and lets the compiler
+    // enforce the ordering of the eager evaluators that follow. Room's handle is
+    // inert until the first query, so there's no launch-time I/O.
+
+    /** SDK-owned Room database — separate from SPICE's NCDMergerDatabase. */
+    internal val database: MicroCoachingDatabase = MicroCoachingDatabase.getInstance(config.context)
+
+    private val triggerEvaluator: TriggerEvaluator = TriggerEvaluator(
+        triggerDao = database.triggerDefinitionDao(),
+        bindingDao = database.moduleTriggerBindingDao(),
+        moduleDao = database.moduleDao(),
+        gapProfileDao = database.chwGapProfileDao(),
+        behaviouralGapDao = database.behaviouralGapDao(),
+        configDao = database.configThresholdDao(),
+        config = config,
+    )
 
     /**
      * `moduleFamilyId → real action-gap id` resolved on-device by
-     * [onDeviceMorningGenerator] (e.g. a wrong-referral module linked via its
-     * `behavioural_gap_ids` to `referral_location_upazila`). The backend's morning
-     * card for such a module may carry only its `module_primary_gap_*` placeholder
-     * (no detection rule), so [coachingModuleStore] overlays this to recognise the
-     * true action gap and keep the refresher surfaced even when the module is completed.
+     * [onDeviceMorningGenerator]. When the backend's morning card carries only a
+     * `module_primary_gap_*` placeholder (no rule), [coachingModuleStore] overlays
+     * this to keep the refresher surfaced even after the module is completed.
      * Empty until the generator runs.
      */
     private val _onDeviceActionGapLinks = MutableStateFlow<Map<String, ActionGapLink>>(emptyMap())
 
     /**
-     * On-device replica of `GET /morning/cards` — computes gap state from cached
-     * events and selects the refresher set the backend would, writing it into
-     * `morning_card_cache`. Used by [morningModuleResolver] when the live morning
-     * endpoint is unavailable. See `docs/offline_refresher_generation_plan.md`.
+     * On-device replica of `GET /morning/cards` — derives gap state from cached
+     * events and writes the refresher set into `morning_card_cache`. Used by
+     * [morningModuleResolver] when the live morning endpoint is unavailable.
      */
-    private val onDeviceMorningGenerator: OnDeviceMorningGenerator by lazy {
-        OnDeviceMorningGenerator(
-            database = database,
-            config = GapStateConfig(
-                passThreshold = config.quizPassThreshold / 100f,
-                escalationFailureCount = config.escalationFailureCount,
-                escalationWindowDays = config.escalationWindowDays,
-                occurrenceWindowDays = config.triggerWindowDays,
-            ),
-            sources = MorningSourcesConfig(
-                quiz = config.refresherTuning.enableQuizRefreshers,
-                gap = config.refresherTuning.enableGapRefreshers,
-                referral = config.refresherTuning.enableReferralRefreshers,
-                visit = config.refresherTuning.enableVisitRefreshers,
-            ),
-            publishActionGapLinks = { _onDeviceActionGapLinks.value = it },
-            loadTodaysVisits = { loadTodaysVisits() },
-        )
-    }
+    private val onDeviceMorningGenerator: OnDeviceMorningGenerator = OnDeviceMorningGenerator(
+        database = database,
+        config = GapStateConfig(
+            passThreshold = config.quizPassThreshold / 100f,
+            escalationFailureCount = config.escalationFailureCount,
+            escalationWindowDays = config.escalationWindowDays,
+            occurrenceWindowDays = config.triggerWindowDays,
+        ),
+        sources = MorningSourcesConfig(
+            quiz = config.refresherTuning.enableQuizRefreshers,
+            gap = config.refresherTuning.enableGapRefreshers,
+            referral = config.refresherTuning.enableReferralRefreshers,
+            visit = config.refresherTuning.enableVisitRefreshers,
+        ),
+        publishActionGapLinks = { _onDeviceActionGapLinks.value = it },
+        loadTodaysVisits = { loadTodaysVisits() },
+    )
 
     /** 4-tier morning-module resolution, extracted from this class (F9). */
-    private val morningModuleResolver: MorningModuleResolver by lazy {
+    internal val morningModuleResolver: MorningModuleResolver by lazy {
         MorningModuleResolver(
             database = database,
             config = config,
@@ -349,14 +323,9 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
 
     /**
      * Single source of truth for the categorised module lists (refreshers /
-     * training) and the **one** featured refresher pick shared by the home
-     * [com.medtroniclabs.microcoaching.ui.components.MorningCard] and the modules
-     * screen. Lives here (not in a ViewModel) because those two surfaces sit in
-     * different Activities — see [CoachingModuleStore].
-     *
-     * Lazy + accessed only post-construction (from UI / [onHomeScreenShown]), so
-     * its eager Room collectors never race the lazy [database] delegate during
-     * SDK construction (the init-order hazard documented above the `init` block).
+     * training) and the one featured refresher pick, shared by the home card and
+     * the modules screen (they sit in different Activities, so it lives here, not a
+     * ViewModel). Lazy so its eager Room collectors start only post-construction.
      */
     internal val coachingModuleStore: CoachingModuleStore by lazy {
         CoachingModuleStore(
@@ -364,7 +333,7 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
             scope = sdkScope,
             chwIdProvider = { currentCHWId },
             langProvider = { if (language == Language.ENGLISH) "en" else "bn" },
-            skippedIds = _skippedRefresherFamilyIds.asStateFlow(),
+            skippedIds = skippedRefresherStore.familyIds,
             onDeviceActionGapLinks = _onDeviceActionGapLinks.asStateFlow(),
         )
     }
@@ -387,64 +356,73 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
     }
 
     /**
-     * The featured refresher resolved by [coachingModuleStore], mapped back to a
-     * [ModuleEntity] so the SPICE home card keeps reading
-     * `cardCount`/`questionCount`/`estimatedMinutes`/`title*` unchanged. Both the
-     * home card and the modules banner derive from the same store pick, so they
-     * always agree; the value advances when a refresher is skipped and goes null
-     * only when every refresher has been skipped.
+     * Admin-configured quiz-reattempt window in **days**, derived from the cached
+     * `config_threshold` rows; falls back to [QuizRetryGate.QUIZ_RETRY_WINDOW_DAYS]
+     * (7). Read by `LearnViewModel.canRetryActiveQuiz` to gate "Try Again". Lazy so
+     * its eager collector starts post-construction.
+     */
+    val quizReattemptValidityDays: StateFlow<Long> by lazy {
+        database.configThresholdDao().getGlobalFlow()
+            .map { rows ->
+                QuizRetryGate.resolveValidityDays(
+                    rows.firstOrNull { it.key == QuizRetryGate.KEY_QUIZ_REATTEMPT_VALIDITY_DAYS }?.value,
+                )
+            }
+            .stateIn(sdkScope, SharingStarted.Eagerly, QuizRetryGate.QUIZ_RETRY_WINDOW_DAYS)
+    }
+
+    /**
+     * Featured refresher from [coachingModuleStore], mapped back to a [ModuleEntity]
+     * so the home card + modules banner share one pick (always agree). Advances on
+     * skip; null once every refresher is skipped (or for a PO — see below).
      */
     val selectedMorningModule: StateFlow<ModuleEntity?> by lazy {
         coachingModuleStore.selectedMorningCard
-            .map { lm -> lm?.moduleFamilyId?.let { database.moduleDao().getByFamilyId(it) } }
+            // PO has no refreshers — never surface a morning card. This hides the
+            // SPICE home MorningCard/LearnCard banner (its `if (current != null)`
+            // guard) without the host needing its own role check.
+            .map { lm ->
+                if (personaPolicy.suppressesRefreshers) null
+                else lm?.moduleFamilyId?.let { database.moduleDao().getByFamilyId(it) }
+            }
             .stateIn(sdkScope, SharingStarted.Eagerly, null)
     }
 
     /**
-     * GAP_DETECTION_SDK.md §4 — per-`rule_type` dispatcher loaded with the four
-     * pilot evaluators. Today only [WrongFacilityTierEvaluator] is wired
-     * end-to-end; the other three are file skeletons returning null until the
-     * remaining TEAM-CONFIRM questions (C-SDK-1, C-SDK-2) are resolved.
-     *
-     * Gated by [MicroCoachingConfig.enableGapDetection] — when false the
-     * dispatcher is skipped and [onAssessmentSubmitted] falls through to its
-     * existing single-event emission (preserves today's behaviour exactly).
+     * Per-`rule_type` gap dispatcher with the four pilot evaluators. Only
+     * [WrongFacilityTierEvaluator] is wired end-to-end today; the other three are
+     * skeletons returning null. Gated by [MicroCoachingConfig.enableGapDetection]
+     * — when false, [onAssessmentSubmitted] keeps its single-event emission.
      */
-    private val gapRuleDispatcher: GapRuleDispatcher by lazy {
-        GapRuleDispatcher(
-            gapDao = database.behaviouralGapDao(),
-            evaluators = mapOf(
-                WrongFacilityTierEvaluator().let { it.ruleType to it },
-                BpAboveThresholdEvaluator().let { it.ruleType to it },
-                GlucoseAboveThresholdEvaluator().let { it.ruleType to it },
-                MissingDangerSignsEvaluator().let { it.ruleType to it },
-            ),
-        )
-    }
+    internal val gapRuleDispatcher: GapRuleDispatcher = GapRuleDispatcher(
+        gapDao = database.behaviouralGapDao(),
+        evaluators = mapOf(
+            WrongFacilityTierEvaluator().let { it.ruleType to it },
+            BpAboveThresholdEvaluator().let { it.ruleType to it },
+            GlucoseAboveThresholdEvaluator().let { it.ruleType to it },
+            MissingDangerSignsEvaluator().let { it.ruleType to it },
+        ),
+    )
 
     /** TP-7 — visit-close handler. See [onVisitCompleted]. */
-    private val visitCompletedHandler: VisitCompletedHandler by lazy {
+    private val visitCompletedHandler: VisitCompletedHandler =
         VisitCompletedHandler(coachingEventDao = database.coachingEventDao())
-    }
 
-    /** Lazy-initialized OTel telemetry manager. Inactive if [MicroCoachingConfig.enableTelemetry] is false. */
-    val telemetry: TelemetryManager by lazy { TelemetryManager(config) }
+    // Teardown-sensitive services keep an explicit Lazy handle so [shutdown] can
+    // release them only if actually created (touching the property would force-init).
+
+    private val telemetryLazy = lazy { TelemetryManager(config) }
+
+    /** OTel telemetry manager. Inactive if [MicroCoachingConfig.enableTelemetry] is false. */
+    val telemetry: TelemetryManager by telemetryLazy
 
     /**
-     * Builds an [EventRecorder] scoped to the SDK's SPICE-facing API hooks.
-     * Used by [onAssessmentSubmitted] and [onRiskFlagObserved] to write
-     * UC-2 / UC-3 events.
-     *
-     * Constructed per-call (not lazy) because [EventRecorder] captures
-     * `chwId` at construction time, and [currentCHWId] may not yet be set
-     * when the SDK is first initialised. Per-VM recorders inside
-     * `LearnViewModel` / `ChatViewModel` stay as they are — those have a
-     * fixed chwId for the VM's lifetime.
-     *
-     * Session id is fixed to `"sdk-hook"` so all SDK-API-originated rows
-     * group together in the backend's session inspector.
+     * An [EventRecorder] for the SDK's hook-originated events (session id
+     * `"sdk-hook"` so they group in the backend). Built per-call because
+     * [EventRecorder] captures `chwId` at construction and [currentCHWId] may not
+     * be set yet at SDK init.
      */
-    private fun newSdkHookRecorder(chwId: String): EventRecorder =
+    internal fun newSdkHookRecorder(chwId: String): EventRecorder =
         EventRecorder(
             dao = database.coachingEventDao(),
             sessionId = "sdk-hook",
@@ -456,115 +434,131 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
 
     private val syncPrefs: SyncPrefs by lazy { SyncPrefs(config.context) }
 
-    // The next two lazy delegates MUST be declared before the `init {}` block.
-    // The init launches coroutines that reference `database` (and `translator`
-    // when language=BANGLA) — if either lazy property's declaration ran AFTER
-    // the init block, the IO dispatcher could resume the launched body before
-    // the main thread reached the declaration, dereferencing a null Lazy
-    // delegate and crashing with the NPE seen in recent crashes.
-
-    /** SDK-owned Room database — separate from SPICE's NCDMergerDatabase. */
-    internal val database: MicroCoachingDatabase by lazy {
-        MicroCoachingDatabase.getInstance(config.context)
-    }
-
     /**
-     * Offline cache for remote assets (module thumbnails, lesson-card images;
-     * video / PDF later). Resolves a stable asset key to a local file,
-     * downloading + persisting on first online view so the asset renders offline
-     * thereafter. See [com.medtroniclabs.microcoaching.data.asset.AssetCache].
+     * Offline cache for remote assets (thumbnails, lesson-card images): resolves an
+     * asset key to a local file, downloading + persisting on first online view so it
+     * renders offline thereafter. See [AssetCache].
      */
     val assetCache: AssetCache by lazy {
-        AssetCache(config.context, database.cachedAssetDao(), sdkScope)
+        AssetCache(config.context, database.cachedAssetDao(), sdkScope, minFreeBytes = config.minFreeStorageBytes)
     }
 
-    /** On-device EN↔BN translator. Active whenever [language] is [Language.BANGLA]. */
-    val translator: OnDeviceTranslator by lazy { OnDeviceTranslator() }
+    private val translatorLazy = lazy { OnDeviceTranslator() }
 
-    private val _chatKnowledgeIndex = MutableStateFlow(
-        ModuleKnowledgeIndex.empty()
+    /** On-device EN↔BN translator. Active whenever [language] is [Language.BANGLA]. */
+    val translator: OnDeviceTranslator by translatorLazy
+
+    /** Lazily-built BM25 index over the on-device module corpus — see [ChatKnowledgeIndexBootstrap]. */
+    private val chatIndexBootstrap = ChatKnowledgeIndexBootstrap(
+        scope = sdkScope,
+        config = config,
+        moduleDao = { database.moduleDao() },
+        retiredFamilyIds = { syncPrefs.retiredFamilyIds },
     )
 
     /**
-     * In-memory BM25 index over the on-device module corpus, used by [ChatViewModel]
-     * to ground chat answers in cards / quiz items (B1–B2 of docs/v3/chat_plan.md).
-     *
-     * Rebuilt on app start and after every inbound module sync — observed via
-     * `ModuleDao.getAllActive()`. Build cost is ≪ 100 ms for ≤ 200 chunks so we
-     * accept the per-emission rebuild rather than gating on a watermark.
+     * In-memory BM25 index over the on-device module corpus; [ChatViewModel] uses it
+     * to ground chat answers in cards / quiz items. Built lazily on the first chat
+     * open ([ensureChatKnowledgeIndex]), not at SDK init. `empty()` until then.
      */
-    val chatKnowledgeIndex: StateFlow<ModuleKnowledgeIndex> =
-        _chatKnowledgeIndex.asStateFlow()
-
-    private var networkCallback: ConnectivityManager.NetworkCallback? = null
-    @Volatile private var networkLost = false
-
-    private val _networkAvailable = MutableStateFlow(true)
+    val chatKnowledgeIndex: StateFlow<ModuleKnowledgeIndex> = chatIndexBootstrap.index
 
     /**
-     * Reactive view of the SDK-observed network state, driven by the same
-     * `ConnectivityManager.NetworkCallback` registered in [registerConnectivityCallback].
-     * Emits `true` when at least one network has `NET_CAPABILITY_INTERNET`,
-     * `false` when none do. Initial value reflects the snapshot taken when
-     * the SDK was constructed.
-     *
-     * UI surfaces (e.g. the chat source-attribution chip row) collect this to
-     * grey out chips immediately when connectivity drops, rather than polling
-     * [isNetworkAvailable] on every recomposition.
+     * Start (once) the background collector that builds and maintains [chatKnowledgeIndex].
+     * Called by [ChatViewModel] on chat open. Idempotent. See [ChatKnowledgeIndexBootstrap].
      */
-    val networkAvailable: StateFlow<Boolean> = _networkAvailable.asStateFlow()
+    fun ensureChatKnowledgeIndex() = chatIndexBootstrap.ensure()
 
-    // ── Lazy SDK services referenced from `init` ──────────────────────────────
-    // Kotlin initialises `by lazy` property delegates in lexical order alongside
-    // init blocks. Coroutines launched in `init` that touch these delegates must
-    // see a non-null backing field, so the declarations live ABOVE the init block.
-    // (Moving them below caused MicroCoachingSDK.kt#L259 NPE on fresh-install
-    // logins where Room schema setup delayed construction past the first dispatch.)
+    /** Connectivity signal + callback lifecycle — see [SdkNetworkMonitor]. */
+    private val networkMonitor = SdkNetworkMonitor(config.context) { onConnectivityRestored() }
+
+    /**
+     * Reactive SDK-observed connectivity (`true` when a network has internet). UI
+     * collects this to grey out chat source chips on drop, instead of polling
+     * [isNetworkAvailable] each recomposition.
+     */
+    val networkAvailable: StateFlow<Boolean> = networkMonitor.available
+
+    /**
+     * Per-domain outcome of the last inbound sync run, so each UI section can scope its
+     * failure state to the table it reads rather than to "the sync" as a whole.
+     * See [com.medtroniclabs.microcoaching.sync.SyncStatusStore].
+     */
+    val syncStatus: SyncStatusStore = SyncStatusStore()
+
+    // ── Lazy services the `init` block forces ─────────────────────────────────
+    // `init` launches coroutines that touch modelManager/sttModelManager (BANGLA)
+    // and translator, so their lazy delegates must be declared ABOVE `init` — else
+    // the IO dispatcher could resume a launched body before the field is assigned.
+
+    private val modelManagerLazy = lazy { ModelManager(config) }
+    private val sttModelManagerLazy = lazy { SttModelManager(config) }
 
     /** Lazy-initialized model lifecycle manager (download, verify, state). */
-    val modelManager: ModelManager by lazy { ModelManager(config) }
+    val modelManager: ModelManager by modelManagerLazy
 
     /**
-     * The on-device model this SDK is configured to download and load. The single
-     * source of truth for the model's display name, parameter count, expected
-     * download size ([ModelVariant.sizeInBytes]), runtime, and RAM class. Hosts use
-     * it to render an accurate, dynamic size label (e.g. via
-     * `Formatter.formatShortFileSize(context, sdk.selectedModelVariant().sizeInBytes)`)
-     * instead of a hard-coded "~600 MB".
+     * The on-device model this SDK will download/load — the source of truth for its
+     * display name, param count, [ModelVariant.sizeInBytes], runtime and RAM class.
+     * Hosts use it to render an accurate download-size label.
      */
     fun selectedModelVariant(): ModelVariant = config.selectedModelVariant()
 
     /**
-     * The catalog of on-device models the host may offer in a picker. By default
-     * only runnable variants are returned (the bundled MediaPipe engine); pass
-     * [includeNonRunnable] = true to also list variants whose runtime is not yet
-     * bundled (they can be displayed but won't load). Selection is applied at
-     * init time via [Builder.selectedModel].
+     * On-device models the host may offer in a picker. Returns only runnable
+     * variants unless [includeNonRunnable] is true (those display but won't load
+     * until their runtime is bundled). Select one via [Builder.selectedModel].
      */
     fun availableModels(includeNonRunnable: Boolean = false): List<ModelVariant> =
         if (includeNonRunnable) ModelCatalog.ALLOWLIST
         else ModelCatalog.ALLOWLIST.filter { ModelCatalog.isRunnable(it) }
 
     /**
-     * Manager for the optional offline Bengali STT model (sherpa-onnx).
-     *
-     * Observe [SttModelManager.state]
-     * from the chat UI to render the download banner. The SDK's default voice
-     * controller (a [com.medtroniclabs.microcoaching.ai.voice.ChatVoiceInputController]
-     * when [Builder.enableVoice] is `true`) triggers a download automatically
-     * when the user dictates Bengali while offline and the model isn't yet on
-     * disk.
+     * Manager for the optional offline Bengali STT model (sherpa-onnx). Observe
+     * [SttModelManager.state] to render the download banner; the default voice
+     * controller ([Builder.enableVoice]) auto-triggers the download on offline
+     * Bengali dictation when the model isn't on disk.
      */
-    val sttModelManager: SttModelManager by lazy {
-        SttModelManager(config)
+    val sttModelManager: SttModelManager by sttModelManagerLazy
+
+    // Declared before `init` (not lazy): the init event-count collector reads
+    // [isProgramOfficer] to skip refresher refilters for a PO.
+    private val _persona = MutableStateFlow(config.persona)
+    /**
+     * Active coaching persona (SK / PO), seeded from [MicroCoachingConfig.persona]
+     * at build time. SDK home UI branches on this; [CoachingPersona.UNKNOWN] is
+     * treated as SK. The host normally sets it once via the Builder.
+     */
+    val persona: StateFlow<CoachingPersona> = _persona.asStateFlow()
+
+    /** Runtime persona override (tests / late role resolution). Builder is the usual path. */
+    fun setPersona(persona: CoachingPersona) {
+        _persona.value = persona
     }
+
+    /** The persona invariant (PO ⇒ no refreshers/morning) in one place — see [PersonaPolicy]. */
+    private val personaPolicy = PersonaPolicy { _persona.value }
+
+    /**
+     * Morning-surface orchestration (refresh → invalidate triad, PO no-op, CHW-switch clear).
+     * Collaborators passed as providers so this never forces the lazy service graph at
+     * construction. See [MorningSurfaceCoordinator].
+     */
+    private val morningCoordinator = MorningSurfaceCoordinator(
+        scope = sdkScope,
+        store = { coachingModuleStore },
+        resolver = { morningModuleResolver },
+        morningCardCacheDao = { database.morningCardCacheDao() },
+        personaPolicy = personaPolicy,
+        flush = { flushTelemetryNow() },
+        onMorningResolved = { _latestModule.value = _morningModules.value.firstOrNull() },
+    )
 
     init {
         if (config.backendUrl.isNotBlank()) {
-            // Detect a destructive Room migration since last boot and clear inbound
-            // sync watermarks so the next pullGaps/pullModules call returns a full
-            // snapshot — otherwise the SharedPreferences watermark outlives the wiped
-            // Room tables and progress never rehydrates from the backend.
+            // On a destructive Room migration, clear inbound watermarks so the next
+            // pull returns a full snapshot — else the prefs watermark outlives the
+            // wiped tables and progress never rehydrates.
             if (syncPrefs.lastKnownRoomVersion < MICRO_COACHING_ROOM_VERSION) {
                 if (syncPrefs.lastKnownRoomVersion > 0) {
                     Log.i(
@@ -577,61 +571,45 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
                 syncPrefs.lastKnownRoomVersion = MICRO_COACHING_ROOM_VERSION
             }
             syncCoordinator.schedulePeriodic()
-            registerConnectivityCallback()
+            networkMonitor.register()
         }
-        if (config.language == Language.BANGLA) {
-            sdkScope.launch { translator.ensureModelReady() }
-            // Proactive Bengali STT model download.
-            //
-            // On CAPABLE devices we chain off the AI model's Ready state: once
-            // the Gemma file lands and chat is usable, kick the voice model
-            // download in the background. Idempotent — sttModelManager.trigger
-            // BengaliDownload() no-ops when the model is present or in flight.
-            //
-            // On LOW-END devices the AI model never reaches Ready (it's never
-            // downloaded), so the chain would dead-end. Trigger the voice
-            // download directly instead — same call, same idempotency, just
-            // decoupled from a Ready emission that will never come.
-            if (isLowEndDevice) {
-                sdkScope.launch { ensureBengaliSttDownloadKickedOff() }
-            } else {
-                sdkScope.launch {
-                    modelManager.state.collect { aiState ->
-                        if (aiState is ModelState.Ready) {
-                            ensureBengaliSttDownloadKickedOff()
-                        }
-                    }
+        // EN↔BN pack: a background download CHECK (the model only loads on first
+        // translate()), kept in init because the inbound FAQ bn→en backfill needs it
+        // before chat opens. Needed in both languages (BN for the Gemma round-trip,
+        // EN to translate chat to/from the bn-only backend).
+        sdkScope.launch { translator.ensureModelReady() }
+        // The Bengali STT (voice) download is no longer kicked off here. It now
+        // starts when the chat opens — ChatViewModel.autoStartOnDevicePacks() —
+        // so the pack downloads in parallel with the AI model on the coaching
+        // setup screen instead of only after the model reaches Ready. The trigger
+        // is idempotent (SttModelManager.triggerBengaliDownload no-ops when the
+        // pack is present/in-flight), and the mic-tap fallback in
+        // ChatVoiceInputController still covers first-dictation.
+
+        // The chat BM25 index is NOT built here — deferred to first chat open
+        // (ensureChatKnowledgeIndex). Eager build meant a full-corpus parse +
+        // permanent retention at launch even for sessions that never open chat.
+
+        // Re-apply the morning reinforce filter on each coaching_event insert so the
+        // home banner walks to the next unmastered module. `drop(1)` skips the cold
+        // emission (onHomeScreenShown already published); distinctUntilChanged +
+        // conflate + throttle coalesce a quiz-answer burst (and Room's COUNT(*)
+        // re-emitting from bulk markSynced) into one refilter of the latest state.
+        sdkScope.launch {
+            database.coachingEventDao().getEventCountFlow()
+                .drop(1)
+                .distinctUntilChanged()
+                .conflate()
+                .collect {
+                    if (personaPolicy.suppressesRefreshers) return@collect  // PO has no refreshers to refilter
+                    val chwId = currentCHWId ?: return@collect
+                    // Best-effort: a failed refilter (e.g. a read racing a sync
+                    // write) must not kill this collector — the next event
+                    // emission retries naturally.
+                    runCatching { refilterMorningModules(chwId) }
+                        .onFailure { Log.w(TAG, "refilterMorningModules failed: ${it.message}") }
+                    delay(RECOMPUTE_THROTTLE_MS)
                 }
-            }
-        }
-
-        // Keep the chat knowledge index in sync with the on-device module corpus.
-        // Cheap to rebuild (< 100 ms for ≤ 200 chunks); refreshes after each
-        // pullModules emits a new list.
-        sdkScope.launch {
-            database.moduleDao().getAllActive().collect { modules ->
-                val indexedModules = RetrievalHintOverlay.apply(
-                    modules = modules.sortedForDisplay(),
-                    assets = config.context.assets,
-                    enabled = config.enableRetrievalHintFixtureOverlay,
-                )
-                _chatKnowledgeIndex.value = ModuleKnowledgeIndex.build(
-                    indexedModules,
-                    retiredFamilyIds = syncPrefs.retiredFamilyIds,
-                )
-            }
-        }
-
-        // Re-apply the morning-cards reinforce filter on every coaching_event
-        // insert so the SPICE home banner walks to the next unmastered module
-        // the moment the CHW finishes the last wrong question of the current
-        // one. `drop(1)` skips the initial cold emission since the publish
-        // path already ran via `onHomeScreenShown` → `refreshMorningModules`.
-        sdkScope.launch {
-            database.coachingEventDao().getEventCountFlow().drop(1).collect {
-                val chwId = currentCHWId ?: return@collect
-                refilterMorningModules(chwId)
-            }
         }
     }
 
@@ -643,33 +621,31 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
     var currentCHWId: String? = null
         internal set
 
-    /** Retrofit API service for the Knowledge Layer backend. */
-    val apiService: CoachingApiService by lazy { NetworkModule.createApiService(config) }
+    private val okHttpClientLazy = lazy { NetworkModule.createOkHttpClient(config) }
 
     /**
-     * Observable lifecycle of the on-device translation pack.
-     *
-     * UI surfaces (chat, coaching card) render a status chip when this is in
-     * [com.medtroniclabs.microcoaching.ai.translation.TranslationModelState.Downloading]
-     * or [com.medtroniclabs.microcoaching.ai.translation.TranslationModelState.Failed]
-     * — see `TranslationModelStateChip` in the UI layer. Hosts can also observe
-     * this directly to show a top-level banner if desired.
+     * The single OkHttpClient behind [apiService]. Owned here so [shutdown] can
+     * evict its pool + stop its dispatcher on re-init; sync workers reuse
+     * [apiService] rather than build a client per run.
+     */
+    internal val okHttpClient: OkHttpClient by okHttpClientLazy
+
+    /** Retrofit API service for the Knowledge Layer backend. */
+    val apiService: CoachingApiService by lazy { NetworkModule.createApiService(config, okHttpClient) }
+
+    /**
+     * Observable lifecycle of the on-device translation pack. UI renders a status
+     * chip on `Downloading`/`Failed`; hosts can observe it for a top-level banner.
      */
     val translationModelState: StateFlow<TranslationModelState>
         get() = translator.state
 
     /**
-     * Speech-to-text controller for the chat mic button.
-     *
-     * When [Builder.enableVoice] is `true`, this is auto-populated with
-     * [com.medtroniclabs.microcoaching.ai.voice.AndroidSpeechRecognizerEngine] —
-     * a wrapper around the platform `SpeechRecognizer` that handles both English
-     * and Bengali (on-device when a pack is installed, cloud Google otherwise).
-     *
-     * Hosts can override with a custom impl at build time via
-     * [Builder.voiceInputController], or replace it later by reassigning this
-     * field directly (e.g. for the offline-Bengali sherpa fallback documented
-     * in `docs/v3/chat/sherpa.md`).
+     * Speech-to-text controller for the chat mic. When [Builder.enableVoice] is
+     * true, auto-populated with [AndroidSpeechRecognizerEngine] (platform
+     * `SpeechRecognizer`, EN + BN). Hosts can override via
+     * [Builder.voiceInputController] or reassign this field (e.g. an
+     * offline-Bengali sherpa fallback).
      */
     @Volatile
     var voiceInputController: VoiceInputController? = null
@@ -699,67 +675,34 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
         }
     }
 
-    // ── SPICE Workflow Event Hooks (Phase 1) ──────────────────────────────────
-    // Stubs — implementations arrive in Phase 1 when SPICE hook signatures are confirmed.
+    // ── SPICE workflow event hooks ────────────────────────────────────────────
 
     /**
-     * Call when the CHW opens the SPICE home screen. Stores [chwId], immediately
-     * surfaces modules from the local cache (fast path), then kicks off a
-     * background morning-cards fetch and refreshes the list when it lands.
-     *
-     * **3-tier resolution:**
-     * 1. If `morning_card_cache` has rows → join with `module_cache` in rank order.
-     * 2. Else if `TriggerEvaluator` returns rows → use those (local gap/trigger logic).
-     * 3. Else → empty list.
+     * Call when the CHW opens the home screen. Stores [chwId], surfaces cached
+     * modules immediately, then fetches morning cards in the background. Resolution:
+     * `morning_card_cache` join → else [TriggerEvaluator] rows → else empty.
      */
     fun onHomeScreenShown(chwId: String) {
         // Detect a CHW switch (different user signed in on this device) before we
         // overwrite currentCHWId — used to isolate the previous user's morning cards.
         val switchedUser = currentCHWId != null && currentCHWId != chwId
         currentCHWId = chwId
+        _currentChwIdFlow.value = chwId  // re-key the home-tile video indicator (MED-I629) to this CHW
         _morningRefresherDismissed.value = false  // reset banner visibility each time the screen opens
         // Load this CHW's persisted skipped-refresher set (survives restart / re-login).
         // Skips are per CHW, so this also swaps the set on a user switch.
         loadSkippedRefreshers(chwId)
-        // currentCHWId is now set — kick the store so its first real compute
-        // lands immediately from the local cache (it emits an empty list until a
-        // chwId is known), before the network refresh returns.
-        coachingModuleStore.invalidate()
-        sdkScope.launch {
-            // On a user switch, drop the previous CHW's cached morning cards so a
-            // different user never sees them before the re-sync below repopulates.
-            // (morning_card_cache has no chw_id column; clearing is the small,
-            // scalable isolation — the cards are fully re-derivable.)
-            if (switchedUser) {
-                database.morningCardCacheDao().clearAll()
-            }
-            morningModuleResolver.refresh(chwId)
-            // refresh() rewrote morning_card_cache (backend /morning/cards pull +
-            // on-device generate). Recompute the store AGAIN so the refresher list
-            // and featured pick reflect the freshly-resolved cards. The early
-            // invalidate above ran against the pre-refresh cache, and the Room-flow
-            // observation alone has proven unreliable on this path (a referral
-            // action-gap card landed in the cache yet the pool stayed stale). This
-            // mirrors the refresh()→invalidate() order already used by onMorningOpen.
-            coachingModuleStore.invalidate()
-        }
+        morningCoordinator.onHomeShown(chwId, switchedUser)
     }
 
-    /** Returns a lightweight health snapshot — useful for startup logging. */
     /**
-     * Returns the highest-priority morning module to surface on the home screen
-     * and modules screen. Priority: gap-sourced items (already ranked first by
-     * the backend in [morningCardsItems]) → first item in [morningModules].
-     *
-     * Both [MorningCard] (home screen) and [QuizRefresherCard] (modules screen)
-     * derive from this same store pick so they always show the same module.
-     *
-     * Back-compat synchronous accessor — now backed by [selectedMorningModule]
-     * (the unified [coachingModuleStore] pick). Prefer collecting the
-     * [selectedMorningModule] flow so the card advances live on skip / progress.
+     * Back-compat synchronous accessor for the featured morning module. Prefer
+     * collecting the [selectedMorningModule] flow so the card advances live on
+     * skip / progress.
      */
     fun getSelectedMorningModule(): ModuleEntity? = selectedMorningModule.value
 
+    /** Lightweight health snapshot — useful for startup logging. */
     fun checkHealth(): SdkHealthReport {
         val model = modelManager.findLocalModel()
         return SdkHealthReport(
@@ -771,275 +714,47 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
     }
 
     /**
-     * Call after a successful assessment submission.
-     * Primary UC-2 Apply trigger point — resolves the best coaching card for the patient
-     * and pushes the result to [latestCardState] for [CoachingCardFragment] to observe.
+     * Call after a successful assessment submission — the primary Apply trigger:
+     * resolves the best coaching card and surfaces it via [latestModule].
      *
-     * @param encounterId SPICE assessment/encounter ID for telemetry tracing. Pass `""` until Q9 is confirmed.
-     * @param patientId Raw SPICE patient ID (will be SHA-256 hashed before any backend call).
-     * @param assessmentData Optional map of patient vitals and clinical flags from SPICE ViewModel.
-     *   Supported keys (TEAM-CONFIRM): `patient_track_id`, `age`, `gender`, `avg_systolic`,
-     *   `avg_diastolic`, `bmi`, `cvd_risk_level`, `fbs_value`, `is_pregnant`,
-     *   `is_htn_diagnosis`, `is_diabetes_diagnosis`, `upazila_id`.
-     *   When empty the SDK will fall back to a condition-agnostic cached card.
+     * @param encounterId SPICE encounter id (telemetry tracing).
+     * @param patientId raw SPICE patient id (SHA-256 hashed before any backend call).
+     * @param assessmentData optional vitals / clinical flags. Recognised keys:
+     *   `patient_track_id`, `age`, `gender`, `avg_systolic`, `avg_diastolic`, `bmi`,
+     *   `cvd_risk_level`, `fbs_value`, `is_pregnant`, `is_htn_diagnosis`,
+     *   `is_diabetes_diagnosis`, `upazila_id`. Empty → condition-agnostic cached card.
      */
     fun onAssessmentSubmitted(
         encounterId: String,
         patientId: String,
         assessmentData: Map<String, Any> = emptyMap(),
-    ) {
-        val chwId = currentCHWId ?: return
-        // Test-loop diagnostic: the key set lands here so we can grep
-        // logcat in docs/gaps/GAPS_TEST.md and confirm SPICE actually
-        // wrote `referralFacilityType` / `referred_site_id` etc. Values
-        // are intentionally omitted — they may contain de-identified
-        // clinical data that doesn't belong in logcat.
-        Log.i(
-            TAG,
-            "onAssessmentSubmitted — encounterId='${encounterId}' " +
-                "assessmentKeys=${assessmentData.keys}",
-        )
-        val payload = assessmentData.mapValues { it.value.toString() } +
-            ("encounter_id" to encounterId) +
-            ("patient_id" to patientId)
-        evaluateWorkflowSignal(chwId, "assessment_submitted", payload)
-
-        // UC-2 / UC-3: emit the assessment-level telemetry the backend expects
-        // (conditional `risk_flag_observed`, stub `card_shown`). Referral
-        // correctness (`spice_action_observed`) is deliberately NOT emitted
-        // here — at assessment-save the CHW has not yet picked a destination
-        // facility, so any referral verdict would be fabricated. That row is
-        // owned entirely by [onReferralSubmitted], which sees the actual pick.
-        // The render path is not yet built — `card_shown` is a placeholder
-        // until the post-assessment counselling card surface exists.
-        sdkScope.launch {
-            try {
-                val recorder = newSdkHookRecorder(chwId)
-                val patientIdHash = PatientIdHasher.hash(patientId)
-                val visitId = encounterId.takeIf { it.isNotBlank() }
-                val villageId = assessmentData["village_id"] as? String
-                val upazilaId = assessmentData["upazila_id"] as? String
-                val patientTrackId = assessmentData["patient_track_id"] as? String
-                val gapId = assessmentData["behavioural_gap_id"] as? String
-                val riskLevel = (assessmentData["risk_level"] as? String).orEmpty()
-                val networkState = if (isNetworkAvailable()) "online" else "offline"
-
-                // Referral-compliance gaps are evaluated only at
-                // [onReferralSubmitted] (the moment the `actual.*` pick exists);
-                // the assessment-submit payload is flat, so no gap can fire here
-                // and no `spice_action_observed` row is written. This keeps
-                // assessment-save free of any (necessarily fabricated) referral
-                // verdict and avoids double-counting a gap across both hooks.
-
-                if (riskLevel.equals("HIGH", ignoreCase = true) ||
-                    riskLevel.equals("EMERGENCY", ignoreCase = true)
-                ) {
-                    recorder.recordRiskFlagObserved(
-                        riskLevel = riskLevel,
-                        patientIdHash = patientIdHash,
-                        patientVisitId = visitId,
-                        patientTrackId = patientTrackId,
-                        villageId = villageId,
-                        upazilaId = upazilaId,
-                        behaviouralGapId = gapId,
-                        networkState = networkState,
-                    )
-                }
-
-                // STUB: post-assessment coaching surface "fires" — replace
-                // with a render-path-driven emission once the visit card UI
-                // is built. Marked `inferenceMode = "cached"` because that's
-                // the only resolution path in scope this week.
-                recorder.recordCardShown(
-                    cardType = "action",
-                    triggerType = "workflow_event",
-                    inferenceMode = "cached",
-                    patientIdHash = patientIdHash,
-                    patientVisitId = visitId,
-                    patientTrackId = patientTrackId,
-                    villageId = villageId,
-                    upazilaId = upazilaId,
-                    behaviouralGapId = gapId,
-                    networkState = networkState,
-                )
-            } catch (e: Exception) {
-                Log.w(TAG, "onAssessmentSubmitted event emission failed: ${e.message}")
-            }
-
-            // Push the freshly-written `clinical_observed` rows immediately
-            // instead of waiting for the 15-min WorkManager tick. Assessment
-            // submit is a meaningful milestone (the supervisor dashboard's
-            // "correct referral" tile depends on these), and a CHW with
-            // network connectivity should see their action surface server-
-            // side within seconds.
-            //
-            // Offline-safe: `flushTelemetryNow` enqueues a WorkManager job
-            // with a `NetworkType.CONNECTED` constraint, so an offline
-            // device queues the work and it fires the moment connectivity
-            // is restored. No need to gate on `isNetworkAvailable()` here.
-            flushTelemetryNow()
-        }
-    }
+    ) = handleAssessmentSubmitted(encounterId, patientId, assessmentData)
 
     /**
-     * Call when the CHW **commits a referral** — picks a destination facility and
-     * confirms it (e.g. BD NCD / RMNCH summary "Done"). This is the moment the
-     * `actual.*` side of a referral exists, so it's where `spice_referral_compliance`
-     * gaps are evaluated — [onAssessmentSubmitted] fires earlier (at save), before
-     * the CHW has picked, so it cannot evaluate referral compliance.
+     * Call when the CHW **commits a referral** (picks + confirms a destination).
+     * This is when the `actual.*` side exists, so `spice_referral_compliance` gaps
+     * are evaluated here — [onAssessmentSubmitted] fires earlier (at save) and can't.
      *
-     * @param referralData the compliance state — a map carrying both the
-     *   `recommended.*` branch (rule-engine output) and the `actual.*` branch
-     *   (the CHW's pick). SPICE assembles this; see
-     *   docs/gaps/COMPLIANCE_TEST_SPEC.md §2.
+     * @param referralData compliance state carrying both the `recommended.*`
+     *   (rule-engine) and `actual.*` (CHW's pick) branches; SPICE assembles it.
      *
-     * Telemetry: emits **one gap-tagged** `spice_action_observed` per fired gap
-     * (`behavioural_gap_id` set, `outcome="incorrect"`). It does **not** emit a
-     * generic fallback row — the single generic "observed" row was already written
-     * by [onAssessmentSubmitted]. So per referred assessment the backend sees: one
-     * generic row (gap_id = null) from the assessment hook + N gap-tagged rows from
-     * here. The backend counts by `(chw_id, behavioural_gap_id)`, so these don't
-     * collide. **Compliance gaps must fire at this hook only** (not also at
-     * assessment-submit) or a gap would be counted twice; today that holds because
-     * the assessment-submit payload is flat (no `recommended.*`/`actual.*`).
+     * Emits one gap-tagged `spice_action_observed` per fired gap (no generic row —
+     * the assessment hook already wrote that). Compliance gaps must fire at THIS
+     * hook only, or the backend's `(chw_id, behavioural_gap_id)` count double-counts.
      */
     fun onReferralSubmitted(
         encounterId: String,
         patientId: String,
         referralData: Map<String, Any> = emptyMap(),
-    ) {
-        val chwId = currentCHWId ?: return
-        // Log the tier comparison inputs *in words* (not just correct=true/false)
-        // so referral_location_* (Upazila vs Community Clinic) can be validated
-        // from logcat. Facility tier is not PII.
-        val recommendedTier = (referralData["recommended"] as? Map<*, *>)?.get("referralFacilityType")
-        val actualTier = (referralData["actual"] as? Map<*, *>)?.get("destinationTier")
-        Log.i(
-            TAG,
-            "onReferralSubmitted — encounterId='${encounterId}' " +
-                "recommendedTier='${recommendedTier}' actualTier='${actualTier}' " +
-                "referralKeys=${referralData.keys}",
-        )
-        if (!config.enableGapDetection) {
-            Log.d(TAG, "onReferralSubmitted: gap detection disabled — skipping")
-            return
-        }
-
-        sdkScope.launch {
-            try {
-                val recorder = newSdkHookRecorder(chwId)
-                val patientIdHash = PatientIdHasher.hash(patientId)
-                val visitId = encounterId.takeIf { it.isNotBlank() }
-                val villageId = referralData["village_id"] as? String
-                val upazilaId = referralData["upazila_id"] as? String
-                val patientTrackId = referralData["patient_track_id"] as? String
-                val networkState = if (isNetworkAvailable()) "online" else "offline"
-
-                val spiceEventCode = (referralData["spice_event_code"] as? String)
-                    ?: "referral_submitted"
-                val assessmentType = referralData["assessment_type"] as? String
-                val firedGaps =
-                    gapRuleDispatcher.evaluate(referralData, spiceEventCode, assessmentType)
-
-                for (result in firedGaps) {
-                    // Every row here is a *fired* compliance gap, i.e. the CHW's
-                    // referral diverged from the recommendation → incorrect. The
-                    // legacy three-axis `correctReferral*` is reason-based and
-                    // tier-blind, so it would contradict `outcome=incorrect` (it
-                    // returns true when only the facility tier is wrong). Report
-                    // false uniformly; the precise dimension is in `evidence`
-                    // (e.g. tier="location"). The generic "correct" baseline is
-                    // still emitted by onAssessmentSubmitted at save time.
-                    recorder.recordSpiceActionObserved(
-                        patientIdHash = patientIdHash,
-                        patientVisitId = visitId,
-                        patientTrackId = patientTrackId,
-                        villageId = villageId,
-                        upazilaId = upazilaId,
-                        behaviouralGapId = result.gapId,
-                        correctReferral = false,
-                        correctReferralLocation = false,
-                        correctReferralType = false,
-                        networkState = networkState,
-                        outcome = result.outcome,
-                        ruleType = result.ruleType,
-                        evidenceJson = EvidenceBuilder.toJsonString(result.evidence),
-                    )
-                }
-                if (firedGaps.isEmpty()) {
-                    // No gap fired. Before claiming a CORRECT referral, confirm the
-                    // tier comparison could actually run. If the CHW referred and a
-                    // recommended tier exists but the ACTUAL destination tier is
-                    // missing/blank (e.g. the picked facility's tier isn't populated
-                    // locally — the known facility-tier data gap), the
-                    // referral_location_* rules log "no signal" and don't fire. That
-                    // is NOT the same as "correct": recording correct here turns
-                    // missing data into a false positive (the wrong-facility-referral
-                    // bug). Skip the positive emission and warn instead — never assert
-                    // a correct referral the SDK couldn't actually verify.
-                    val actualMap = referralData["actual"] as? Map<*, *>
-                    val didRefer = actualMap?.get("didRefer") == true
-                    val actualTierPresent =
-                        (actualMap?.get("destinationTier") as? String)?.isNotBlank() == true
-                    val recommendedTierPresent =
-                        ((referralData["recommended"] as? Map<*, *>)?.get("referralFacilityType") as? String)
-                            ?.isNotBlank() == true
-
-                    if (didRefer && recommendedTierPresent && !actualTierPresent) {
-                        Log.w(
-                            TAG,
-                            "onReferralSubmitted: referral made and a recommended tier exists, but " +
-                                "actual.destinationTier is missing/blank — NOT recording a correct " +
-                                "referral (tier comparison could not run; facility tier likely " +
-                                "unpopulated). recommendedTier='$recommendedTier' actualTier='$actualTier'",
-                        )
-                    } else {
-                        // Genuinely no divergence to report → emit the single positive
-                        // `spice_action_observed` row (gap_id = null) so the supervisor
-                        // "correct referral" tile sees a correct data point. This is the
-                        // only place a `correctReferral = true` row originates now that
-                        // the assessment hook no longer fabricates one.
-                        recorder.recordSpiceActionObserved(
-                            patientIdHash = patientIdHash,
-                            patientVisitId = visitId,
-                            patientTrackId = patientTrackId,
-                            villageId = villageId,
-                            upazilaId = upazilaId,
-                            behaviouralGapId = null,
-                            correctReferral = true,
-                            correctReferralLocation = true,
-                            correctReferralType = true,
-                            networkState = networkState,
-                        )
-                    }
-                }
-            } catch (e: Exception) {
-                Log.w(TAG, "onReferralSubmitted event emission failed: ${e.message}")
-            }
-            flushTelemetryNow()
-
-            // The referral just changed this CHW's compliance-gap state — a wrong
-            // referral opens a new action-gap refresher (e.g. "Maternal & Neonatal
-            // Referral Process"), a correct one can resolve a prior one. Re-run the
-            // morning resolution NOW so the on-device generator folds in the
-            // freshly-recorded `spice_action_observed` row and the refresher list /
-            // featured card update immediately — instead of waiting for the next
-            // onHomeScreenShown / sync tick.
-            morningModuleResolver.refresh(chwId)
-            coachingModuleStore.invalidate()
-        }
-    }
+    ) = handleReferralSubmitted(encounterId, patientId, referralData)
 
     /**
-     * Call when the CHW finishes a patient visit in SPICE (TP-7).
+     * Call when the CHW finishes a patient visit. Backfills `patient_visit_id` on
+     * this visit's still-pending coaching_event rows (written by
+     * [onAssessmentSubmitted] before the encounterId was final), emits `session_end`,
+     * and triggers a sync push.
      *
-     * Backfills `patient_visit_id` on every still-pending coaching_event row
-     * this visit produced (these events were written by [onAssessmentSubmitted]
-     * before the encounterId was final — see BUG-5), emits a `session_end`
-     * system event, and triggers an immediate sync push.
-     *
-     * @param encounterId SPICE assessment/encounter ID. Pass the real value
-     *   from SPICE — blank values are skipped.
+     * @param encounterId SPICE encounter id; blank values are skipped.
      */
     fun onVisitCompleted(encounterId: String) {
         val chwId = currentCHWId ?: return
@@ -1072,50 +787,28 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
      */
     fun onMorningOpen() {
         val chwId = currentCHWId ?: return
-        sdkScope.launch {
-            morningModuleResolver.refresh(chwId)
-            _latestModule.value = _morningModules.value.firstOrNull()
-            // morning_card_cache changed → re-read it in the store's mapping.
-            coachingModuleStore.invalidate()
-        }
+        morningCoordinator.onMorningOpen(chwId)
     }
 
     /**
-     * Force a refresh of the morning refreshers. Pushes any pending telemetry (so
-     * the backend can act on a just-finished quiz), re-pulls `GET /morning/cards`
-     * (the backend re-runs its gap algorithm), re-runs the on-device generator
-     * (which reflects local progress immediately, even before the push round-trips),
-     * and recomputes the shared store.
-     *
-     * Exposed for:
-     *  - the SPICE host's **pull-to-refresh** on the home coaching surface, and
-     *  - quiz completion ([com.medtroniclabs.microcoaching.ui.quiz.QuizResultScreen]),
-     *    so a finished module's refresher state updates without leaving the screen.
-     *
-     * No-op until a CHW id is known. Safe to call repeatedly (the network pull is
-     * best-effort; offline it falls back to the on-device generator).
+     * Force-refresh the morning refreshers: flush pending telemetry, re-pull
+     * `GET /morning/cards`, re-run the on-device generator, recompute the store.
+     * Used by host pull-to-refresh and by quiz completion. No-op until a CHW id is
+     * known; safe to call repeatedly (offline falls back to the on-device generator).
      */
     fun refreshRefreshers() {
         val chwId = currentCHWId ?: return
-        sdkScope.launch {
-            flushTelemetryNow()
-            morningModuleResolver.refresh(chwId)
-            coachingModuleStore.invalidate()
-        }
+        morningCoordinator.refreshAfterQuiz(chwId)
     }
 
     /**
-     * 4-tier morning resolution, extracted into [MorningModuleResolver]. Re-exposed
-     * for `InboundSyncWorker` / `RefresherBottomSheet`, which re-filter the morning
-     * list against freshly-synced progress. Delegates to the same resolver instance
-     * so it mutates the SDK's [morningModules] / [morningCardsItems] flows.
+     * Fire-and-forget morning refilter on the SDK scope — for UI call-sites (e.g. a
+     * sheet's dismiss) whose lifecycle ends before the refilter completes, so the
+     * work survives the surface (an ad-hoc `MainScope()` per call leaked).
      */
-    internal suspend fun refilterMorningModules(chwId: String) {
-        morningModuleResolver.refilter(chwId)
-        // morning_card_cache may have changed → re-read it in the store's mapping
-        // so refresher list / featured pick reflect freshly-synced progress.
-        coachingModuleStore.invalidate()
-    }
+    fun refilterMorningModulesAsync(chwId: String) = morningCoordinator.refilterAsync(chwId)
+
+    internal suspend fun refilterMorningModules(chwId: String) = morningCoordinator.refilter(chwId)
 
     /** Call when SPICE surfaces a risk flag for the active patient. */
     fun onRiskFlagObserved(riskLevel: String, patientId: String? = null) {
@@ -1124,10 +817,8 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
         if (patientId != null) payload["patient_id"] = patientId
         evaluateWorkflowSignal(chwId, "risk_flag_observed", payload)
 
-        // UC-3: emit the wire-level `risk_flag_observed` row so the backend's
-        // clinical_observed feed picks it up. Sub-scenario C of UC-2 (mid-
-        // visit escalation) fires through this same hook — recording the
-        // event here means SPICE only has to call one method.
+        // Also emit the wire-level `risk_flag_observed` row for the backend's
+        // clinical_observed feed (mid-visit escalation fires through here too).
         sdkScope.launch {
             try {
                 val recorder = newSdkHookRecorder(chwId)
@@ -1140,9 +831,7 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
             } catch (e: Exception) {
                 Log.w(TAG, "onRiskFlagObserved event emission failed: ${e.message}")
             }
-            // Risk-flag is arguably more time-sensitive than a regular
-            // assessment submit — push the row immediately. Offline-safe:
-            // WorkManager queues with NetworkType.CONNECTED.
+            // Time-sensitive — push immediately (offline-safe; WorkManager queues).
             flushTelemetryNow()
         }
     }
@@ -1185,7 +874,7 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
         }
     }
 
-    private fun evaluateWorkflowSignal(
+    internal fun evaluateWorkflowSignal(
         chwId: String,
         spiceEventCode: String,
         payload: Map<String, String>,
@@ -1206,93 +895,52 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
         }
     }
 
-    internal fun isNetworkAvailable(): Boolean {
-        val cm = config.context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
-            ?: return false
-        val net = cm.activeNetwork ?: return false
-        return cm.getNetworkCapabilities(net)
-            ?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
-    }
+    internal fun isNetworkAvailable(): Boolean = networkMonitor.isAvailable()
 
     /**
-     * Idempotent helper called from the BANGLA-gated `modelManager.state`
-     * collector in `init` whenever the AI model lands in `Ready`. Triggers the
-     * Bengali sherpa STT download unless it's already on disk or in flight.
-     * Logs the decision so the auto-chain is observable via `adb logcat -s
-     * MicroCoachingSDK`.
+     * Full teardown of this instance: unregister connectivity, cancel sync workers,
+     * cancel [sdkScope] (stopping the init collectors + eager `stateIn` pipelines),
+     * then release every service holding threads / native memory (telemetry, model
+     * managers, translator, voice engines, HTTP client). Only actually-created
+     * services are released (`Lazy` handles are checked, so shutdown never
+     * force-initialises one). Called by [Builder.build] on the replaced instance so
+     * re-init can't leak the old graph; idempotent, and the instance is inert after.
      */
-    private fun ensureBengaliSttDownloadKickedOff() {
-        val current = sttModelManager.state.value
-        when (current) {
-            is com.medtroniclabs.microcoaching.ai.voice.stt.SttModelState.Ready,
-            is com.medtroniclabs.microcoaching.ai.voice.stt.SttModelState.Downloading,
-            is com.medtroniclabs.microcoaching.ai.voice.stt.SttModelState.Extracting -> {
-                Log.d(TAG, "Bengali STT download already ${current::class.simpleName} — skipping auto-trigger")
-                return
-            }
-            else -> {
-                Log.i(TAG, "Auto-triggering Bengali STT download (lang=BN, AI ready)")
-                sttModelManager.triggerBengaliDownload()
-            }
-        }
-    }
-
-    private fun registerConnectivityCallback() {
-        val cm = config.context.getSystemService(Context.CONNECTIVITY_SERVICE)
-            as? ConnectivityManager ?: return
-        val request = NetworkRequest.Builder()
-            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-            .build()
-
-        // If the SDK initialises while OFFLINE, pre-set `networkLost = true`
-        // so the next `onAvailable` callback triggers a restore. The previous
-        // implementation defaulted to false → the first `onAvailable` (which
-        // always fires shortly after registration to report the current
-        // network) was silently ignored, and pending events shipped from
-        // yesterday's session sat in Room until the 15-min periodic worker
-        // fired.
-        if (cm.activeNetwork == null) {
-            networkLost = true
-            _networkAvailable.value = false
-            Log.d(TAG, "Network callback registering while offline — primed for restore.")
-        } else {
-            _networkAvailable.value = true
-        }
-
-        val callback = object : ConnectivityManager.NetworkCallback() {
-            override fun onAvailable(network: Network) {
-                Log.d(TAG, "onAvailable(network=$network) networkLost=$networkLost")
-                _networkAvailable.value = true
-                if (networkLost) {
-                    Log.i(TAG, "Connectivity restored — flushing pending telemetry.")
-                    networkLost = false
-                    onConnectivityRestored()
-                }
-            }
-            override fun onLost(network: Network) {
-                Log.i(TAG, "Connectivity lost — pending events will sync when online.")
-                networkLost = true
-                _networkAvailable.value = false
-            }
-        }
-        try {
-            cm.registerNetworkCallback(request, callback)
-            networkCallback = callback
-            Log.d(TAG, "Network callback registered. activeNetwork=${cm.activeNetwork}")
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to register network callback: ${e.message}")
-        }
-    }
-
-    /** Releases the network callback and cancels all pending sync workers. Call before replacing the SDK instance. */
     fun shutdown() {
-        val cm = config.context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
-        networkCallback?.let { cb ->
-            try { cm?.unregisterNetworkCallback(cb) } catch (_: Exception) {}
-            networkCallback = null
-        }
+        networkMonitor.unregister()
         syncCoordinator.cancelAll()
-        Log.d(TAG, "SDK shutdown — network callback unregistered, sync cancelled.")
+
+        // Stop the init-block collectors and every eager stateIn on this instance
+        // BEFORE releasing the services they touch.
+        sdkScope.cancel()
+
+        if (telemetryLazy.isInitialized()) {
+            runCatching { telemetryLazy.value.shutdown() }
+                .onFailure { Log.w(TAG, "telemetry.shutdown threw: ${it.message}") }
+        }
+        if (modelManagerLazy.isInitialized()) {
+            runCatching { modelManagerLazy.value.close() }
+                .onFailure { Log.w(TAG, "modelManager.close threw: ${it.message}") }
+        }
+        if (sttModelManagerLazy.isInitialized()) {
+            runCatching { sttModelManagerLazy.value.close() }
+                .onFailure { Log.w(TAG, "sttModelManager.close threw: ${it.message}") }
+        }
+        if (translatorLazy.isInitialized()) {
+            runCatching { translatorLazy.value.close() }
+                .onFailure { Log.w(TAG, "translator.close threw: ${it.message}") }
+        }
+        runCatching { voiceInputController?.release() }
+            .onFailure { Log.w(TAG, "voiceInputController.release threw: ${it.message}") }
+        voiceInputController = null
+        if (okHttpClientLazy.isInitialized()) {
+            runCatching {
+                okHttpClientLazy.value.dispatcher.executorService.shutdown()
+                okHttpClientLazy.value.connectionPool.evictAll()
+            }.onFailure { Log.w(TAG, "okHttpClient teardown threw: ${it.message}") }
+        }
+
+        Log.d(TAG, "SDK shutdown — scope cancelled, services released, sync cancelled.")
     }
 
     /**
@@ -1304,23 +952,16 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
         Log.i(TAG, "onConnectivityRestored — flushing spans and triggering sync.")
         if (config.enableTelemetry) telemetry.flushPendingSpans()
         if (config.backendUrl.isNotBlank()) {
-            // Outbound flush first — gets pending telemetry to the backend
-            // promptly even if the inbound bundle pull stalls or fails.
-            // triggerNow() then chains outbound+inbound for full freshness.
-            // WorkManager dedupes / coalesces the two outbound workers, so
-            // there's no double-POST risk.
-            syncCoordinator.triggerOutboundNow()
+            // triggerNow() chains outbound → inbound, so pending telemetry ships
+            // before the catalogue refresh.
             syncCoordinator.triggerNow()
         }
     }
 
     /**
-     * Force an immediate outbound telemetry flush — bypasses the 15-min
-     * WorkManager periodic interval. Intended for SDK-internal use when a
-     * quiz answer or module completion has just been recorded, and as a
-     * developer hook for verifying backend ingestion during integration.
-     *
-     * No-op when [MicroCoachingConfig.backendUrl] is blank.
+     * Force an immediate outbound telemetry flush (bypasses the 15-min periodic
+     * interval) — used after a quiz answer / module completion. No-op when
+     * [MicroCoachingConfig.backendUrl] is blank.
      */
     fun flushTelemetryNow() {
         if (config.backendUrl.isBlank()) {
@@ -1331,93 +972,67 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
         syncCoordinator.triggerOutboundNow()
     }
 
+    /**
+     * Remove the cached PO dashboard snapshot (MED-I516 AC6). The host (spice) calls
+     * this on user logout. Fire-and-forget on [sdkScope]; safe to call when empty.
+     * The dashboard cache is also chwId-guarded, so cross-user leakage cannot occur
+     * even before this runs.
+     */
+    fun clearDashboardCache() {
+        sdkScope.launch {
+            runCatching {
+                MicroCoachingDatabase.getInstance(config.context).dashboardCacheDao().clear()
+            }.onFailure { Log.w(TAG, "clearDashboardCache threw: ${it.message}") }
+        }
+    }
+
+    /**
+     * Force an immediate **full-catalogue** inbound resync (host pull-to-refresh):
+     * clears the modules watermark so the next `/sync/modules` pull fetches the full
+     * catalogue + assignment set — this is what surfaces a newly-assigned but
+     * unchanged module before the daily reconcile. Chains outbound → inbound so
+     * pending telemetry still ships. No-op when [MicroCoachingConfig.backendUrl] is blank.
+     */
+    fun triggerFullInboundSync() {
+        if (config.backendUrl.isBlank()) {
+            Log.d(TAG, "triggerFullInboundSync skipped — backendUrl is blank")
+            return
+        }
+        Log.i(TAG, "triggerFullInboundSync — clearing modules watermark and enqueuing full inbound sync.")
+        SyncPrefs(config.context).modulesWatermark = null
+        syncCoordinator.triggerNow()
+    }
+
     // ── CHW Context Storage ───────────────────────────────────────────────────
 
     private val chwPrefs by lazy {
-        config.context.getSharedPreferences("micro_coaching_chw_prefs", Context.MODE_PRIVATE)
+        config.context.getSharedPreferences(com.medtroniclabs.microcoaching.util.PrefsNames.CHW, Context.MODE_PRIVATE)
     }
 
-    /**
-     * Call whenever the CHW's patient list is available (home screen or patient list screen).
-     * Persists an anonymised summary of recent screenings so the AI chat can answer
-     * questions like "আমার আজকের স্ক্রিনিং কারা?".
-     *
-     * @param chwWorkContext Anonymised summary — no patient names or IDs.
-     */
-    fun onCHWContextUpdated(chwWorkContext: CHWWorkContext) {
-        Log.d(TAG, "CHWContext [SDK] onCHWContextUpdated — count=${chwWorkContext.screenedTodayCount}, recentPatients=${chwWorkContext.recentPatients.size}")
-        sdkScope.launch { storeCHWContext(chwWorkContext) }
-    }
+    // ── CHW work-context / visits / snapshot — owned by [ChwContextStore] ──────
+    private val chwContextStore = ChwContextStore(sdkScope, { chwPrefs })
 
-    private fun storeCHWContext(ctx: CHWWorkContext) {
-        val json = Json.encodeToString(ctx)
-        chwPrefs.edit().putString("chw_work_context", json).apply()
-    }
+    /** Persist the host's anonymised CHW work context (recent screenings). See [ChwContextStore]. */
+    fun onCHWContextUpdated(chwWorkContext: CHWWorkContext) = chwContextStore.updateContext(chwWorkContext)
 
     /** Returns the last CHW work context pushed via [onCHWContextUpdated], or null if none stored. */
-    fun loadCHWContext(): CHWWorkContext? {
-        val json = chwPrefs.getString("chw_work_context", null) ?: return null
-        return try {
-            Json.decodeFromString<CHWWorkContext>(json)
-        } catch (e: Exception) {
-            Log.w(TAG, "CHWContext [SDK] Failed to decode CHWWorkContext: ${e.message}")
-            null
-        }
-    }
+    fun loadCHWContext(): CHWWorkContext? = chwContextStore.loadContext()
 
-    /**
-     * Call at home/morning open with the CHW's patient visits due **today** (the
-     * host's `FollowUp` rows filtered to today). Used as a cold-start refresher
-     * source: when there are no behavioural-gap picks and no backend morning cards,
-     * the on-device generator matches these visits to modules via the synced
-     * `assessment_due` `workflow_event` trigger bindings. Push an empty list to clear.
-     *
-     * No patient identifiers — only [TodaysVisit.encounterType] / [TodaysVisit.isPregnant]
-     * and the due date are used.
-     */
-    fun onTodaysVisitsUpdated(visits: List<TodaysVisit>) {
-        Log.d(TAG, "CHWContext [SDK] onTodaysVisitsUpdated — visits=${visits.size}")
-        sdkScope.launch { storeTodaysVisits(visits) }
-    }
-
-    private fun storeTodaysVisits(visits: List<TodaysVisit>) {
-        val json = Json.encodeToString(visits)
-        chwPrefs.edit().putString("todays_visits", json).apply()
-    }
+    /** Persist the CHW's patient visits due today (cold-start refresher source). See [ChwContextStore]. */
+    fun onTodaysVisitsUpdated(visits: List<TodaysVisit>) = chwContextStore.updateTodaysVisits(visits)
 
     /** Returns the visits last pushed via [onTodaysVisitsUpdated], or empty if none/undecodable. */
-    fun loadTodaysVisits(): List<TodaysVisit> {
-        val json = chwPrefs.getString("todays_visits", null) ?: return emptyList()
-        return try {
-            Json.decodeFromString<List<TodaysVisit>>(json)
-        } catch (e: Exception) {
-            Log.w(TAG, "CHWContext [SDK] Failed to decode todays_visits: ${e.message}")
-            emptyList()
-        }
-    }
-
-    private fun storeLastPatientSnapshot(snapshot: PatientSnapshot) {
-        val json = Json.encodeToString(snapshot)
-        chwPrefs.edit().putString("last_patient_snapshot", json).apply()
-        Log.d(TAG, "CHWContext [SDK] Persisted PatientSnapshot: conditions=${snapshot.conditions}, risk=${snapshot.riskLevel}")
-    }
+    fun loadTodaysVisits(): List<TodaysVisit> = chwContextStore.loadTodaysVisits()
 
     /** Returns the snapshot from the most recent assessment, or null if none stored. */
-    fun loadLastPatientSnapshot(): PatientSnapshot? {
-        val json = chwPrefs.getString("last_patient_snapshot", null) ?: return null
-        return try {
-            Json.decodeFromString<PatientSnapshot>(json)
-        } catch (e: Exception) {
-            Log.w(TAG, "CHWContext [SDK] Failed to decode PatientSnapshot: ${e.message}")
-            null
-        }
-    }
+    fun loadLastPatientSnapshot(): PatientSnapshot? = chwContextStore.loadLastPatientSnapshot()
 
     // ── Builder ───────────────────────────────────────────────────────────────
 
     class Builder(private val context: Context) {
         private var language: Language = Language.BANGLA
         private var tenantId: String = ""
+        private var persona: CoachingPersona = CoachingPersona.SK
         private var backendUrl: String = ""
         private var authToken: String = ""
         private var connectionTimeoutSeconds: Int = 30
@@ -1446,6 +1061,7 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
         private var refresherTuning: RefresherTuning = RefresherTuning()
         private var forceLowEndMode: Boolean? = null
         private var enableChat: Boolean = true
+        private var enableIncompleteModuleReminder: Boolean = true
         private var enableRetrievalHintFixtureOverlay: Boolean = false
         private var enableVoice: Boolean = false
         private var enableLearnModule: Boolean = false
@@ -1454,14 +1070,18 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
         private var dataCallback: MicroCoachingDataCallback? = null
         private var uiTheme: CoachingUiTheme = CoachingUiTheme.SYSTEM
         private var forcedMode: CoachingMode? = null
+        // Keep in sync with MicroCoachingConfig.minFreeStorageBytes default (512 MB).
+        private var minFreeStorageBytes: Long = 512L * 1024 * 1024
         private var voiceInputController: VoiceInputController? = null
         private var offlineSttEngineFactory:
             ((android.content.Context, java.io.File) -> OfflineSttEngine)? = null
 
         fun language(l: Language) = apply { language = l }
         fun tenantId(id: String) = apply { tenantId = id }
+        /** Active coaching persona (SK / PO). Resolve from the user's role; default SK. */
+        fun persona(p: CoachingPersona) = apply { persona = p }
         fun backendUrl(url: String) = apply { backendUrl = url }
-        /** Pass the SPICE JWT here. SDK forwards it as `Authorization: Bearer <token>`. */
+        /** Pass SPICE's stored login token here. SDK forwards it verbatim as `Authorization`. */
         fun authToken(token: String) = apply { authToken = token }
         fun connectionTimeout(seconds: Int) = apply { connectionTimeoutSeconds = seconds }
         fun readTimeout(seconds: Int) = apply { readTimeoutSeconds = seconds }
@@ -1523,9 +1143,9 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
          */
         fun chatTuning(tuning: ChatTuning) = apply { chatTuning = tuning }
         /**
-         * Tune the daily refresher quiz-subset nudge — the sample ratio and the
-         * min/max bounds on how many of a module's questions a refresher presents.
-         * See [RefresherTuning]. Leave unset for the defaults (~40%, 2–6, sweet 3–4).
+         * Configure the refresher sources (quiz / gap / referral / visit toggles). A
+         * refresher presents its full to-reinforce set; the legacy quiz-subset sampling
+         * fields are deprecated no-ops. See [RefresherTuning]. Leave unset for defaults.
          */
         fun refresherTuning(tuning: RefresherTuning) = apply { refresherTuning = tuning }
         /**
@@ -1537,6 +1157,12 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
          */
         fun forceLowEndMode(force: Boolean?) = apply { forceLowEndMode = force }
         fun enableChat(enabled: Boolean) = apply { enableChat = enabled }
+        /**
+         * Toggle the incomplete-assigned-modules reminder popup (MED-1529 Req 2).
+         * Default true. Pass false as a host kill switch.
+         */
+        fun enableIncompleteModuleReminder(enabled: Boolean) =
+            apply { enableIncompleteModuleReminder = enabled }
         /**
          * Merge hand-authored per-card hints from `assets/retrieval/overlays/`
          * before building the chat index. Benchmark / QA only — off in production.
@@ -1586,11 +1212,22 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
             factory: (android.content.Context, java.io.File) -> OfflineSttEngine,
         ) = apply { offlineSttEngineFactory = factory }
 
+        /**
+         * Minimum free device storage (bytes) to keep available. Downloads that
+         * would leave less than this are refused with an insufficient-storage
+         * error instead of filling the disk. Default 512 MB; e.g. pass
+         * `1_073_741_824L` for a 1 GB floor. Negative values are clamped to 0.
+         */
+        fun minFreeStorageBytes(bytes: Long) = apply {
+            minFreeStorageBytes = bytes.coerceAtLeast(0L)
+        }
+
         fun build(): MicroCoachingSDK {
             val config = MicroCoachingConfig(
                 context = context.applicationContext,
                 language = language,
                 tenantId = tenantId,
+                persona = persona,
                 backendUrl = backendUrl,
                 authToken = authToken,
                 connectionTimeoutSeconds = connectionTimeoutSeconds,
@@ -1617,6 +1254,7 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
                 refresherTuning = refresherTuning,
                 forceLowEndMode = forceLowEndMode,
                 enableChat = enableChat,
+                enableIncompleteModuleReminder = enableIncompleteModuleReminder,
                 enableRetrievalHintFixtureOverlay = enableRetrievalHintFixtureOverlay,
                 enableVoice = enableVoice,
                 enableLearnModule = enableLearnModule,
@@ -1625,21 +1263,20 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
                 dataCallback = dataCallback,
                 uiTheme = uiTheme,
                 forcedMode = forcedMode,
+                minFreeStorageBytes = minFreeStorageBytes,
             )
-            val sdk = MicroCoachingSDK(config)
-            synchronized(Companion) {
+            // Tear down the outgoing instance BEFORE constructing the new one: the
+            // new init{} schedules periodic sync under the same unique work names
+            // the old shutdown() cancels, so the reverse order would cancel the
+            // fresh sync on every re-init.
+            val sdk = synchronized(Companion) {
                 instance?.shutdown()
-                instance = sdk
+                MicroCoachingSDK(config).also { instance = it }
             }
 
-            // Wire the chat mic. Host-supplied controller wins; otherwise install
-            // ChatVoiceInputController, which routes between the platform
-            // SpeechRecognizer (English / online Bengali) and an optional
-            // offline sherpa engine (offline Bengali). The offline engine
-            // factory is supplied by hosts that include :sdk-android-sherpa via
-            // Builder.offlineSttEngineFactory(SherpaOnnxStt.factory). Without
-            // it, the orchestrator falls back to an "offline voice model
-            // missing" error in the no-network Bengali case.
+            // Wire the chat mic: host-supplied controller wins, else
+            // ChatVoiceInputController (platform SpeechRecognizer for EN / online BN,
+            // an optional host-supplied sherpa factory for offline BN).
             sdk.voiceInputController = voiceInputController
                 ?: if (config.enableVoice) {
                     val androidEngine =
@@ -1661,9 +1298,8 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
                 "modelPath=${config.modelPath.isNotBlank()} " +
                 "forcedMode=${config.forcedMode ?: "auto"}")
 
-            // Kick off model download if configured to do so at init.
-            // Skip entirely on low-end devices — they never use the AI model,
-            // so queuing the ~1 GB download would waste bandwidth and storage.
+            // Kick off the model download if configured for init — skipped on
+            // low-end devices (they never use the AI model).
             if (config.modelDownloadStrategy == ModelDownloadStrategy.ON_SDK_INIT &&
                 !sdk.isLowEndDevice
             ) {
@@ -1676,6 +1312,12 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
 
     companion object {
         private const val TAG = "MicroCoachingSDK"
+
+        /**
+         * Min gap between morning-refilter runs. With `conflate()`, coalesces an
+         * invalidation burst (quiz streak, bulk markSynced) into one recompute.
+         */
+        private const val RECOMPUTE_THROTTLE_MS = 500L
 
         @Volatile
         private var instance: MicroCoachingSDK? = null

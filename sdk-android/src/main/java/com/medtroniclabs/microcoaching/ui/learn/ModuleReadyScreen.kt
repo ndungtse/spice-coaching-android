@@ -15,8 +15,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -32,7 +34,9 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.sync.SyncPrefs
+import com.medtroniclabs.microcoaching.ui.common.ErrorState
 import com.medtroniclabs.microcoaching.ui.common.SdkScreenHeader
+import com.medtroniclabs.microcoaching.ui.common.rememberManualInboundSyncState
 import com.medtroniclabs.microcoaching.ui.learn.modules.ModulesScreen
 import com.medtroniclabs.microcoaching.ui.learn.modules.components.ModuleCard
 import com.medtroniclabs.microcoaching.ui.theme.MicroCoachingTheme
@@ -51,7 +55,14 @@ import java.util.Locale
  *
  * [LearnUiState.ModuleReady] is no longer rendered here — the nav graph skips
  * directly to [ModuleDetailScreen] when a module is tapped (Fix 1).
+ *
+ * Pre-existing legacy chain: [LearnFragment] is this screen's only host; the
+ * live `ModuleReady` route renders `CoachingHomeHost` instead.
  */
+@Deprecated("Legacy embeddable learn surface; not reachable from CoachingFlowActivity — see docs/_coaching/01_navigation_and_screens.md")
+// Dormant-to-dormant: this legacy body still composes the deprecated ModulesScreen.
+@Suppress("DEPRECATION")
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ModuleReadyScreen(
     uiState: LearnUiState,
@@ -74,6 +85,11 @@ fun ModuleReadyScreen(
     if (uiState is LearnUiState.ModuleList) {
         lastModuleList.value = uiState.modules
     }
+
+    // Pull-to-refresh forces a full-catalogue inbound sync so a newly-assigned
+    // module surfaces immediately (an incremental watermark pull would omit its
+    // unchanged content — see MicroCoachingSDK.triggerFullInboundSync).
+    val manualSync = rememberManualInboundSyncState()
 
     Column(
         modifier = Modifier
@@ -101,7 +117,7 @@ fun ModuleReadyScreen(
             val syncedSubtitle = if (lastSyncedAt <= 0L) {
                 stringResource(R.string.modules_last_synced_never)
             } else {
-                stringResource(R.string.modules_last_synced, formatLastSynced(lastSyncedAt))
+                stringResource(R.string.modules_last_synced, com.medtroniclabs.microcoaching.util.shortDateTimeLabel(lastSyncedAt))
             }
             SdkScreenHeader(
                 title = stringResource(R.string.modules_screen_title),
@@ -114,31 +130,7 @@ fun ModuleReadyScreen(
         // Error state gets a dedicated full-screen rendering — the modules
         // surface doesn't belong below an error message.
         if (uiState is LearnUiState.Error) {
-            Column(
-                modifier = Modifier.fillMaxSize().padding(32.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
-            ) {
-                Text(
-                    text = uiState.message,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.error,
-                    textAlign = TextAlign.Center,
-                )
-                Spacer(Modifier.height(16.dp))
-                Button(
-                    onClick = onRetrySync,
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                    ),
-                ) {
-                    Text(
-                        text = stringResource(R.string.learn_retry_sync),
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                }
-            }
+            ErrorState(message = uiState.message, onRetry = onRetrySync)
             return@Column
         }
 
@@ -152,20 +144,26 @@ fun ModuleReadyScreen(
             // the shared store inside [ModulesScreen]; uiState only drives the
             // top loading bar here.
             val isLoading = uiState is LearnUiState.Loading
-            ModulesScreen(
-                chwId = chwId,
-                isLoading = isLoading,
-                onShowQuickLearn = onShowQuickLearn,
-                onShowRefresherQuiz = onShowRefresherQuiz,
-                onTrainingSelect = onModuleSelected,
-                onRefresherStart = onRefresherStart,
-                onSeeAllTraining = onSeeAllTraining,
-                onSeeAllRefreshers = onSeeAllRefreshers,
-                knowledgeDocuments = knowledgeDocuments,
-                cachedDocIds = cachedDocIds,
-                onKnowledgeDocSelect = onKnowledgeDocSelect,
-                onSeeAllKnowledge = onSeeAllKnowledge,
-            )
+            PullToRefreshBox(
+                isRefreshing = manualSync.isRefreshing,
+                onRefresh = { manualSync.refresh() },
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                ModulesScreen(
+                    chwId = chwId,
+                    isLoading = isLoading,
+                    onShowQuickLearn = onShowQuickLearn,
+                    onShowRefresherQuiz = onShowRefresherQuiz,
+                    onTrainingSelect = onModuleSelected,
+                    onRefresherStart = onRefresherStart,
+                    onSeeAllTraining = onSeeAllTraining,
+                    onSeeAllRefreshers = onSeeAllRefreshers,
+                    knowledgeDocuments = knowledgeDocuments,
+                    cachedDocIds = cachedDocIds,
+                    onKnowledgeDocSelect = onKnowledgeDocSelect,
+                    onSeeAllKnowledge = onSeeAllKnowledge,
+                )
+            }
         } else {
             // Legacy non-SPICE host path — keeps the older spinner + flat list
             // rendering untouched.
@@ -186,24 +184,24 @@ fun ModuleReadyScreen(
                     }
                 }
                 is LearnUiState.ModuleList -> {
-                    ModuleListContent(
-                        modules = uiState.modules,
-                        onModuleSelected = onModuleSelected,
-                    )
+                    PullToRefreshBox(
+                        isRefreshing = manualSync.isRefreshing,
+                        onRefresh = { manualSync.refresh() },
+                        modifier = Modifier.fillMaxSize(),
+                    ) {
+                        Column(modifier = Modifier.fillMaxSize()) {
+                            ModuleListContent(
+                                modules = uiState.modules,
+                                onModuleSelected = onModuleSelected,
+                            )
+                        }
+                    }
                 }
                 else -> Unit
             }
         }
     }
 }
-
-/**
- * Formats an inbound-sync epoch-millis timestamp into a compact, locale-aware
- * "day month, HH:mm" label for the modules-screen header subtitle
- * (e.g. "29 Jun, 14:30").
- */
-private fun formatLastSynced(epochMillis: Long): String =
-    SimpleDateFormat("d MMM, HH:mm", Locale.getDefault()).format(Date(epochMillis))
 
 // ── Internal list content ──────────────────────────────────────────────────────
 
@@ -241,6 +239,8 @@ internal fun ModuleListContent(
 
 // ── Previews ───────────────────────────────────────────────────────────────────
 
+// Dormant-to-dormant: previews of the deprecated ModuleReadyScreen.
+@Suppress("DEPRECATION")
 @Preview(showBackground = true)
 @Composable
 private fun PreviewModuleReadyScreen_List() {
@@ -254,6 +254,8 @@ private fun PreviewModuleReadyScreen_List() {
     }
 }
 
+// Dormant-to-dormant: previews of the deprecated ModuleReadyScreen.
+@Suppress("DEPRECATION")
 @Preview(showBackground = true)
 @Composable
 private fun PreviewModuleReadyScreen_Loading() {

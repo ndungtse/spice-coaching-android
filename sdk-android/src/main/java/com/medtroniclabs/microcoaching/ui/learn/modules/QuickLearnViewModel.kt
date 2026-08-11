@@ -12,8 +12,12 @@ import com.medtroniclabs.microcoaching.data.db.entity.ModuleEntity
 import com.medtroniclabs.microcoaching.progress.toReinforceQuestionIds
 import com.medtroniclabs.microcoaching.ui.learn.LearnModule
 import com.medtroniclabs.microcoaching.ui.learn.LearnViewModel
+import com.medtroniclabs.microcoaching.ui.learn.recordQuickLearnAnswer
+import com.medtroniclabs.microcoaching.ui.learn.selectModuleForQuiz
 import com.medtroniclabs.microcoaching.ui.learn.QuizQuestion
 import com.medtroniclabs.microcoaching.ui.learn.parseInlineQuiz
+import com.medtroniclabs.microcoaching.ui.learn.shuffledForAttempt
+import com.medtroniclabs.microcoaching.ui.learn.withShuffledOptions
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -115,6 +119,9 @@ class QuickLearnViewModel(
         MicroCoachingSDK.getInstance().coachingModuleStore.refresherModules
     val trainingModules: StateFlow<List<LearnModule>> =
         MicroCoachingSDK.getInstance().coachingModuleStore.trainingModules
+    /** False until the assigned-module set has loaded — gates the Training empty state. */
+    val trainingAssignmentsLoaded: StateFlow<Boolean> =
+        MicroCoachingSDK.getInstance().coachingModuleStore.trainingAssignmentsLoaded
     val featuredCard: StateFlow<LearnModule?> =
         MicroCoachingSDK.getInstance().coachingModuleStore.selectedMorningCard
 
@@ -167,8 +174,9 @@ class QuickLearnViewModel(
     suspend fun firstReinforceQuestionFor(moduleFamilyId: String): QuizQuestion? {
         val sdk = MicroCoachingSDK.getInstance()
         val entity = sdk.database.moduleDao().getByFamilyId(moduleFamilyId) ?: return null
-        return reinforceSlice(entity).firstOrNull()
-            ?: parseInlineQuiz(entity.quizJson, sdkLang()).firstOrNull()
+        return (reinforceSlice(entity).firstOrNull()
+            ?: parseInlineQuiz(entity.quizJson, sdkLang()).firstOrNull())
+            ?.withShuffledOptions()
     }
 
     /** Look up the morning-card cache for the top module's source / gap id. */
@@ -203,10 +211,13 @@ class QuickLearnViewModel(
         if (toReinforce.isEmpty()) return emptyList()
         val wrong = sdk.database.coachingEventDao()
             .getLatestWrongQuestionIds(chwId, entity.moduleFamilyId).toSet()
-        // Wrong-first, then the remaining outstanding questions; authored order per tier.
+        // Wrong-first, then the remaining outstanding questions. The weak-spots-lead
+        // tiering is preserved (pedagogy + it must match the tile count / membership,
+        // which depend only on the SET, not the order), but each tier is shuffled so a
+        // reattempt doesn't replay the same question sequence.
         val weak = allQ.filter { it.id in wrong && it.id in toReinforce }
         val rest = allQ.filter { it.id in toReinforce && it.id !in wrong }
-        return weak + rest
+        return weak.shuffled() + rest.shuffled()
     }
 
     fun submitAnswer(answerIndex: Int) {
@@ -286,11 +297,30 @@ class QuickLearnViewModel(
         } ?: return
         lastPrimedEntity = entity
 
-        // Full to-reinforce set. If the module is fully mastered (nothing outstanding)
+        // A backend "quiz"-source morning card can target ONE specific question
+        // (morning_card_cache.quiz_id). When set AND still present in the module's
+        // current quiz, drill only that question. A stale/missing id falls through
+        // to the normal to-reinforce behaviour, exactly like every other refresher.
+        val targetQuizId = morningCardFor(entity.moduleId)?.quizId
+        val targeted = targetQuizId?.let { id ->
+            parseInlineQuiz(entity.quizJson, sdkLang()).filter { it.id == id }
+        }?.takeIf { it.isNotEmpty() }
+        if (targetQuizId != null && targeted == null) {
+            android.util.Log.w(TAG,
+                "primeRefresherQuiz: target quiz=$targetQuizId not in module=${entity.moduleFamilyId}, " +
+                    "falling back to full to-reinforce set")
+        }
+
+        // Full to-reinforce set (already weak-first, shuffled within tier by
+        // reinforceSlice). If the module is fully mastered (nothing outstanding)
         // — e.g. a skipped card the CHW already aced, still accessible from the list —
-        // fall back to the WHOLE quiz so the tap opens a re-takeable sheet that matches
-        // the tile's question count, instead of a blank screen.
-        val selected = reinforceSlice(entity).ifEmpty { parseInlineQuiz(entity.quizJson, sdkLang()) }
+        // fall back to the WHOLE quiz (question order randomised) so the tap opens a
+        // re-takeable sheet that matches the tile's question count, instead of a blank
+        // screen. Either way, shuffle each question's options for this attempt.
+        val ordered = targeted
+            ?: reinforceSlice(entity)
+                .ifEmpty { parseInlineQuiz(entity.quizJson, sdkLang()).shuffledForAttempt() }
+        val selected = ordered.map { it.withShuffledOptions() }
         if (selected.isEmpty()) return // genuinely no quiz
         android.util.Log.i(TAG,
             "primeRefresherQuiz: module=${entity.moduleFamilyId} selected=${selected.size}")
@@ -316,8 +346,14 @@ class QuickLearnViewModel(
      */
     fun restartRefresherQuiz() {
         val entity = lastPrimedEntity ?: return
-        val questions = filteredQuestionsForRefresher.value
+        // Faithful redo of the SAME question set, but reshuffled (order + options) so the
+        // reattempt isn't a replay. shuffledForAttempt composes the option mapping back to
+        // authored order, so telemetry's canonical index stays correct after the reshuffle.
+        val questions = filteredQuestionsForRefresher.value.shuffledForAttempt()
         if (questions.isEmpty()) return
+        // Keep the displayed list (RefresherContent) and the scoring list (activeQuestions,
+        // set by selectModuleForQuiz) pointing at the same shuffled instance.
+        filteredQuestionsForRefresher.value = questions
         val card = morningCardFor(entity.moduleId)
         val module = entity.toMinimalLearnModule(
             behaviouralGapId = card?.behaviouralGapId,
@@ -336,8 +372,9 @@ class QuickLearnViewModel(
         // back to its first quiz question so the featured module still previews (in
         // lock-step with the host MorningCard). Null only when the module ships no quiz.
         val slice = reinforceSlice(entity)
-        val question = slice.firstOrNull()
-            ?: parseInlineQuiz(entity.quizJson, sdkLang()).firstOrNull()
+        val question = (slice.firstOrNull()
+            ?: parseInlineQuiz(entity.quizJson, sdkLang()).firstOrNull())
+            ?.withShuffledOptions()
             ?: run {
                 android.util.Log.d(TAG, "morning module '${entity.titleBn}' has no inline questions — banner hidden.")
                 return null
@@ -392,6 +429,7 @@ private fun ModuleEntity.toMinimalLearnModule(
     title = translatedText(bn = titleBn, en = titleEn),
     body = translatedText(bn = descriptionBn ?: "", en = descriptionEn),
     clinicalDomain = domain,
+    contentDomain = contentDomain,
     moduleId = moduleId,
     moduleVersion = version,
     moduleType = moduleType,

@@ -43,12 +43,12 @@ sealed class DownloadItemUiState {
 }
 
 /**
- * Project the Gemma AI model's fields out of the chat [ChatUiState.ModelNotReady]
+ * Project the Gemma AI model's fields out of the chat [ChatUiState.SetupRequired]
  * into the shared card shape. Note we don't expose Paused directly from
- * the chat layer yet — Gemma's pause flag lives on `ChatUiState.ModelNotReady`
+ * the chat layer yet — Gemma's pause flag lives on `ChatUiState.SetupRequired`
  * but the existing UX folds it under `isDownloading=false isPaused=true`.
  */
-fun ChatUiState.ModelNotReady.toAiDownloadItemState(modelPresent: Boolean): DownloadItemUiState =
+fun ChatUiState.SetupRequired.toAiDownloadItemState(modelPresent: Boolean): DownloadItemUiState =
     when {
         modelPresent -> DownloadItemUiState.Done
         isDownloading && downloadProgress < 0 -> DownloadItemUiState.Preparing

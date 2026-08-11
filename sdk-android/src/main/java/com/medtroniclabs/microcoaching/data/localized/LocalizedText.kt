@@ -14,7 +14,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
-private val localizedJson = Json { ignoreUnknownKeys = true }
+private val localizedJson = com.medtroniclabs.microcoaching.util.StrictJson
 
 /**
  * Bilingual string map (`{"bn": "...", "en": "..."}`) used across module sync,

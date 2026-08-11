@@ -33,7 +33,12 @@ import com.medtroniclabs.microcoaching.ui.flow.CoachingFlowActivity
  *     .addToBackStack(null)
  *     .commit()
  * ```
+ *
+ * Pre-existing legacy chain: this Fragment is [ModuleReadyScreen]'s only host
+ * and itself has no call sites. Host apps should embed the coaching flow via
+ * [CoachingFlowActivity] instead.
  */
+@Deprecated("Legacy embeddable learn surface; not reachable from CoachingFlowActivity — see docs/_coaching/01_navigation_and_screens.md")
 class LearnFragment : Fragment() {
 
     private lateinit var viewModel: LearnViewModel
@@ -48,6 +53,8 @@ class LearnFragment : Fragment() {
         )[LearnViewModel::class.java]
     }
 
+    // Dormant-to-dormant: this legacy host still composes the deprecated ModuleReadyScreen.
+    @Suppress("DEPRECATION")
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -74,6 +81,8 @@ class LearnFragment : Fragment() {
 
     companion object {
         /** Create a new instance of [LearnFragment]. */
+        // Dormant-to-dormant: factory for the deprecated fragment itself.
+        @Suppress("DEPRECATION")
         fun newInstance(): LearnFragment = LearnFragment()
     }
 }

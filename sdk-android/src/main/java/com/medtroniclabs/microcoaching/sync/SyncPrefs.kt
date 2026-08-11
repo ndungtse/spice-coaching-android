@@ -84,6 +84,11 @@ class SyncPrefs(context: Context) {
         get() = prefs.getString(KEY_CONFIG_WATERMARK, null)
         set(value) = prefs.edit().putString(KEY_CONFIG_WATERMARK, value).apply()
 
+    /** ISO 8601 server watermark from the last `GET /sync/chat-faqs` response. */
+    var chatFaqsWatermark: String?
+        get() = prefs.getString(KEY_CHAT_FAQS_WATERMARK, null)
+        set(value) = prefs.edit().putString(KEY_CHAT_FAQS_WATERMARK, value).apply()
+
     // ── Config thresholds (formerly delivered via ScenarioSyncBundle; now defaults
     //    until the SDK consumes /config/sync — see Phase 3+ in
     //    docs/spice-2.0/04-integration-timeline.md). ──
@@ -139,11 +144,12 @@ class SyncPrefs(context: Context) {
         .remove(KEY_GAPS_WATERMARK)
         .remove(KEY_TRIGGERS_WATERMARK)
         .remove(KEY_CONFIG_WATERMARK)
+        .remove(KEY_CHAT_FAQS_WATERMARK)
         .remove(KEY_RETIRED_FAMILY_IDS)
         .apply()
 
     companion object {
-        private const val PREFS_NAME = "micro_coaching_sync"
+        private const val PREFS_NAME = com.medtroniclabs.microcoaching.util.PrefsNames.SYNC
         private const val KEY_LAST_OUTBOUND_SYNC_AT = "last_outbound_sync_at"
         private const val KEY_LAST_INBOUND_SYNC_AT = "last_inbound_sync_at"
         private const val KEY_LAST_MODULES_RECONCILE_AT = "last_modules_reconcile_at"
@@ -151,6 +157,7 @@ class SyncPrefs(context: Context) {
         private const val KEY_GAPS_WATERMARK = "gaps_watermark"
         private const val KEY_TRIGGERS_WATERMARK = "triggers_watermark"
         private const val KEY_CONFIG_WATERMARK = "config_watermark"
+        private const val KEY_CHAT_FAQS_WATERMARK = "chat_faqs_watermark"
         private const val KEY_MORNING_CARDS_MAX = "morning_cards_max"
         private const val KEY_GAP_RESOLVE_THRESHOLD = "gap_resolve_threshold"
         private const val KEY_SOFT_TRIGGER_WRONG_COUNT = "soft_trigger_wrong_count_threshold"

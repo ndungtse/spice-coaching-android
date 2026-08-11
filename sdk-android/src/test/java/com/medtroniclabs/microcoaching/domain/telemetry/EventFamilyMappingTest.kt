@@ -10,17 +10,20 @@ class EventFamilyMappingTest {
         assertEquals("coaching", eventFamilyFor("card_shown"))
         assertEquals("coaching", eventFamilyFor("card_skipped"))
         assertEquals("coaching", eventFamilyFor("card_accepted"))
-        assertEquals("coaching", eventFamilyFor("quiz_started"))
+        // `module_quiz_viewed` (Events-Modelling 1.7, formerly `quiz_started`) is
+        // the "CHW opened a quiz" event in the `coaching` family.
+        assertEquals("coaching", eventFamilyFor("module_quiz_viewed"))
         // Per v3 E2E doc (docs/v3/coaching-platform-e2e-backend.md) the per-question
         // attempt event is `module_quiz_attempted` in the `coaching` family.
         assertEquals("coaching", eventFamilyFor("module_quiz_attempted"))
         assertEquals("coaching", eventFamilyFor("counselling_used"))
+        // `module_card_viewed` moved to `coaching` per Events-Modelling 1.7.
+        assertEquals("coaching", eventFamilyFor("module_card_viewed"))
     }
 
     @Test
     fun `module learning events map to the learning family`() {
         assertEquals("learning", eventFamilyFor("module_delivered"))
-        assertEquals("learning", eventFamilyFor("module_card_viewed"))
         assertEquals("learning", eventFamilyFor("module_completed"))
     }
 

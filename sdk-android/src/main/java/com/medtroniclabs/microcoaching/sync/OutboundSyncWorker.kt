@@ -6,7 +6,7 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.medtroniclabs.microcoaching.MicroCoachingSDK
 import com.medtroniclabs.microcoaching.data.db.MicroCoachingDatabase
-import com.medtroniclabs.microcoaching.network.NetworkModule
+import kotlinx.coroutines.sync.withLock
 
 /**
  * WorkManager worker that pushes pending SDK events to the Knowledge Layer backend.
@@ -58,16 +58,28 @@ class OutboundSyncWorker(
         }
 
         val db = MicroCoachingDatabase.getInstance(applicationContext)
-        val apiService = NetworkModule.createApiService(config)
+        // Reuse the SDK's cached Retrofit service — a per-run createApiService()
+        // built a fresh OkHttpClient (dispatcher threads + connection pool) for
+        // every 15-min tick and every hook-triggered flush.
         val syncApi = SyncApi(
-            apiService = apiService,
+            apiService = sdk.apiService,
             db = db,
             sessionId = "sync-$currentChwId",
             chwId = currentChwId,
             tenantId = config.tenantId.ifBlank { null },
         )
 
-        val result = syncApi.pushPendingEvents()
+        // Single-flight: the periodic, chain, and _flush work names don't dedupe
+        // against each other — serialize so concurrent triggers can't each load
+        // the full pending set at once. See [SyncGate].
+        val result = SyncGate.outbound.withLock { syncApi.pushPendingEvents() }
+
+        // Retention cleanup piggybacks on healthy outbound runs — synced
+        // llm_trace / digital_proficiency rows older than 30 days are dropped
+        // (coaching_event is intentionally retained; see pruneSyncedTelemetry).
+        if (result.skipped || result.success) {
+            syncApi.pruneSyncedTelemetry()
+        }
 
         return when {
             result.skipped -> Result.success()

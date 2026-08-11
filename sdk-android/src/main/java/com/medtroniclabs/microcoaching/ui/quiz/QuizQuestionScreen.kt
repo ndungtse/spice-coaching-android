@@ -16,9 +16,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -63,8 +65,33 @@ fun QuizQuestionScreen(
     moduleTitle: String = "",
     onHome: () -> Unit = {},
 ) {
-    val quizState = uiState as? LearnUiState.QuizInProgress ?: return
-    val question = quizState.questions.getOrNull(questionIndex) ?: return
+    // Keep the last-known quiz state visible while an exit transition animates.
+    // Every quiz exit flips the shared LearnViewModel state BEFORE the pop
+    // (back at question 0 → restoreModuleDetail(); last answer → finishQuiz()),
+    // and the outgoing destination stays composed through the animation —
+    // without this cache the screen composed nothing (white) for the whole
+    // transition, and stayed white permanently when the pop was dropped (back
+    // pressed right as activity state saved). Mirrors ModuleDetailScreen's
+    // cachedModule fallback.
+    val liveQuizState = uiState as? LearnUiState.QuizInProgress
+    var cachedQuizState by remember { mutableStateOf<LearnUiState.QuizInProgress?>(null) }
+    LaunchedEffect(liveQuizState) {
+        if (liveQuizState != null) cachedQuizState = liveQuizState
+    }
+    val quizState = liveQuizState ?: cachedQuizState
+    val question = quizState?.questions?.getOrNull(questionIndex)
+    if (quizState == null || question == null) {
+        // Never compose NOTHING — a bare `return` here painted the whole route
+        // white whenever both the live and cached state were unavailable (e.g.
+        // an exotic restore the nav-graph entry guard didn't cover).
+        Box(
+            modifier = Modifier.fillMaxSize().background(SurfaceBackground),
+            contentAlignment = Alignment.Center,
+        ) {
+            CircularProgressIndicator()
+        }
+        return
+    }
     val totalQuestions = quizState.questions.size
 
     // Once a question is answered, lock it for the remainder of the session.

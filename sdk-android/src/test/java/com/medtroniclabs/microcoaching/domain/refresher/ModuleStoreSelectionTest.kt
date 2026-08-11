@@ -43,6 +43,9 @@ class ModuleStoreSelectionTest {
         source = source,
         moduleType = moduleType,
         inlineQuestions = if (hasQuiz) quiz else null,
+        // selectFeatured checks questionCount (populated even on the slim list
+        // model, where inlineQuestions is null) — mirror that here.
+        questionCount = if (hasQuiz) quiz.size else 0,
         fromMorningCard = fromMorningCard,
     )
 
@@ -95,6 +98,57 @@ class ModuleStoreSelectionTest {
         val refreshers = ModuleCategorizer.categorize(listOf(notSurfaced)).refreshers
         assertEquals(emptyList<String>(), refreshers.map { it.moduleFamilyId })
         assertNull(selectFeatured(refreshers, emptySet()))
+    }
+
+    // ── orderRefresherQueue (recency + action-gap ordering, MED-1595) ────────────
+
+    @Test
+    fun `newest-assigned sorts first among non-action-gaps`() {
+        val old = refresher("old").copy(assignedAtMs = 1_000L)
+        val new = refresher("new").copy(assignedAtMs = 2_000L)
+        assertEquals(
+            listOf("new", "old"),
+            orderRefresherQueue(listOf(old, new)).map { it.moduleFamilyId },
+        )
+    }
+
+    @Test
+    fun `action-gap is pinned on top even when older than a fresh assignment`() {
+        val newest = refresher("newest").copy(assignedAtMs = 9_000L)
+        val actionGapOld = refresher("action").copy(assignedAtMs = 1_000L, isActionGap = true)
+        assertEquals(
+            listOf("action", "newest"),
+            orderRefresherQueue(listOf(newest, actionGapOld)).map { it.moduleFamilyId },
+        )
+    }
+
+    @Test
+    fun `modules with no assignment date sort last`() {
+        val dated = refresher("dated").copy(assignedAtMs = 500L)
+        val undated = refresher("undated").copy(assignedAtMs = null)
+        assertEquals(
+            listOf("dated", "undated"),
+            orderRefresherQueue(listOf(undated, dated)).map { it.moduleFamilyId },
+        )
+    }
+
+    @Test
+    fun `equal recency preserves prior order (stable sort keeps clinical ordering)`() {
+        val a = refresher("a").copy(assignedAtMs = 1_000L)
+        val b = refresher("b").copy(assignedAtMs = 1_000L)
+        val c = refresher("c").copy(assignedAtMs = 1_000L)
+        assertEquals(
+            listOf("a", "b", "c"),
+            orderRefresherQueue(listOf(a, b, c)).map { it.moduleFamilyId },
+        )
+    }
+
+    @Test
+    fun `featured pick follows the ordered queue — newest-assigned with a quiz`() {
+        val old = refresher("old").copy(assignedAtMs = 1_000L)
+        val new = refresher("new").copy(assignedAtMs = 2_000L)
+        val featured = selectFeatured(orderRefresherQueue(listOf(old, new)), emptySet())
+        assertEquals("new", featured?.moduleFamilyId)
     }
 
     // ── isActionGapStillActive (re-drill gate) ──────────────────────────────────

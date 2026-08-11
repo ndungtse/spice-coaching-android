@@ -5,12 +5,14 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import com.medtroniclabs.microcoaching.data.db.dao.AssignedModuleDao
+import com.medtroniclabs.microcoaching.data.db.dao.AssignedVideoDao
 import com.medtroniclabs.microcoaching.data.db.dao.BehaviouralGapDao
 import com.medtroniclabs.microcoaching.data.db.dao.ChatMessageDao
 import com.medtroniclabs.microcoaching.data.db.dao.ChwGapProfileDao
 import com.medtroniclabs.microcoaching.data.db.dao.ChwQuizQuestionStateDao
 import com.medtroniclabs.microcoaching.data.db.dao.ChwModuleCompletionDao
 import com.medtroniclabs.microcoaching.data.db.dao.CachedAssetDao
+import com.medtroniclabs.microcoaching.data.db.dao.DashboardCacheDao
 import com.medtroniclabs.microcoaching.data.db.dao.ChwModulePartialCompletionDao
 import com.medtroniclabs.microcoaching.data.db.dao.CoachingEventDao
 import com.medtroniclabs.microcoaching.data.db.dao.ConfigThresholdDao
@@ -19,12 +21,15 @@ import com.medtroniclabs.microcoaching.data.db.dao.LlmTraceDao
 import com.medtroniclabs.microcoaching.data.db.dao.ModuleDao
 import com.medtroniclabs.microcoaching.data.db.dao.MorningCardCacheDao
 import com.medtroniclabs.microcoaching.data.db.dao.ModuleTriggerBindingDao
+import com.medtroniclabs.microcoaching.data.db.dao.ChatFaqDao
 import com.medtroniclabs.microcoaching.data.db.dao.PublishedSourceDocumentDao
-import com.medtroniclabs.microcoaching.data.db.dao.SourceDocumentThumbnailDao
+import com.medtroniclabs.microcoaching.data.db.dao.RequestedModuleDao
 import com.medtroniclabs.microcoaching.data.db.dao.TriggerDefinitionDao
 import com.medtroniclabs.microcoaching.data.db.entity.AssignedModuleEntity
+import com.medtroniclabs.microcoaching.data.db.entity.AssignedVideoEntity
 import com.medtroniclabs.microcoaching.data.db.entity.BehaviouralGapEntity
 import com.medtroniclabs.microcoaching.data.db.entity.CachedAssetEntity
+import com.medtroniclabs.microcoaching.data.db.entity.DashboardCacheEntity
 import com.medtroniclabs.microcoaching.data.db.entity.ChatMessageEntity
 import com.medtroniclabs.microcoaching.data.db.entity.ChwGapProfileEntity
 import com.medtroniclabs.microcoaching.data.db.entity.ChwQuizQuestionStateEntity
@@ -37,7 +42,9 @@ import com.medtroniclabs.microcoaching.data.db.entity.DigitalProficiencyEventEnt
 import com.medtroniclabs.microcoaching.data.db.entity.LlmTraceEntity
 import com.medtroniclabs.microcoaching.data.db.entity.ModuleEntity
 import com.medtroniclabs.microcoaching.data.db.entity.ModuleTriggerBindingEntity
+import com.medtroniclabs.microcoaching.data.db.entity.ChatFaqEntity
 import com.medtroniclabs.microcoaching.data.db.entity.PublishedSourceDocumentEntity
+import com.medtroniclabs.microcoaching.data.db.entity.RequestedModuleEntity
 import com.medtroniclabs.microcoaching.data.db.entity.SourceDocumentThumbnailEntity
 import com.medtroniclabs.microcoaching.data.db.entity.TriggerDefinitionEntity
 import com.medtroniclabs.microcoaching.data.db.migration.MIGRATION_14_15
@@ -54,6 +61,11 @@ import com.medtroniclabs.microcoaching.data.db.migration.MIGRATION_24_25
 import com.medtroniclabs.microcoaching.data.db.migration.MIGRATION_25_26
 import com.medtroniclabs.microcoaching.data.db.migration.MIGRATION_26_27
 import com.medtroniclabs.microcoaching.data.db.migration.MIGRATION_27_28
+import com.medtroniclabs.microcoaching.data.db.migration.MIGRATION_28_29
+import com.medtroniclabs.microcoaching.data.db.migration.MIGRATION_29_30
+import com.medtroniclabs.microcoaching.data.db.migration.MIGRATION_30_31
+import com.medtroniclabs.microcoaching.data.db.migration.MIGRATION_31_32
+import com.medtroniclabs.microcoaching.data.db.migration.MIGRATION_32_33
 
 /**
  * SDK-owned Room database. Completely separate from SPICE's NCDMergerDatabase.
@@ -67,8 +79,8 @@ import com.medtroniclabs.microcoaching.data.db.migration.MIGRATION_27_28
  *           carrying user_id); the Training Modules screen filters its library to
  *           the current user's rows while the chatbot keeps reading the full
  *           module_cache catalogue;
- *           v26: published_source_document table — durable mirror of
- *           GET /sync/source-documents/published; backs the Knowledge section,
+ *           v26: published_source_document table — durable mirror of the
+ *           source-document catalogue; backs the Knowledge section,
  *           which now lists every published source document rather than only
  *           those derived from module_cache;
  *           v22: module_cache.search_metadata_json — raw module-level
@@ -106,17 +118,28 @@ import com.medtroniclabs.microcoaching.data.db.migration.MIGRATION_27_28
  *           v10: backend-shape alignment.)
  *
  * Migration strategy: destructive re-creation for pre-release versions.
+ *
+ * v29: chat_faq table — cached ranked chat-FAQ suggestions from
+ *      /sync/chat-faqs, question stored as a localized `{bn, en?}` JSON blob
+ *      (English backfilled by on-device translation); backs the chat suggestion
+ *      chips with static defaults as the empty-cache fallback.
+ * v30: assigned_video table — durable mirror of the assigned audio/video
+ *      documents in the source-document catalogue;
+ *      backs the Training sub-tab with per-CHW assigned videos, inline thumbnail
+ *      presigned URLs, and monotonic watch-progress columns for resume + the
+ *      YouTube-style progress bars.
  */
 /**
  * Public schema version, mirrored from [Database.version] so callers (e.g.
  * `MicroCoachingSDK.init`) can detect destructive migrations and reset
  * SharedPreferences-based watermarks accordingly.
  */
-const val MICRO_COACHING_ROOM_VERSION: Int = 28
+const val MICRO_COACHING_ROOM_VERSION: Int = 33
 
 @Database(
     entities = [
         AssignedModuleEntity::class,
+        AssignedVideoEntity::class,
         ChatMessageEntity::class,
         CoachingEventEntity::class,
         LlmTraceEntity::class,
@@ -134,6 +157,9 @@ const val MICRO_COACHING_ROOM_VERSION: Int = 28
         CachedAssetEntity::class,
         SourceDocumentThumbnailEntity::class,
         PublishedSourceDocumentEntity::class,
+        ChatFaqEntity::class,
+        DashboardCacheEntity::class,
+        RequestedModuleEntity::class,
     ],
     version = MICRO_COACHING_ROOM_VERSION,
     exportSchema = false,
@@ -141,6 +167,7 @@ const val MICRO_COACHING_ROOM_VERSION: Int = 28
 abstract class MicroCoachingDatabase : RoomDatabase() {
 
     abstract fun assignedModuleDao(): AssignedModuleDao
+    abstract fun assignedVideoDao(): AssignedVideoDao
     abstract fun chatMessageDao(): ChatMessageDao
     abstract fun coachingEventDao(): CoachingEventDao
     abstract fun llmTraceDao(): LlmTraceDao
@@ -156,8 +183,10 @@ abstract class MicroCoachingDatabase : RoomDatabase() {
     abstract fun chwModulePartialCompletionDao(): ChwModulePartialCompletionDao
     abstract fun morningCardCacheDao(): MorningCardCacheDao
     abstract fun cachedAssetDao(): CachedAssetDao
-    abstract fun sourceDocumentThumbnailDao(): SourceDocumentThumbnailDao
     abstract fun publishedSourceDocumentDao(): PublishedSourceDocumentDao
+    abstract fun chatFaqDao(): ChatFaqDao
+    abstract fun dashboardCacheDao(): DashboardCacheDao
+    abstract fun requestedModuleDao(): RequestedModuleDao
 
     companion object {
         private const val DATABASE_NAME = "microcoaching.db"
@@ -189,6 +218,11 @@ abstract class MicroCoachingDatabase : RoomDatabase() {
                     MIGRATION_25_26,
                     MIGRATION_26_27,
                     MIGRATION_27_28,
+                    MIGRATION_28_29,
+                    MIGRATION_29_30,
+                    MIGRATION_30_31,
+                    MIGRATION_31_32,
+                    MIGRATION_32_33,
                 )
                 .fallbackToDestructiveMigration(dropAllTables = true)
                 .build()

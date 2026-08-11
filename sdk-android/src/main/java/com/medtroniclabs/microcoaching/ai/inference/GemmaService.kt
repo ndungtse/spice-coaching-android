@@ -18,17 +18,13 @@ import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * LLM inference engine using MediaPipe GenAI for Gemma 3 1B INT4 models.
+ * On-device LLM inference via MediaPipe GenAI. Loads any Gemma `.task` variant from
+ * [com.medtroniclabs.microcoaching.ai.model.ModelCatalog] — the SDK's only bundled
+ * inference engine. Requires API 24+ / arm64-v8a; per-variant RAM and size come from
+ * the catalog, gated by [com.medtroniclabs.microcoaching.domain.system.DeviceCapability].
  *
- * Supports `.task` model files — the SDK's only on-device inference engine.
- *
- * Device requirements:
- *   - Minimum: 3 GB RAM, API 24, arm64-v8a
- *   - Model: ~600 MB for Gemma 3 1B INT4 (.task variant)
- *   - Cold start: ~4 seconds
- *
- * Thread safety: A [Mutex] ensures only one inference runs at a time.
- * Concurrent requests will receive [LLMError.InferenceBusy].
+ * Thread safety: a [Mutex] serialises inference; concurrent requests get
+ * [LLMError.InferenceBusy].
  */
 class GemmaService(private val context: Context) : LLMService {
 

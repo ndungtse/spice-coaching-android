@@ -267,7 +267,7 @@ private fun ChatSheetEmptyPreview() {
 }
 
 @Preview(
-    name = "Sheet — model downloading",
+    name = "Sheet — setup / downloading",
     showBackground = true,
     backgroundColor = 0xFFCCCCCC,
     widthDp = 360,
@@ -278,7 +278,7 @@ private fun ChatSheetDownloadingPreview() {
     MicroCoachingTheme {
         ChatSheetPreviewFrame {
             ChatScreen(
-                uiState = ChatUiState.ModelNotReady(
+                uiState = ChatUiState.SetupRequired(
                     downloadProgress = 42,
                     isDownloading = true,
                 ),
@@ -286,6 +286,7 @@ private fun ChatSheetDownloadingPreview() {
                 onSendSuggested = {},
                 onRequestDownload = {},
                 onSpeakMessage = {},
+                showVoiceCard = true,
                 onClose = {},
                 showCloseIcon = true,
             )

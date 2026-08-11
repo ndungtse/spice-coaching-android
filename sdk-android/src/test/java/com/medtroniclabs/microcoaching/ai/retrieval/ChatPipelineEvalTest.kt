@@ -103,7 +103,7 @@ class ChatPipelineEvalTest {
             val top = hits.firstOrNull()
             val served = top != null && !OffTopicGuard.isClearlyUnanswerable(
                 query = case.query,
-                topHit = top,
+                hits = hits,
                 clinicalTerms = scope.scopeTerms(),
             )
 

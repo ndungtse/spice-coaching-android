@@ -24,6 +24,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import com.medtroniclabs.microcoaching.ui.theme.SpiceGreen
+import com.medtroniclabs.microcoaching.ui.theme.SpiceGreenContainer
+import com.medtroniclabs.microcoaching.ui.theme.SpiceGreenDark
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -72,14 +75,14 @@ fun ModuleCard(
                 Text(
                     text = module.title,
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                    color = Color(0xFF0A3D27),
+                    color = SpiceGreenDark,
                     modifier = Modifier.weight(1f),
                 )
                 if (module.status == "completed") {
                     Icon(
                         imageVector = Icons.Default.CheckCircle,
                         contentDescription = stringResource(R.string.learn_completed_cd),
-                        tint = Color(0xFF1B6B4A),
+                        tint = SpiceGreen,
                         modifier = Modifier.size(20.dp),
                     )
                 }
@@ -136,7 +139,7 @@ fun DomainChip(domain: String) {
 @Composable
 fun StatusChip(status: String) {
     val (label, bg, fg) = when (status) {
-        "completed"   -> Triple(stringResource(R.string.status_completed), Color(0xFFD7F0E5), Color(0xFF0A3D27))
+        "completed"   -> Triple(stringResource(R.string.status_completed), SpiceGreenContainer, SpiceGreenDark)
         "in_progress" -> Triple(stringResource(R.string.status_in_progress), Color(0xFFFFF3CD), Color(0xFF856404))
         else -> return
     }

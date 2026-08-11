@@ -122,6 +122,32 @@ class ModuleKnowledgeIndexTest {
     }
 
     @Test
+    fun `title only card is excluded from retrieval index`() {
+        val cardsJson = """
+            [
+              {"title_en":"How to Give Advice"},
+              {"title_en":"Condom guidance","body_en":"Condoms are available at community clinics and pharmacies."}
+            ]
+        """.trimIndent()
+        val index = ModuleKnowledgeIndex.build(listOf(moduleWith(cardsJson)))
+        val hits = index.search("How to Give Advice", k = 2, scoreThreshold = 0f)
+        assertTrue("title-only stub cards must not be indexed", hits.isEmpty())
+    }
+
+    @Test
+    fun `near empty body card is excluded from retrieval index`() {
+        val cardsJson = """
+            [
+              {"title_en":"How to Give Advice","body_en":"Short stub."},
+              {"title_en":"Condom guidance","body_en":"Condoms are available at community clinics and pharmacies."}
+            ]
+        """.trimIndent()
+        val index = ModuleKnowledgeIndex.build(listOf(moduleWith(cardsJson)))
+        val hits = index.search("How to Give Advice", k = 2, scoreThreshold = 0f)
+        assertTrue("near-empty body cards must not be indexed", hits.isEmpty())
+    }
+
+    @Test
     fun `malformed retrieval_metadata is tolerated (degrades to empty)`() {
         // Wrong shape (array instead of object) must not break the index build.
         val cardsJson = """
@@ -418,7 +444,7 @@ class ModuleKnowledgeIndexTest {
             [
               {
                 "title_en": "Card A",
-                "body_en": "Body A.",
+                "body_en": "Body A with enough indexed prose for BM25.",
                 "retrieval_hints_en": ["top level hint for card a"],
                 "search_metadata": {
                   "retrieval_hints_en": ["nested hint should lose"]
@@ -426,7 +452,7 @@ class ModuleKnowledgeIndexTest {
               },
               {
                 "title_en": "Card B",
-                "body_en": "Body B.",
+                "body_en": "Body B with enough indexed prose for BM25.",
                 "search_metadata": {
                   "retrieval_hints_en": ["nested hint for card b"]
                 }
@@ -447,7 +473,7 @@ class ModuleKnowledgeIndexTest {
               {"title_en": "Overview", "body_en": "General introduction."},
               {
                 "title_en": "Specific Topic",
-                "body_en": "Detailed guidance.",
+                "body_en": "Detailed guidance with enough prose for indexing.",
                 "search_metadata": {
                   "keywords_en": ["unique-card-keyword-xyz"]
                 }
@@ -466,7 +492,7 @@ class ModuleKnowledgeIndexTest {
               {"title_en": "Overview", "body_en": "General introduction."},
               {
                 "title_en": "ORS guidance",
-                "body_en": "Rehydration steps.",
+                "body_en": "Rehydration steps with enough prose for indexing.",
                 "search_metadata": {
                   "questions_en": ["how much ORS should a child drink per day"]
                 }
@@ -544,11 +570,11 @@ class ModuleKnowledgeIndexTest {
     @Test
     fun `retired family ids are excluded from the index`() {
         val active = moduleWith(
-            cardsJson = """[{"title_en":"Active module","body_en":"Still published."}]""",
+            cardsJson = """[{"title_en":"Active module","body_en":"Still published and indexed in the corpus."}]""",
             moduleFamilyId = "fam-active",
         )
         val retired = moduleWith(
-            cardsJson = """[{"title_en":"Retired module","body_en":"Should not appear."}]""",
+            cardsJson = """[{"title_en":"Retired module","body_en":"Should not appear in search results."}]""",
             moduleId = "m-retired",
             moduleFamilyId = "fam-retired",
         )
@@ -569,7 +595,7 @@ class ModuleKnowledgeIndexTest {
               "search_phrases": {"en": ["signs of neonatal sepsis"]}
             }
         """.trimIndent()
-        val cardsJson = """[{"title": {"en": "Sepsis"}, "body": {"en": "General care."}}]"""
+        val cardsJson = """[{"title": {"en": "Sepsis"}, "body": {"en": "General care guidance for neonatal sepsis."}}]"""
         val index = ModuleKnowledgeIndex.build(listOf(moduleWith(cardsJson, searchMetadataJson = meta)))
         val hits = index.search("neonatal sepsis", k = 2, scoreThreshold = 0f)
         assertTrue("localized keywords must be indexed", hits.isNotEmpty())

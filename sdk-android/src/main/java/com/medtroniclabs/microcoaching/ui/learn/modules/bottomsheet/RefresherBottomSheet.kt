@@ -10,11 +10,14 @@ import com.google.android.material.bottomsheet.BottomSheetDialog
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.unit.dp
 import androidx.fragment.app.FragmentManager
@@ -25,8 +28,6 @@ import com.medtroniclabs.microcoaching.ui.SdkLocalizedTheme
 import com.medtroniclabs.microcoaching.ui.flow.CoachingFlowActivity
 import com.medtroniclabs.microcoaching.ui.learn.LearnViewModel
 import com.medtroniclabs.microcoaching.ui.learn.modules.QuickLearnViewModel
-import kotlinx.coroutines.MainScope
-import kotlinx.coroutines.launch
 
 /**
  * Bottom sheet for the morning refresher experience.
@@ -53,9 +54,16 @@ class RefresherBottomSheet : BottomSheetDialogFragment() {
 
     override fun onCreateDialog(savedInstanceState: Bundle?) =
         super.onCreateDialog(savedInstanceState).apply {
+            // Tapping the dimmed area above the sheet still dismisses it.
+            setCanceledOnTouchOutside(true)
             (this as? BottomSheetDialog)?.behavior?.apply {
                 state = BottomSheetBehavior.STATE_EXPANDED
                 skipCollapsed = true
+                // Drag-to-dismiss (pull-to-close) disabled: the sheet's vertical drag
+                // was competing with the inner content's scroll. The sheet now stays
+                // put — dismissal is via the Done CTA or tapping the dimmed top above
+                // (setCanceledOnTouchOutside), never by dragging the sheet itself.
+                isDraggable = false
             }
         }
 
@@ -80,13 +88,19 @@ class RefresherBottomSheet : BottomSheetDialogFragment() {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
                 SdkLocalizedTheme {
+                    // Partial-height sheet (~68% of the screen) so the dimmed top of the
+                    // dialog stays tappable to dismiss. The sheet content lays out its own
+                    // scrollable body + sticky action footer, so this fixed height simply
+                    // caps how tall the sheet grows.
+                    val sheetHeight = LocalConfiguration.current.screenHeightDp.dp * 0.68f
                     // White sheet surface (rounded top to match the dialog),
                     // overriding the Material bottom-sheet default tint. Quiz
                     // options inside use a soft surface tint so they read against
                     // this white background.
                     Box(
                         modifier = Modifier
-                            .fillMaxSize()
+                            .fillMaxWidth()
+                            .height(sheetHeight)
                             .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
                             .background(Color.White),
                     ) {
@@ -119,14 +133,23 @@ class RefresherBottomSheet : BottomSheetDialogFragment() {
         //      actually push them and pull the updated partial-completions).
         val sdk = MicroCoachingSDK.getInstance()
         val chwId = sdk.currentCHWId.orEmpty()
-        val activityVm = ViewModelProvider(
-            requireActivity(),
-            LearnViewModel.factory(requireContext().applicationContext, chwId),
-        )[LearnViewModel::class.java]
-        activityVm.refreshModuleCounts()
-        if (chwId.isNotBlank()) {
-            MainScope().launch { sdk.refilterMorningModules(chwId) }
+        // Only CoachingFlowActivity hosts ModulesScreen — getting (and thereby
+        // CREATING) the activity-scoped LearnViewModel from any other host
+        // (e.g. the SPICE home screen) parked a full LearnViewModel + TTS
+        // engine in the host activity for its entire lifetime, refreshing a
+        // screen that isn't there. The SPICE MorningCard is covered by the
+        // refilter below.
+        val activity = requireActivity()
+        if (activity is CoachingFlowActivity) {
+            val activityVm = ViewModelProvider(
+                activity,
+                LearnViewModel.factory(requireContext().applicationContext, chwId),
+            )[LearnViewModel::class.java]
+            activityVm.refreshModuleCounts()
         }
+        // SDK-scope fire-and-forget: the refilter must outlive this sheet, and
+        // a per-call MainScope() was an unmanaged, never-cancelled scope.
+        sdk.refilterMorningModulesAsync(chwId)
         sdk.flushTelemetryNow()
         sdk.syncCoordinator.triggerNow()
         super.onDismiss(dialog)

@@ -65,13 +65,27 @@ class CoachingTtsHelper(
                 }
             }
             TextToSpeech.LANG_MISSING_DATA -> {
+                // Don't auto-bounce the user to system settings — that fired
+                // unprompted on every VM init (chat AND lesson player). Just
+                // surface the missing state; the coaching setup screen (and any
+                // other caller) offers an explicit "Install" action wired to
+                // [installLanguageData].
                 _state.value = TtsState.LanguageMissing
-                val intent = Intent(TextToSpeech.Engine.ACTION_INSTALL_TTS_DATA)
-                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                runCatching { context.startActivity(intent) }
             }
             else -> _state.value = TtsState.Error
         }
+    }
+
+    /**
+     * Open the platform TTS-data installer so the user can download the missing
+     * voice pack for [locale]. Called on demand (e.g. the setup screen's TTS
+     * "Install" button) rather than automatically from [onInit]. Best-effort:
+     * a device with no activity to handle the intent simply no-ops.
+     */
+    fun installLanguageData() {
+        val intent = Intent(TextToSpeech.Engine.ACTION_INSTALL_TTS_DATA)
+        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        runCatching { context.startActivity(intent) }
     }
 
     private val progressListener = object : UtteranceProgressListener() {
@@ -158,9 +172,9 @@ sealed class TtsState {
     data object Speaking : TtsState()
 
     /**
-     * Locale data isn't installed on the device. The helper has already
-     * fired the system installer intent — UI should reflect that the toggle
-     * isn't usable until the user comes back.
+     * Locale data isn't installed on the device. Read-aloud is unusable until
+     * the user installs it. The helper no longer auto-launches the installer —
+     * callers surface an explicit action wired to [CoachingTtsHelper.installLanguageData].
      */
     data object LanguageMissing : TtsState()
 

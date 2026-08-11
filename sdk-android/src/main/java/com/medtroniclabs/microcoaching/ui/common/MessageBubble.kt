@@ -250,4 +250,4 @@ fun AssistantAvatar(
 }
 
 private fun Long.toTimeString(): String =
-    SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(this))
+    com.medtroniclabs.microcoaching.util.timeLabel(this)

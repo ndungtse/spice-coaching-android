@@ -5,6 +5,7 @@ import com.medtroniclabs.microcoaching.data.db.dao.ChwGapProfileDao
 import com.medtroniclabs.microcoaching.data.db.dao.CoachingEventDao
 import com.medtroniclabs.microcoaching.data.db.entity.ChwGapProfileEntity
 import com.medtroniclabs.microcoaching.data.db.entity.CoachingEventEntity
+import com.medtroniclabs.microcoaching.domain.telemetry.sha256Short
 
 /**
  * Computes effective per-CHW gap state with the **baseline + replay delta**
@@ -48,7 +49,7 @@ internal class OnDeviceGapStateEngine(
         val events = eventDao.getReplayableForGapState(chwId)
         Log.i(
             TAG,
-            "engine: chw=$chwId baselineGaps=${states.size} baselineActive=$baselineActive " +
+            "engine: chw=${chwId.sha256Short()} baselineGaps=${states.size} baselineActive=$baselineActive " +
                 "replayEvents=${events.size}",
         )
 
@@ -141,16 +142,6 @@ internal class OnDeviceGapStateEngine(
                 )
             }
             else -> null
-        }
-    }
-
-    /** Prefer the per-question `is_correct`, then the explicit outcome string. */
-    private fun outcomeOf(event: CoachingEventEntity): GapOutcome {
-        event.isCorrect?.let { return if (it) GapOutcome.CORRECT else GapOutcome.INCORRECT }
-        return when (event.outcome?.lowercase()) {
-            "correct" -> GapOutcome.CORRECT
-            "wrong", "incorrect" -> GapOutcome.INCORRECT
-            else -> GapOutcome.UNKNOWN
         }
     }
 

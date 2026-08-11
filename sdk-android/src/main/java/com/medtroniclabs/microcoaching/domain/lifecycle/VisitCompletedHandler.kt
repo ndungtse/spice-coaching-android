@@ -3,6 +3,7 @@ package com.medtroniclabs.microcoaching.domain.lifecycle
 import android.util.Log
 import com.medtroniclabs.microcoaching.data.db.dao.CoachingEventDao
 import com.medtroniclabs.microcoaching.domain.telemetry.EventRecorder
+import com.medtroniclabs.microcoaching.domain.telemetry.sha256Short
 
 /**
  * TP-7 — `onVisitCompleted`. Runs when SPICE signals the CHW has finished a
@@ -42,7 +43,11 @@ class VisitCompletedHandler(
                 chwId = chwId,
                 encounterId = encounterId,
             )
-            Log.i(TAG, "Visit close: backfilled patient_visit_id on $updated event(s) for chw=$chwId visit=$encounterId")
+            Log.i(
+                TAG,
+                "Visit close: backfilled patient_visit_id on $updated event(s) " +
+                    "for chw=${chwId.sha256Short()} visit=$encounterId",
+            )
         } catch (e: Exception) {
             Log.w(TAG, "Visit-close backfill failed: ${e.message}", e)
         }

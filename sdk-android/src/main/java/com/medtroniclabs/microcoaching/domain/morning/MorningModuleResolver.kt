@@ -9,12 +9,15 @@ import com.medtroniclabs.microcoaching.domain.gaps.ondevice.OnDeviceMorningGener
 import com.medtroniclabs.microcoaching.network.CoachingApiService
 import com.medtroniclabs.microcoaching.progress.toReinforceQuestionIds
 import com.medtroniclabs.microcoaching.sync.SyncApi
+import com.medtroniclabs.microcoaching.sync.pullMorningCards
 import com.medtroniclabs.microcoaching.ui.learn.parseInlineQuiz
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * Resolves the prioritised morning-module list and publishes it into the SDK's
- * [morningModules] / [morningCardsItems] flows. Extracted from `MicroCoachingSDK`
+ * [morningModules] / [morningCardsItems] flows. Split out of `MicroCoachingSDK`
  * (which was a god object) — behaviour is unchanged; this only relocates the
  * 4-tier resolution cluster behind a single collaborator.
  *
@@ -40,6 +43,16 @@ internal class MorningModuleResolver(
 ) {
 
     /**
+     * Serializes [refresh] / [refilter] runs. Both are triggered from many
+     * overlapping sources (`onHomeScreenShown`, `onMorningOpen`,
+     * `refreshRefreshers`, `onReferralSubmitted`, the coaching_event collector,
+     * and `InboundSyncWorker`) and each run loads the full module table plus
+     * per-module quiz parsing — concurrent runs multiplied that allocation for
+     * no benefit and could interleave publishes out of order.
+     */
+    private val refreshMutex = Mutex()
+
+    /**
      * Core 4-tier morning resolution used by both `onHomeScreenShown` and
      * `onMorningOpen`.
      *
@@ -50,7 +63,7 @@ internal class MorningModuleResolver(
      * Step 3: always run the [OnDeviceMorningGenerator], which merges its gap-driven
      * cards into the cache (assisting the backend, or standing in for it offline).
      */
-    suspend fun refresh(chwId: String) {
+    suspend fun refresh(chwId: String): Unit = refreshMutex.withLock {
         try {
             // ── Tier 1 / Tier 2 seed: use whatever is already in the cache ──
             val cached = database.morningCardCacheDao().getAllOrderedOnce()
@@ -66,10 +79,7 @@ internal class MorningModuleResolver(
                     sessionId = "morning-refresh",
                     chwId = chwId,
                 )
-                val result = syncApi.pullMorningCards(
-                    chwId = chwId,
-                    tenantId = config.tenantId.takeIf { it.isNotBlank() },
-                )
+                val result = syncApi.pullMorningCards()
                 if (result.success) {
                     Log.i(TAG, "Morning cards live fetch OK: ${result.count} items")
                 } else {
@@ -108,7 +118,7 @@ internal class MorningModuleResolver(
      * Falls back to [applyLocalFallbackIfEmpty] so a fresh CHW (no cache) or a CHW
      * who just mastered their last morning-card module still sees a top module.
      */
-    suspend fun refilter(chwId: String) {
+    suspend fun refilter(chwId: String): Unit = refreshMutex.withLock {
         val cache = database.morningCardCacheDao().getAllOrderedOnce()
         if (cache.isEmpty()) {
             morningCardsItems.value = emptyList()

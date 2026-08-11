@@ -23,6 +23,7 @@ import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.ui.common.CircularScoreArc
 import com.medtroniclabs.microcoaching.ui.learn.LearnUiState
 import com.medtroniclabs.microcoaching.ui.learn.LearnViewModel
+import com.medtroniclabs.microcoaching.ui.learn.finishQuiz
 import com.medtroniclabs.microcoaching.ui.learn.QuizQuestion
 
 /**

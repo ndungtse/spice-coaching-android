@@ -22,18 +22,18 @@ import com.medtroniclabs.microcoaching.ui.learn.modules.components.RefresherList
 import com.medtroniclabs.microcoaching.ui.theme.SurfaceBackground
 
 /**
- * Full-screen, scrollable list of every refresher — reached from the "See all"
- * link on the modules screen's Refreshers section. Mirrors [AllModulesScreen]
- * (top header + scrollable body), but renders the full-width [RefresherList]
- * tiles instead of a grid because refresher tiles are list-shaped, not grid
- * cells.
+ * Full-screen "Practice Zone" list of EVERY active refresher — reached from the
+ * "See all" link on the Coaching tab's Refresher sub-tab. Mirrors
+ * [AllModulesScreen] (top header + scrollable body), but renders the full-width
+ * [RefresherList] tiles instead of a grid because refresher tiles are
+ * list-shaped, not grid cells.
  *
  * Refreshers come straight from the shared
- * [com.medtroniclabs.microcoaching.domain.refresher.CoachingModuleStore] —
- * the same source [ModulesScreen] reads via `QuickLearnViewModel.refresherModules`
- * — so the home list and this screen always agree. Tapping a tile runs the exact
- * same path as the home Refresher list ([onRefresherStart] then
- * [onShowRefresherQuiz]), so the bottom-sheet / quiz flow is unchanged.
+ * [com.medtroniclabs.microcoaching.domain.refresher.CoachingModuleStore] — the
+ * same source the Refresher sub-tab's Practice Zone row reads — so the sub-tab
+ * and this screen always agree. Tapping a tile runs the exact same path as the
+ * sub-tab tiles ([onRefresherStart] then [onShowRefresherQuiz]), so the
+ * bottom-sheet / quiz flow is unchanged.
  */
 @Composable
 fun RefreshersScreen(
@@ -45,10 +45,6 @@ fun RefreshersScreen(
 ) {
     val sdk = MicroCoachingSDK.getInstance()
     val refreshers by sdk.coachingModuleStore.refresherModules.collectAsState()
-    val skipped by sdk.skippedRefresherFamilyIds.collectAsState()
-    // This screen lists ONLY skipped refreshers (the deferred bucket); the rest of
-    // the active queue is worked through via the banner's "Next refresher" chain.
-    val skippedRefreshers = refreshers.filter { it.moduleFamilyId in skipped }
     // Sheet queue = the FULL active pool, so "Next refresher" still chains the whole
     // active set (matching the home screen) regardless of which tile is tapped.
     val poolFamilyIds = refreshers.map { it.moduleFamilyId }
@@ -59,7 +55,7 @@ fun RefreshersScreen(
             .background(SurfaceBackground),
     ) {
         SdkScreenHeader(
-            title = stringResource(R.string.modules_section_refreshers),
+            title = stringResource(R.string.coaching_section_practice_zone),
             onBack = onBack,
             onHome = onHome,
         )
@@ -70,13 +66,13 @@ fun RefreshersScreen(
                 .padding(vertical = 12.dp),
         ) {
             RefresherList(
-                modules = skippedRefreshers,
+                modules = refreshers,
                 onSelect = { module ->
                     onRefresherStart(module)
                     onShowRefresherQuiz(poolFamilyIds)
                 },
                 showHeader = false,
-                emptyMessage = stringResource(R.string.refresher_empty_no_skipped),
+                emptyMessage = stringResource(R.string.refresher_empty_none),
             )
             Spacer(Modifier.height(80.dp)) // Breathing room for FABs
         }

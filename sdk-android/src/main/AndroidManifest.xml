@@ -86,10 +86,11 @@
             android:exported="false" />
 
         <!--
-            Source-document preview — launched from chat citation chips. Hosts
-            the WebView that renders the presigned-URL PDF. `configChanges` keeps
-            the WebView state across rotation so the user doesn't lose their
-            place after a tilt. Exported=false: only SDK code calls it.
+            Source-document preview — launched from chat citation chips and the
+            Knowledge section. Renders a locally-cached PDF (via the platform
+            PdfRenderer) or image; streams video/audio. `configChanges` preserves
+            scroll/zoom state across rotation so the user doesn't lose their place
+            after a tilt. Exported=false: only SDK code calls it.
         -->
         <activity
             android:name="com.medtroniclabs.microcoaching.ui.document.DocumentPreviewActivity"
@@ -120,7 +121,7 @@
             to can read the file.
         -->
         <provider
-            android:name="androidx.core.content.FileProvider"
+            android:name="com.medtroniclabs.microcoaching.CoachingFileProvider"
             android:authorities="${applicationId}.microcoaching.provider"
             android:exported="false"
             android:grantUriPermissions="true">

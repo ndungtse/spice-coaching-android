@@ -45,6 +45,11 @@ data class AssignedModuleEntity(
     @ColumnInfo(name = "module_family_id")
     val moduleFamilyId: String? = null,
 
+    /**
+     * When the module was assigned, epoch millis — from the backend's v3
+     * `assigned_module_ids[].assigned_at`. Null for the legacy id-only shape (which
+     * carried no timestamp) or when the backend omits it.
+     */
     @ColumnInfo(name = "assigned_at")
     val assignedAt: Long? = null,
 

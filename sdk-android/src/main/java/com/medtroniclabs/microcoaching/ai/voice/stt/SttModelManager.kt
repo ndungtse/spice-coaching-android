@@ -14,6 +14,7 @@ import com.medtroniclabs.microcoaching.MicroCoachingConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -51,8 +52,25 @@ class SttModelManager(private val config: MicroCoachingConfig) {
         config.context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
     init {
-        reconcileReadyState()
+        // Reconcile probes getExternalFilesDir + several File.exists() checks —
+        // run it off the constructing thread (Builder.build() forces this
+        // manager on the main thread when voice is enabled). Guarded on Idle so
+        // a WorkInfo emission that lands first (a live download) wins.
+        scope.launch(Dispatchers.IO) {
+            if (_state.value is SttModelState.Idle) reconcileReadyState()
+        }
         observeUniqueWork()
+    }
+
+    /**
+     * Cancels the WorkManager observation scope. Called by
+     * [com.medtroniclabs.microcoaching.MicroCoachingSDK.shutdown] when the SDK
+     * instance is replaced — mirrors
+     * [com.medtroniclabs.microcoaching.ai.model.ModelManager.close]. The
+     * manager is unusable afterwards.
+     */
+    fun close() {
+        scope.cancel()
     }
 
     /** Absolute path to the Bengali model directory. May not exist yet. */
@@ -232,7 +250,7 @@ class SttModelManager(private val config: MicroCoachingConfig) {
         const val DOWNLOAD_TAG = "microcoaching_stt_download"
         const val UNIQUE_WORK_NAME = "microcoaching_stt_download_bn"
 
-        private const val PREFS_NAME = "microcoaching_stt_prefs"
+        private const val PREFS_NAME = com.medtroniclabs.microcoaching.util.PrefsNames.STT
         private const val KEY_BN_READY = "stt_bn_ready"
 
         private val REQUIRED_FILES = listOf(

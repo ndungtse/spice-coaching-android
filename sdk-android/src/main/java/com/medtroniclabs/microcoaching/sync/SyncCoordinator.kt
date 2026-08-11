@@ -133,6 +133,9 @@ class SyncCoordinator(private val context: Context) {
         workManager.cancelUniqueWork(InboundSyncWorker.WORK_NAME)
         workManager.cancelUniqueWork(OutboundSyncWorker.WORK_NAME + "_periodic")
         workManager.cancelUniqueWork(InboundSyncWorker.WORK_NAME + "_periodic")
+        // The hook-triggered flush leg (triggerOutboundNow) has its own unique
+        // name — it was previously left running across SDK shutdowns.
+        workManager.cancelUniqueWork(OutboundSyncWorker.WORK_NAME + "_flush")
     }
 
     companion object {

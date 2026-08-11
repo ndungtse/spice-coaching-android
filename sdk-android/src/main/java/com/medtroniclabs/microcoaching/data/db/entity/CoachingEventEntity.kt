@@ -16,7 +16,7 @@ import androidx.room.PrimaryKey
  *
  * Event taxonomy (eventType values):
  *   card_shown, card_skipped, card_accepted, counselling_used, audio_played
- *   quiz_started, module_quiz_attempted
+ *   module_quiz_viewed, module_quiz_attempted
  *   spice_action_observed, risk_flag_observed, equipment_anomaly_observed
  *   session_start, session_end
  *   digital_help_used

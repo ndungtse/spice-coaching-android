@@ -7,7 +7,7 @@ import kotlinx.coroutines.flow.StateFlow
  * Common interface for all on-device LLM inference engines.
  *
  * Implementations:
- *   - [GemmaService] — MediaPipe Gemma 3 1B INT4 (`.task` model file)
+ *   - [GemmaService] — MediaPipe, loads any Gemma `.task` variant from the model catalog
  *
  * The implementation is selected at runtime by [InferenceRouter]
  * based on the model file extension.

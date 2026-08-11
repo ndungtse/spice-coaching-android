@@ -6,6 +6,7 @@ import com.medtroniclabs.microcoaching.data.db.entity.ModuleEntity
 import com.medtroniclabs.microcoaching.data.db.entity.MorningCardCacheEntity
 import com.medtroniclabs.microcoaching.data.mapper.parseIsoMillis
 import com.medtroniclabs.microcoaching.domain.context.TodaysVisit
+import com.medtroniclabs.microcoaching.domain.telemetry.sha256Short
 import java.util.TimeZone
 
 /**
@@ -72,7 +73,7 @@ internal class OnDeviceMorningGenerator(
     suspend fun generate(chwId: String, nowMillis: Long): Int {
         Log.i(
             TAG,
-            "generate: chw=$chwId — computing offline morning cards " +
+            "generate: chw=${chwId.sha256Short()} — computing offline morning cards " +
                 "(sources: quiz=${sources.quiz} gap=${sources.gap} referral=${sources.referral} visit=${sources.visit})",
         )
 
@@ -263,7 +264,7 @@ internal class OnDeviceMorningGenerator(
     ) {
         if (gapStates.isNotEmpty()) {
             val active = gapStates.values.count { it.status == GapStatus.ACTIVE || it.status == GapStatus.MONITORING }
-            Log.i(TAG, "states: chw=$chwId gapStates=${gapStates.size} gapActive=$active")
+            Log.i(TAG, "states: chw=${chwId.sha256Short()} gapStates=${gapStates.size} gapActive=$active")
         }
 
         // Per-card provenance: the source (quiz-level, legacy gap-driven, today's-visit,

@@ -17,6 +17,12 @@
     <string name="chat_show_english">Show English</string>
     <string name="chat_show_bengali">Show Bengali</string>
     <string name="chat_speak">Speak</string>
+    <string name="chat_feedback_helpful">Helpful response</string>
+    <string name="chat_feedback_not_helpful">Not a helpful response</string>
+    <string name="chat_feedback_sheet_title">Tell us more</string>
+    <string name="chat_feedback_sheet_prompt">What was wrong with this response? Your feedback helps us improve.</string>
+    <string name="chat_feedback_sheet_placeholder">Add details (optional)</string>
+    <string name="chat_feedback_sheet_submit">Submit</string>
     <string name="chat_translate">Translate</string>
     <string name="chat_response_details">Response Details</string>
     <string name="chat_risk_label">Risk: </string>
@@ -48,8 +54,17 @@
     <string name="chat_header_title">AI Coach</string>
     <string name="chat_header_online">Online</string>
     <string name="chat_header_offline">Offline</string>
+    <!-- Manual on-device/online chat mode chip in the header -->
+    <string name="chat_mode_online">Online</string>
+    <string name="chat_mode_on_device">On-device</string>
+    <string name="chat_mode_online_unavailable">· No internet</string>
+    <string name="chat_mode_tap_to_change">· Tap to change</string>
+    <string name="chat_mode_switch_to_online">Switch to online AI</string>
+    <string name="chat_mode_switch_to_on_device">Switch to on-device AI</string>
+    <string name="chat_model_unsupported">The downloaded AI model can\'t run on this app version. Please contact support or switch to online chat.</string>
+    <string name="chat_model_load_failed_retry">Couldn\'t start the AI model: %1$s. Tap “Go to chat” to try again.</string>
     <string name="chat_today">Today</string>
-    <string name="chat_welcome_message">How can I help you today? You can ask me about patient counselling, clinical protocols, growth monitoring, or SPICE.</string>
+    <string name="chat_welcome_message">How can I help you today? You can ask me about patient counselling, clinical protocols, or SPICE.</string>
     <string name="chat_close_sheet">Close chat</string>
     <string name="chat_download_pause">Pause</string>
     <string name="chat_download_resume">Resume</string>
@@ -93,7 +108,7 @@
     <string name="learn_lesson_complete_title">Lesson complete!</string>
     <string name="learn_lesson_complete_body">You\'ve read through the Blood Pressure Referral reference table. You can come back here to review at any time.</string>
     <string name="learn_back_to_modules">Back to modules</string>
-    <string name="learn_retry_sync">Retry</string>
+    <string name="learn_retry_sync">@string/common_retry</string>
 
     <!-- ── Domain chips ───────────────────────────────────────────────────── -->
     <string name="domain_hypertension">Hypertension</string>
@@ -101,6 +116,11 @@
     <string name="domain_maternal_health">Maternal Health</string>
     <string name="domain_emergency">Emergency</string>
     <string name="domain_spice_digital">SPICE Digital</string>
+
+    <!-- ── Content-domain tags (Med-I617) ─────────────────────────────────── -->
+    <string name="content_domain_clinical">Clinical</string>
+    <string name="content_domain_digital">Digital</string>
+    <string name="content_domain_operational">Operational</string>
 
     <!-- ── Status chips ───────────────────────────────────────────────────── -->
     <string name="status_completed">Completed</string>
@@ -177,6 +197,7 @@
     <string name="module_detail_minutes">%1$d Mins</string>
     <!-- ── W4 course-detail + lesson player ───────────────────────────────── -->
     <string name="module_detail_curriculum">Curriculum</string>
+    <string name="module_detail_assigned_on">Assigned %1$s</string>
     <string name="module_detail_learning_cards">Learning cards</string>
     <string name="module_detail_quiz_section">Quiz</string>
     <string name="module_detail_knowledge_check">Knowledge check</string>
@@ -198,7 +219,17 @@
     <string name="refresher_back">Back</string>
     <string name="lesson_player_start_quiz">Start Quiz</string>
     <string name="lesson_player_back_to_modules">More modules</string>
+    <string name="lesson_player_finish">Finish</string>
     <string name="quiz_try_again">Try Again</string>
+
+    <!-- ── Cards-completion screen (modules with no quiz) ─────────────────── -->
+    <string name="cards_complete_title">Module Completed</string>
+    <string name="cards_complete_headline">Great job!</string>
+    <string name="cards_complete_body">You\'ve successfully read all the learning cards in this module.</string>
+    <string name="cards_complete_whats_next_title">What\'s next?</string>
+    <string name="cards_complete_whats_next_body">Continue to the next module to build more knowledge.</string>
+    <string name="cards_complete_continue">Continue</string>
+    <string name="cards_complete_back_to_modules">Back to Modules</string>
 
     <!-- ── Voice input + translation ─────────────────────────────────────── -->
     <string name="chat_voice_input_hint">Tap to speak</string>
@@ -261,6 +292,10 @@
          misleading. -->
     <string name="chat_error_no_response_available">Couldn\'t get a response right now. Please try again.</string>
     <string name="chat_error_no_response_generated">No response generated — try again.</string>
+    <!-- Shown when the on-device language pack needed to translate the chat
+         question/answer couldn't be loaded or downloaded. Names the real cause
+         (the language pack) rather than connectivity or the AI model. -->
+    <string name="chat_error_language_pack">Couldn\'t load the language pack needed to answer. Connect to the internet to finish downloading it, then try again.</string>
 
     <!-- ── Translation pack state chip (Block E) ────────────────────────── -->
     <string name="translation_pack_downloading">Translation pack downloading…</string>
@@ -298,6 +333,7 @@
     <string name="knowledge_doc_unavailable_offline">Document not available offline</string>
     <string name="knowledge_view_cd">View</string>
     <string name="doc_error_storage_full">Not enough storage to download this document</string>
+    <string name="doc_error_offline_not_downloaded">This document isn\'t downloaded yet. Connect to the internet to download and view it.</string>
     <string name="doc_type_pdf">PDF</string>
     <string name="doc_type_presentation">Slides</string>
     <string name="doc_type_spreadsheet">Spreadsheet</string>
@@ -306,7 +342,8 @@
     <string name="doc_type_file">File</string>
     <!-- Host coaching grid tile (CoachingGridTile). -->
     <string name="coaching_tile_label">Coaching</string>
-    <string name="coaching_tile_badge_cd">%1$d skipped refreshers</string>
+    <string name="coaching_tile_new_videos">New videos assigned</string>
+    <string name="coaching_tile_new_modules">New modules assigned</string>
     <string name="doc_cannot_preview">This file can\'t be previewed in-app</string>
     <string name="doc_open_with">Open with another app</string>
 
@@ -359,6 +396,15 @@
     <string name="chat_voice_error_network">Network error. Try again when you\'re online.</string>
     <string name="chat_voice_error_engine">Voice input isn\'t available on this device.</string>
     <string name="chat_voice_error_generic">Voice input failed. Tap the mic to try again.</string>
+    <!-- Specific STT failure causes — shown instead of the generic message when the
+         recognizer error is recognisable, so the user (and QA) sees the true reason. -->
+    <string name="chat_voice_error_language">Speech recognition isn\'t available for this language on this device.</string>
+    <!-- Offline + the platform's on-device speech pack for the language isn't installed.
+         The pack download is queued automatically; it needs internet to land. -->
+    <string name="chat_voice_error_offline_pack_missing">You\'re offline and the voice pack for this language isn\'t downloaded yet. Connect to the internet once — it will download automatically for offline use.</string>
+    <string name="chat_voice_error_busy">Voice recognizer is busy. Wait a moment, then tap the mic again.</string>
+    <string name="chat_voice_error_audio">Couldn\'t access the microphone. Make sure nothing else is using it and try again.</string>
+    <string name="chat_voice_error_service">Speech recognition service is unavailable right now. Try again.</string>
     <string name="chat_voice_backend_on_device">On-device (offline)</string>
     <string name="chat_voice_backend_server">Server (needs internet)</string>
     <string name="chat_voice_backend_offline_model">Offline voice model</string>
@@ -373,10 +419,15 @@
     <string name="stt_banner_downloading_preparing">Preparing Bengali voice model download…</string>
     <string name="stt_banner_extracting">Unpacking Bengali voice model…</string>
     <string name="stt_banner_failed">Voice model download failed — tap retry</string>
-    <string name="stt_banner_retry">Retry</string>
+    <string name="stt_banner_retry">@string/common_retry</string>
     <string name="stt_banner_cancel">Cancel</string>
 
-    <!-- ── Download item cards on ModelNotReady screen ─────────────────────────── -->
+    <!-- ── Coaching setup screen ───────────────────────────────────────────────── -->
+    <string name="coaching_setup_title">Set up coaching</string>
+    <string name="coaching_setup_description">We\'ll download what coaching needs to work offline. This runs in the background. You can keep using the app.</string>
+    <string name="coaching_setup_go_to_chat">Go to chat</string>
+
+    <!-- ── Download item cards on the coaching setup screen ─────────────────────── -->
     <string name="download_card_ai_title">AI Model</string>
     <string name="download_card_ai_size">~%1$s</string>
     <string name="download_card_voice_title">Bengali Voice Model</string>
@@ -395,8 +446,9 @@
     <string name="download_card_progress_mb">%1$d MB / %2$d MB · %3$d%%</string>
     <string name="download_card_progress_indeterminate">%1$d MB downloaded</string>
     <string name="download_card_progress_percent">%1$d%%</string>
-    <string name="download_both">Download both</string>
-    <string name="download_both_hint">Voice model continues after the AI model finishes.</string>
+    <string name="download_card_tts_title">Read-aloud voice</string>
+    <string name="download_card_tts_hint">For reading answers aloud</string>
+    <string name="download_card_tts_install">Install</string>
 
     <!-- ── Model download foreground-service notification ─────────────────────── -->
     <string name="notification_model_download_channel_name">AI model download</string>
@@ -409,5 +461,178 @@
 
     <!-- In-app variant of chat_downloading_model_progress that also shows MB. -->
     <string name="chat_downloading_model_progress_mb">Downloading model… (%1$d MB / %2$d MB · %3$d%%)</string>
+
+    <!-- ── Role-aware coaching (SK leaderboard / PO dashboard) ─────────────────── -->
+    <string name="coaching_tab_coaching">Coaching</string>
+    <string name="coaching_tab_leaderboard">Leaderboard</string>
+    <string name="coaching_tab_dashboard">Dashboard</string>
+    <string name="coaching_po_header_title">At a Glance</string>
+    <string name="coaching_leaderboard_coming_soon">Leaderboard coming soon</string>
+    <string name="coaching_dashboard_coming_soon">Dashboard coming soon</string>
+    <string name="leaderboard_period_all_time">All Time</string>
+    <string name="leaderboard_period_this_month">This Month</string>
+    <string name="leaderboard_period_this_week">This Week</string>
+    <string name="leaderboard_you">You</string>
+    <string name="leaderboard_group_meta">%1$s · %2$d SKs</string>
+    <string name="leaderboard_updated">Updated %1$s</string>
+    <string name="leaderboard_achievement_leading">You\'re #1! You\'re leading %1$s. Keep it up!</string>
+    <string name="leaderboard_xp_value">%1$s XP</string>
+    <string name="coaching_streak_banner">%1$d-day streak! Keep going — you\'re on a roll</string>
+
+    <!-- ── Coaching sub-tabs restructure (Training/Refresher/Knowledge/Badges) ─── -->
+    <string name="coaching_tab_badges">Badges</string>
+    <string name="coaching_subtab_training">Training</string>
+    <string name="coaching_subtab_refresher">Refresher</string>
+    <string name="coaching_subtab_knowledge">Knowledge</string>
+    <string name="coaching_section_practice_zone">Practice Zone</string>
+    <string name="coaching_section_learning_library">Learning Library</string>
+    <string name="refresher_hero_start_module">Start module</string>
+    <string name="practice_zone_tag_learning">Learning</string>
+    <string name="badge_new">NEW</string>
+    <string name="training_videos_more">More videos</string>
+    <string name="training_videos_meta">%1$s · %2$d min</string>
+    <string name="training_videos_meta_duration">%1$d min</string>
+    <string name="training_videos_coming_soon">Video playback coming soon</string>
+    <string name="training_videos_empty">No training videos yet</string>
+    <string name="training_videos_download">Download</string>
+    <string name="training_videos_remove_download">Remove download</string>
+    <string name="training_videos_storage_full">Not enough storage to download this video.</string>
+    <string name="training_videos_download_failed">Couldn\'t download this video. Please try again.</string>
+    <string name="badges_earned_count">%1$d of %2$d earned</string>
+    <string name="badges_journey_title">Your Journey</string>
+    <string name="badges_journey_subtitle">Track the milestones you unlock as you learn</string>
+    <string name="badges_journey_see_path">See your learning path</string>
+    <string name="badges_milestones_count">%1$d of %2$d milestones</string>
+    <string name="badge_now">NOW</string>
+    <string name="journey_start_lesson">Start lesson</string>
+    <string name="knowledge_empty_none">No knowledge documents yet</string>
+
+    <!-- ── PO dashboard ───────────────────────────────────────────────────────── -->
+    <string name="po_showing_data_for">Showing data for</string>
+    <string name="po_date_from">From</string>
+    <string name="po_date_to">To</string>
+    <string name="common_ok">OK</string>
+    <string name="common_cancel">Cancel</string>
+    <string name="po_metric_active_now">Responsive SKs</string>
+    <string name="po_metric_inactive">Non-Responsive SKs</string>
+    <string name="po_metric_finished_modules">Finished Modules</string>
+    <string name="po_metric_chatbot_engaged">Chatbot Engaged</string>
+    <string name="po_section_my_sks">My SKs</string>
+    <string name="po_section_module_completion">Module Completion</string>
+    <string name="po_section_top_searched_existing_modules">Top Searched Existing Modules</string>
+    <string name="po_section_top_searched_suggested_modules">Top Searched Suggested Modules</string>
+    <!-- Knowledge-document usage -->
+    <string name="po_section_document_usage">Knowledge Document Usage</string>
+    <string name="po_document_total_opens">Total opens</string>
+    <string name="po_document_unique_documents">Documents</string>
+    <string name="po_document_unique_readers">Readers</string>
+    <string name="po_document_opens_and_readers">%1$d opens · %2$d readers</string>
+    <string name="po_document_last_opened">Last opened %1$s</string>
+    <string name="po_document_last_opened_by">Last opened %1$s by %2$s</string>
+    <string name="po_document_opens_list">Opens</string>
+    <string name="po_document_empty_opens">No documents opened in this period</string>
+    <string name="po_document_reader_with_role">%1$s (%2$s)</string>
+    <string name="po_search_hint_documents">Search documents…</string>
+    <string name="po_section_refreshers_completed">Refreshers Completed</string>
+    <string name="po_search_hint">Search SKs…</string>
+    <string name="po_status_active">Responsive</string>
+    <string name="po_status_needs_attention">Needs attention</string>
+    <string name="po_status_inactive">Non-Responsive</string>
+    <string name="po_modules_fraction">%1$d/%2$d modules</string>
+    <string name="po_drilldown_active">Responsive SKs</string>
+    <string name="po_drilldown_chatbot">Chatbot Usage</string>
+    <string name="po_drilldown_modules">Modules Completed</string>
+    <string name="po_drilldown_sk">My SK</string>
+    <string name="po_group_active">RESPONSIVE (%1$d)</string>
+    <string name="po_group_needs_attention">NEEDS ATTENTION (%1$d)</string>
+    <string name="po_group_inactive">NON-RESPONSIVE (%1$d)</string>
+    <string name="po_group_using_chatbot">USING CHATBOT (%1$d)</string>
+    <string name="po_group_not_using_chatbot">NOT USING CHATBOT (%1$d)</string>
+    <string name="po_queries_count">%1$d queries</string>
+    <string name="po_modules_subtitle">%1$d MODULES · %2$d SKs</string>
+    <string name="po_sk_summary_modules">Modules</string>
+    <string name="po_sk_summary_queries">Queries</string>
+    <string name="po_sk_summary_streak">Streak</string>
+    <string name="po_sk_section_activity">Activity</string>
+    <string name="po_sk_section_top_queries">Top Queries</string>
+    <string name="po_sk_last_chatbot">Last chatbot use</string>
+    <string name="po_sk_last_module">Last module</string>
+    <string name="po_sk_module_done">Done</string>
+    <string name="po_sk_module_pending">Pending</string>
+    <string name="po_fraction">%1$d/%2$d</string>
+    <string name="po_error_pull_to_refresh">Pull down to refresh.</string>
+    <string name="po_stale_notice">@string/common_couldnt_refresh</string>
+    <string name="po_offline_message">@string/common_error_offline</string>
+    <string name="po_error_generic">@string/common_error_generic</string>
+    <string name="po_retry">@string/common_retry</string>
+    <string name="po_na">N/A</string>
+    <string name="po_sk_no_modules">No modules assigned</string>
+    <string name="po_sk_no_queries">No queries in this period</string>
+    <!-- Section "Show all" full-list screens -->
+    <string name="po_show_all">Show all (%1$d)</string>
+    <string name="po_search_hint_modules">Search modules…</string>
+    <string name="po_filter_all">All</string>
+    <string name="po_filter_active">Responsive</string>
+    <string name="po_filter_inactive">Non-Responsive</string>
+    <string name="po_filter_chatbot">Chatbot</string>
+    <string name="po_section_empty">No items found</string>
+    <!-- MED-I628 Top Searched drill-downs -->
+    <string name="po_searched_existing_title">Searched Module</string>
+    <string name="po_searched_suggested_title">Suggested Module</string>
+    <string name="po_searched_served">Served by chatbot</string>
+    <string name="po_searched_requested">Requested for assignment</string>
+    <string name="po_searched_queries">Queries</string>
+    <string name="po_searched_requests">Requests</string>
+    <string name="po_searched_reason">Reason</string>
+    <string name="po_searched_occurrences">Asked %1$d times</string>
+    <string name="po_searched_empty_queries">No queries in this period</string>
+    <string name="po_searched_empty_requests">No requests in this period</string>
+    <string name="training_empty_no_assigned">No modules have been assigned yet</string>
+
+    <!-- Training requests (CHW) -->
+    <string name="training_requests_entry_title">Training Requests</string>
+    <string name="training_requests_entry_subtitle">Request training or suggest new module topics</string>
+    <string name="training_requests_entry_view">View</string>
+    <string name="training_requests_title">Training Requests</string>
+    <string name="training_requests_empty">No training requests yet</string>
+    <string name="training_requests_empty_hint">Request training on a module or suggest a new topic — your requests help admins plan new training modules.</string>
+    <string name="training_request_new">New Request</string>
+    <string name="training_request_submitted_on">Requested %1$s</string>
+    <string name="training_request_form_title">Request Training</string>
+    <string name="training_request_form_description">Request training on an existing module, or suggest a new topic you need. Admins use these requests when planning new training modules.</string>
+    <string name="training_request_requested_by">Requested by</string>
+    <string name="training_request_module_label">Module</string>
+    <string name="training_request_module_placeholder">Select a module</string>
+    <string name="training_request_picker_title">Select a module</string>
+    <string name="training_request_picker_search_hint">Search modules</string>
+    <string name="training_request_picker_empty">No modules found</string>
+    <string name="training_request_picker_suggest_new">Suggest a new module</string>
+    <string name="training_request_picker_suggest_query">Suggest \"%1$s\" as a new module</string>
+    <string name="training_request_custom_hint">e.g. Managing diabetes during pregnancy</string>
+    <string name="training_request_custom_supporting">Sent as a suggestion for a new training module</string>
+    <string name="training_request_custom_clear">Back to module list</string>
+    <string name="training_request_reason_label">Reason</string>
+    <string name="training_request_reason_hint">Why do you need this training?</string>
+    <string name="training_request_submit">Submit Request</string>
+    <string name="training_request_submitted">Your training request has been submitted.</string>
+    <string name="training_request_error_duplicate">You already have a raised request for this module.</string>
+    <string name="training_request_error_generic">Could not submit the request. Please try again.</string>
+    <string name="training_request_load_error">Could not load your training requests.</string>
+    <string name="training_request_cta">Request training</string>
+
+    <!-- ── Incomplete-module reminder popup (MED-1529 Req 2) ──────────────── -->
+    <string name="reminder_incomplete_title">Incomplete modules</string>
+    <string name="reminder_incomplete_body">You have %1$d module(s) left to complete.</string>
+    <string name="reminder_incomplete_ok">OK</string>
+
+    <!-- ── Shared status/error copy (CoachingError taxonomy + StatusView) ──────── -->
+    <string name="common_retry">Retry</string>
+    <string name="common_error_offline">You\'re offline. Reconnect and try again.</string>
+    <string name="common_error_server">The server is having trouble. Please try again in a moment.</string>
+    <string name="common_error_not_allowed">We couldn\'t load this. Please contact your supervisor.</string>
+    <string name="common_error_no_backend">No modules available. Backend is not configured.</string>
+    <string name="common_error_generic">Something went wrong.</string>
+    <string name="common_couldnt_refresh">Couldn\'t refresh — showing saved content.</string>
+    <string name="coaching_sync_partial_notice">Some content couldn\'t be updated. Pull down to try again.</string>
 
 </resources>

@@ -8,6 +8,9 @@ import android.os.Build
 import android.util.Log
 import androidx.work.CoroutineWorker
 import com.medtroniclabs.microcoaching.BuildConfig
+import com.medtroniclabs.microcoaching.ai.download.DownloadResult
+import com.medtroniclabs.microcoaching.ai.download.ResumableHttpDownloader
+import com.medtroniclabs.microcoaching.network.NetworkModule
 import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
@@ -139,15 +142,19 @@ class ModelDownloadWorker(
         // which provider served the bytes.
         val outputFile = File(outputDir, variant.fileName)
 
+        NetworkModule.logAuthFingerprint(authToken, "model-download")
         val headers = buildMap<String, String> {
-            if (authToken.isNotBlank()) put("Authorization", "Bearer $authToken")
+            // Forwarded verbatim — the backend gateway expects the login token
+            // as-is, with no `Bearer` prefix.
+            if (authToken.isNotBlank()) put("Authorization", authToken)
+            put("Client", NetworkModule.CLIENT_HEADER_VALUE)
         }
 
         return streamDownload(
             url = downloadUrl,
             headers = headers,
             outputFile = outputFile,
-            minValidBytes = ModelCatalog.minValidSizeBytes(variant),
+            minValidBytes = ModelSizeProbe.minValidSizeBytes(applicationContext, variant),
         )
     }
 
@@ -188,153 +195,33 @@ class ModelDownloadWorker(
             url = hfUrl,
             headers = headers,
             outputFile = outputFile,
-            minValidBytes = ModelCatalog.minValidSizeBytes(variant),
+            minValidBytes = ModelSizeProbe.minValidSizeBytes(applicationContext, variant),
         )
     }
 
     // ── Shared streaming download ─────────────────────────────────────────────
 
     /**
-     * Streams [url] to [outputFile], resuming from existing bytes if the server supports Range.
-     * Reports progress (0–99) via WorkManager [setProgress].
+     * Streams [url] to [outputFile] (resume + throttled progress + size-floor check) via the
+     * shared [ResumableHttpDownloader], reporting progress through [emitProgress]. Maps the
+     * shared result back to this worker's provider-fallback [DownloadOutcome].
      */
     private suspend fun streamDownload(
         url: String,
         headers: Map<String, String>,
         outputFile: File,
         minValidBytes: Long,
-    ): DownloadOutcome = runCatching {
-        val client = OkHttpClient.Builder()
-            .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(300, TimeUnit.SECONDS)
-            .build()
-
-        // Resume from partial file
-        val existingBytes = if (outputFile.exists()) outputFile.length() else 0L
-        val requestBuilder = Request.Builder().url(url)
-        headers.forEach { (k, v) -> requestBuilder.header(k, v) }
-        if (existingBytes > 0L) {
-            requestBuilder.header("Range", "bytes=$existingBytes-")
-        }
-
-        val response = client.newCall(requestBuilder.build()).execute()
-
-        // Always close the response to avoid OkHttp connection leaks on early returns.
-        response.use { resp ->
-            val isPartialContent = resp.code == 206
-            Log.d(TAG, "streamDownload → HTTP ${resp.code} ${resp.message} | url=$url")
-
-            if (resp.code == 416) {
-                // Range not satisfiable — server rejected our resume offset.
-                // If the local file is already ≥ the variant's size floor it is almost
-                // certainly the complete model; treat it as a successful download so
-                // inference can proceed. If smaller, it is a corrupt partial — delete it
-                // so the next attempt starts from zero.
-                val localSize = outputFile.length()
-                return@runCatching if (localSize >= minValidBytes) {
-                    Log.i(TAG, "HTTP 416 — local file is ${localSize / 1_048_576} MB, treating as already complete")
-                    DownloadOutcome.Success(outputFile)
-                } else {
-                    outputFile.delete()
-                    Log.w(TAG, "HTTP 416 — partial file deleted (${localSize / 1_048_576} MB), retry to start fresh")
-                    DownloadOutcome.Failure("HTTP 416: partial file removed — retry to restart download")
-                }
-            }
-
-            if (!resp.isSuccessful && !isPartialContent) {
-                if (BuildConfig.DEBUG) {
-                    val errorBody = resp.body?.string()?.take(500) ?: "<no body>"
-                    Log.e(TAG, "streamDownload failed | HTTP ${resp.code} | body=$errorBody | headers=${resp.headers}")
-                } else {
-                    Log.e(TAG, "streamDownload failed | HTTP ${resp.code}: ${resp.message}")
-                }
-                return@runCatching DownloadOutcome.Failure("HTTP ${resp.code}: ${resp.message}")
-            }
-
-            val body = resp.body
-                ?: return@runCatching DownloadOutcome.Failure("Empty response body")
-
-            val contentLength = body.contentLength()
-            val totalBytes = if (contentLength > 0L) contentLength + existingBytes else 0L
-            val appendToFile = existingBytes > 0L && isPartialContent
-
-            if (existingBytes > 0L) {
-                Log.i(TAG, "Resuming download from byte $existingBytes (${existingBytes / 1_048_576} MB already present)")
-            }
-
-            body.byteStream().use { input ->
-                FileOutputStream(outputFile, appendToFile).use { output ->
-                    val buffer = ByteArray(BUFFER_SIZE)
-                    var bytesRead: Int
-                    var totalRead = existingBytes
-
-                    // Throttle progress emission: every percent change, or every
-                    // PROGRESS_EMIT_INTERVAL_MS, whichever comes first. Without throttling
-                    // each 8 KB iteration would spam setForeground and saturate the
-                    // notification system.
-                    var lastEmitMs = 0L
-                    var lastEmittedPercent = -1
-
-                    // First emit happens once we already have a stream open so the
-                    // notification flips from the initial "0 MB" to a real number quickly.
-                    emitProgress(
-                        percent = if (totalBytes > 0L) {
-                            ((totalRead * 100L) / totalBytes).toInt().coerceIn(0, 99)
-                        } else 0,
-                        bytesDownloaded = totalRead,
-                        totalBytes = totalBytes,
-                    )
-                    lastEmitMs = System.currentTimeMillis()
-
-                    while (input.read(buffer).also { bytesRead = it } != -1) {
-                        output.write(buffer, 0, bytesRead)
-                        totalRead += bytesRead
-
-                        val now = System.currentTimeMillis()
-                        val percent = if (totalBytes > 0L) {
-                            ((totalRead * 100L) / totalBytes).toInt().coerceIn(0, 99)
-                        } else {
-                            -1
-                        }
-                        val percentChanged = percent != -1 && percent != lastEmittedPercent
-                        val intervalElapsed = (now - lastEmitMs) >= PROGRESS_EMIT_INTERVAL_MS
-                        if (percentChanged || intervalElapsed) {
-                            lastEmitMs = now
-                            lastEmittedPercent = percent
-                            emitProgress(
-                                percent = percent.coerceAtLeast(0),
-                                bytesDownloaded = totalRead,
-                                totalBytes = totalBytes,
-                            )
-                        }
-                    }
-                    output.flush()
-                }
-            }
-
-            // Verify the download is complete. HuggingFace often uses chunked transfer
-            // (no Content-Length), so the loop above may exit on a dropped connection with
-            // a partial file. Treat anything below the minimum valid size as a failure
-            // and delete it so the next attempt starts fresh.
-            val finalSize = outputFile.length()
-            if (totalBytes > 0L && finalSize < totalBytes) {
-                outputFile.delete()
-                return@runCatching DownloadOutcome.Failure(
-                    "Incomplete download: received $finalSize of $totalBytes bytes — file deleted"
-                )
-            }
-            if (totalBytes == 0L && finalSize < minValidBytes) {
-                outputFile.delete()
-                return@runCatching DownloadOutcome.Failure(
-                    "Download too small (${finalSize / 1_048_576} MB < ${minValidBytes / 1_048_576} MB minimum) — file deleted, retry required"
-                )
-            }
-
-            DownloadOutcome.Success(outputFile)
-        }
-    }.getOrElse { cause ->
-        Log.e(TAG, "streamDownload error for $url: ${cause.message}")
-        DownloadOutcome.Failure(cause.message ?: "Unknown error")
+    ): DownloadOutcome = when (
+        val result = ResumableHttpDownloader.download(
+            url = url,
+            outputFile = outputFile,
+            minValidBytes = minValidBytes,
+            headers = headers,
+            logTag = TAG,
+        ) { percent, bytesDownloaded, totalBytes -> emitProgress(percent, bytesDownloaded, totalBytes) }
+    ) {
+        is DownloadResult.Success -> DownloadOutcome.Success(outputFile)
+        is DownloadResult.Failure -> DownloadOutcome.Failure(result.reason)
     }
 
     // ── Foreground service + progress emission ────────────────────────────────
@@ -403,54 +290,20 @@ class ModelDownloadWorker(
     }
 
     /**
-     * Same shape as `ModelManager.logNetworkSnapshot` but lives here so the
-     * worker can describe its own view of the network. Important for the
-     * "WorkManager satisfied its constraint but the worker still can't reach
-     * the network" debugging story — the worker's view is what actually
-     * matters for HTTP success.
+     * The worker's own view of the network (vs `ModelManager`'s). Important for
+     * the "WorkManager satisfied its constraint but the worker still can't reach
+     * the network" debugging story — the worker's view is what actually matters
+     * for HTTP success.
+     *
+     * @see NetworkDiagnostics.logSnapshot
      */
-    private fun logNetworkSnapshot(stage: String) {
-        val cm = applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
-        if (cm == null) {
-            Log.w(TAG, "Network snapshot[$stage]: ConnectivityManager unavailable")
-            return
-        }
-        val net = cm.activeNetwork
-        if (net == null) {
-            Log.w(TAG, "Network snapshot[$stage]: activeNetwork=null")
-            return
-        }
-        val caps = cm.getNetworkCapabilities(net)
-        if (caps == null) {
-            Log.w(TAG, "Network snapshot[$stage]: capabilities=null for activeNetwork=${net.networkHandle}")
-            return
-        }
-        Log.i(
-            TAG,
-            "Network snapshot[$stage]: activeNetwork=${net.networkHandle}, " +
-                "transports=${transportSummary(caps)}, " +
-                "notMetered=${caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)}, " +
-                "internet=${caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)}, " +
-                "validated=${caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)}",
-        )
-    }
-
-    private fun transportSummary(caps: NetworkCapabilities): String {
-        val flags = mutableListOf<String>()
-        if (caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) flags += "CELLULAR"
-        if (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) flags += "WIFI"
-        if (caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) flags += "ETHERNET"
-        if (caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) flags += "VPN"
-        if (caps.hasTransport(NetworkCapabilities.TRANSPORT_BLUETOOTH)) flags += "BLUETOOTH"
-        return if (flags.isEmpty()) "[]" else flags.joinToString(prefix = "[", postfix = "]")
-    }
+    private fun logNetworkSnapshot(stage: String) =
+        com.medtroniclabs.microcoaching.util.NetworkDiagnostics.logSnapshot(applicationContext, TAG, stage)
 
     companion object {
         private const val TAG = "ModelDownloadWorker"
-        private const val BUFFER_SIZE = 8 * 1024  // 8 KB
-        // The "is this download complete?" floor is now per-variant
-        // (ModelCatalog.minValidSizeBytes), passed into streamDownload — the old
-        // global 750 MB constant was tuned for the 1B and rejected the 270M.
+        // The completeness floor is per-variant (ModelCatalog.minValidSizeBytes),
+        // passed into streamDownload.
 
         // ── WorkManager input keys ────────────────────────────────────────────
         /** String array of provider keys — see [ModelProvider.toKey]. */
@@ -474,12 +327,9 @@ class ModelDownloadWorker(
         /** Human-readable error string. Present only on failure. */
         const val KEY_ERROR = "error"
 
-        /** Minimum gap between two progress emits, ms. Keeps notification updates ≤ 2 Hz. */
-        private const val PROGRESS_EMIT_INTERVAL_MS = 500L
-
         // Mirrors ModelManager constants — kept here so the worker can persist the
         // ready flag without needing a back-reference to the manager instance.
-        private const val PREFS_NAME = "microcoaching_model_prefs"
+        private const val PREFS_NAME = com.medtroniclabs.microcoaching.util.PrefsNames.MODEL
         private const val KEY_MODEL_READY = "model_ready"
         private const val KEY_MODEL_PATH = "model_path"
     }

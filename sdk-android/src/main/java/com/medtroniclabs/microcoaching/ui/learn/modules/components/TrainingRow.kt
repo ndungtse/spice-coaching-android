@@ -35,6 +35,12 @@ fun TrainingRow(
     tileWidth: Dp = 150.dp,
     tileSpacing: Dp = 12.dp,
     horizontalPadding: Dp = 16.dp,
+    // Null keeps the default "Training" section title; set to give the row a
+    // caller-specific heading (e.g. a sub-tab title) without duplicating this composable.
+    title: String? = null,
+    // moduleFamilyId of the single card that should render the NEW pill (see
+    // TrainingCard.showNewBadge); null (the default) renders no NEW pill anywhere.
+    newModuleFamilyId: String? = null,
 ) {
     if (modules.isEmpty()) return
 
@@ -45,7 +51,7 @@ fun TrainingRow(
 
         Column(modifier = Modifier.fillMaxWidth()) {
             SectionHeader(
-                title = stringResource(R.string.modules_section_training),
+                title = title ?: stringResource(R.string.modules_section_training),
                 seeAllLabel = if (showSeeAll) stringResource(R.string.modules_see_all) else null,
                 onSeeAllClick = if (showSeeAll) onSeeAll else null,
             )
@@ -61,10 +67,12 @@ fun TrainingRow(
                         meta = stringResource(
                             R.string.training_meta_minutes_questions,
                             module.estimatedMinutes ?: 5,
-                            module.inlineQuestions?.size ?: 0,
+                            module.questionCount,
                         ),
                         progressFraction = progressFractionFor(module),
                         thumbnailUrl = module.thumbnailUrl,
+                        showNewBadge = module.moduleFamilyId == newModuleFamilyId,
+                        contentDomain = module.contentDomain,
                         onClick = { onSelect(module) },
                         modifier = Modifier.width(layout.cardWidth),
                     )

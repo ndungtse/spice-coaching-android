@@ -20,7 +20,7 @@ import kotlinx.serialization.json.jsonArray
  *
  * See `docs/v3/rich-body.json` for the shape this targets.
  */
-private val lenientJson = Json { ignoreUnknownKeys = true; isLenient = true }
+private val lenientJson = com.medtroniclabs.microcoaching.util.LenientJson
 
 /**
  * Parse [raw] as a TipTap block array. Returns null when [raw] is not a JSON array
@@ -66,6 +66,8 @@ private fun parseBlock(element: JsonElement): RichBlock? {
                 objectName = a.stringAttr("object_name"),
                 caption = a.stringAttr("caption"),
                 alt = a.stringAttr("alt"),
+                width = a.intAttr("width"),
+                height = a.intAttr("height"),
             )
         }
 
@@ -173,6 +175,10 @@ private val JsonObject.attrs: JsonObject?
 
 private fun JsonObject?.stringAttr(key: String): String? =
     (this?.get(key) as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
+
+/** Positive integer attr (e.g. image `width`/`height`), else null. */
+private fun JsonObject?.intAttr(key: String): Int? =
+    (this?.get(key) as? JsonPrimitive)?.intOrNull?.takeIf { it > 0 }
 
 /** Lower-cases and strips separators so "ordered_list", "orderedList" both match "orderedlist". */
 private fun normalizeType(type: String?): String? =

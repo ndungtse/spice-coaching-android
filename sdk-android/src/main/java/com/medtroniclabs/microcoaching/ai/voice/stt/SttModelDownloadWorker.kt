@@ -8,8 +8,8 @@ import androidx.work.CoroutineWorker
 import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
-import okhttp3.OkHttpClient
-import okhttp3.Request
+import com.medtroniclabs.microcoaching.ai.download.DownloadResult
+import com.medtroniclabs.microcoaching.ai.download.ResumableHttpDownloader
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream
 import java.io.BufferedInputStream
@@ -20,23 +20,21 @@ import java.util.concurrent.TimeUnit
 
 /**
  * Downloads a sherpa-onnx STT model archive and extracts it into the configured
- * output directory. Foreground-service worker so the OS keeps it alive when the
- * host app is backgrounded — same pattern as the Gemma
- * [com.medtroniclabs.microcoaching.ai.model.ModelDownloadWorker].
- *
- * v1 handles a single archive (Bengali). The worker is generic over URL +
- * output dir so future languages plug in trivially.
+ * output directory. Foreground-service worker so the OS keeps it alive when the host
+ * app is backgrounded — same pattern as the Gemma
+ * [com.medtroniclabs.microcoaching.ai.model.ModelDownloadWorker]. Generic over URL +
+ * output dir (Bengali is the only archive today).
  *
  * Flow:
  *   1. setForeground (notification visible)
- *   2. Stream-download `.tar.bz2` to a temp file with HTTP `Range` resume
+ *   2. Stream-download `.tar.bz2` with HTTP `Range` resume
  *   3. Extract via Commons Compress (BZip2 → Tar)
  *   4. Verify the four required files exist (encoder/decoder/joiner/tokens)
- *   5. Delete the archive, write the ready flag, return success
+ *   5. Delete the archive and return success ([SttModelManager] writes the ready flag
+ *      on the observed SUCCEEDED — unlike the Gemma worker, this one doesn't persist it)
  *
- * On any failure the worker deletes the temp archive (incomplete byte stream)
- * but **leaves the extracted dir intact** if extraction already started — the
- * next attempt's extraction step is idempotent.
+ * An incomplete archive is removed by [ResumableHttpDownloader] for a clean retry; a
+ * complete archive that fails extraction is kept, and re-extraction is idempotent.
  */
 class SttModelDownloadWorker(
     context: Context,
@@ -59,9 +57,14 @@ class SttModelDownloadWorker(
         val archiveFile = File(outputDir, ARCHIVE_FILENAME)
 
         // 1) Download with resume + throttled progress reporting.
-        val downloadOutcome = streamDownload(url, archiveFile)
-        if (downloadOutcome is DownloadOutcome.Failure) {
-            return Result.failure(workDataOf(KEY_ERROR to downloadOutcome.reason))
+        val downloadResult = ResumableHttpDownloader.download(
+            url = url,
+            outputFile = archiveFile,
+            minValidBytes = MIN_VALID_ARCHIVE_SIZE_BYTES,
+            logTag = TAG,
+        ) { percent, bytesDownloaded, totalBytes -> emitProgress(percent, bytesDownloaded, totalBytes) }
+        if (downloadResult is DownloadResult.Failure) {
+            return Result.failure(workDataOf(KEY_ERROR to downloadResult.reason))
         }
 
         // 2) Extract the archive.
@@ -85,114 +88,6 @@ class SttModelDownloadWorker(
         archiveFile.delete()
         return Result.success(workDataOf(KEY_OUTPUT_DIR to outputDir.absolutePath))
     }
-
-    // ── Download ──────────────────────────────────────────────────────────────
-
-    private suspend fun streamDownload(url: String, outputFile: File): DownloadOutcome =
-        runCatching {
-            val client = OkHttpClient.Builder()
-                .connectTimeout(30, TimeUnit.SECONDS)
-                .readTimeout(300, TimeUnit.SECONDS)
-                .build()
-
-            val existingBytes = if (outputFile.exists()) outputFile.length() else 0L
-            val requestBuilder = Request.Builder().url(url)
-            if (existingBytes > 0L) {
-                requestBuilder.header("Range", "bytes=$existingBytes-")
-            }
-
-            val response = client.newCall(requestBuilder.build()).execute()
-            response.use { resp ->
-                val isPartialContent = resp.code == 206
-                Log.d(TAG, "streamDownload → HTTP ${resp.code} ${resp.message} | url=$url")
-
-                if (resp.code == 416) {
-                    val localSize = outputFile.length()
-                    return@runCatching if (localSize >= MIN_VALID_ARCHIVE_SIZE_BYTES) {
-                        Log.i(TAG, "HTTP 416 — local file ${localSize / 1_048_576} MB, treating as complete")
-                        DownloadOutcome.Success
-                    } else {
-                        outputFile.delete()
-                        DownloadOutcome.Failure("HTTP 416: partial removed — retry")
-                    }
-                }
-
-                if (!resp.isSuccessful && !isPartialContent) {
-                    return@runCatching DownloadOutcome.Failure(
-                        "HTTP ${resp.code}: ${resp.message}",
-                    )
-                }
-
-                val body = resp.body
-                    ?: return@runCatching DownloadOutcome.Failure("empty body")
-                val contentLength = body.contentLength()
-                val totalBytes =
-                    if (contentLength > 0L) contentLength + existingBytes else 0L
-                val appendToFile = existingBytes > 0L && isPartialContent
-
-                body.byteStream().use { input ->
-                    FileOutputStream(outputFile, appendToFile).use { output ->
-                        val buffer = ByteArray(BUFFER_SIZE)
-                        var bytesRead: Int
-                        var totalRead = existingBytes
-                        var lastEmitMs = 0L
-                        var lastEmittedPercent = -1
-
-                        // First emit so the notification flips to a real number quickly.
-                        emitProgress(
-                            percent = if (totalBytes > 0L) {
-                                ((totalRead * 100L) / totalBytes).toInt().coerceIn(0, 99)
-                            } else 0,
-                            bytesDownloaded = totalRead,
-                            totalBytes = totalBytes,
-                        )
-                        lastEmitMs = System.currentTimeMillis()
-
-                        while (input.read(buffer).also { bytesRead = it } != -1) {
-                            output.write(buffer, 0, bytesRead)
-                            totalRead += bytesRead
-
-                            val now = System.currentTimeMillis()
-                            val percent = if (totalBytes > 0L) {
-                                ((totalRead * 100L) / totalBytes).toInt().coerceIn(0, 99)
-                            } else -1
-                            val percentChanged =
-                                percent != -1 && percent != lastEmittedPercent
-                            val intervalElapsed =
-                                (now - lastEmitMs) >= PROGRESS_EMIT_INTERVAL_MS
-                            if (percentChanged || intervalElapsed) {
-                                lastEmitMs = now
-                                lastEmittedPercent = percent
-                                emitProgress(
-                                    percent = percent.coerceAtLeast(0),
-                                    bytesDownloaded = totalRead,
-                                    totalBytes = totalBytes,
-                                )
-                            }
-                        }
-                        output.flush()
-                    }
-                }
-
-                val finalSize = outputFile.length()
-                if (totalBytes > 0L && finalSize < totalBytes) {
-                    outputFile.delete()
-                    return@runCatching DownloadOutcome.Failure(
-                        "Incomplete download: $finalSize / $totalBytes — deleted",
-                    )
-                }
-                if (totalBytes == 0L && finalSize < MIN_VALID_ARCHIVE_SIZE_BYTES) {
-                    outputFile.delete()
-                    return@runCatching DownloadOutcome.Failure(
-                        "Archive too small (${finalSize / 1_048_576} MB)",
-                    )
-                }
-                DownloadOutcome.Success
-            }
-        }.getOrElse { cause ->
-            Log.e(TAG, "streamDownload error for $url: ${cause.message}")
-            DownloadOutcome.Failure(cause.message ?: "Unknown")
-        }
 
     // ── Extract ───────────────────────────────────────────────────────────────
 
@@ -292,15 +187,8 @@ class SttModelDownloadWorker(
         }
     }
 
-    private sealed class DownloadOutcome {
-        object Success : DownloadOutcome()
-        data class Failure(val reason: String) : DownloadOutcome()
-    }
-
     companion object {
         private const val TAG = "SttModelDownloadWorker"
-        private const val BUFFER_SIZE = 8 * 1024
-        private const val PROGRESS_EMIT_INTERVAL_MS = 500L
         private const val MIN_VALID_ARCHIVE_SIZE_BYTES = 50L * 1024 * 1024 // 50 MB
         private const val ARCHIVE_FILENAME = "_archive.tar.bz2"
 
