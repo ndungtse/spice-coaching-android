@@ -61,9 +61,16 @@ class GemmaService(private val context: Context) : LLMService {
                 llmInference = LlmInference.createFromOptions(context, options)
                 loadedConfig = configuration
                 _isModelLoaded.value = true
-                Log.i(TAG, "Gemma model loaded: ${modelFile.name}")
+                Log.i(TAG, "Gemma model loaded: ${modelFile.name} (${modelFile.length()} bytes)")
             }.onFailure { cause ->
                 _isModelLoaded.value = false
+                // The native cause is the only description of why the engine refused the
+                // file, and the UI shows a plain sentence instead, so log it or lose it.
+                Log.e(
+                    TAG,
+                    "Gemma load failed for ${modelFile.name} (${modelFile.length()} bytes): ${cause.message}",
+                    cause,
+                )
                 throw LLMError.ModelLoadFailed(cause.message ?: "unknown error", cause)
             }
         }

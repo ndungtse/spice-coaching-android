@@ -46,12 +46,20 @@ sealed class ChatUiState {
      *   disk. Drives the AI card's "Done" state and enables the manual "Go to chat" button
      *   (the automatic transition into chat waits for the voice pack too — see
      *   [ChatViewModel.maybeAutoEnterChat]).
-     * @param aiSizeBytes real download size for the selected model, resolved from the
-     *   server. Null until that lands (or when the server is unreachable), in which
-     *   case the card falls back to the catalog's approximate constant.
-     * @param loadError why the engine failed to load a model that IS on disk. Set only
-     *   on the bounce-back path — the user tapped "Go to chat", the load failed, and
-     *   they were returned here; without it the screen looks inert.
+     * @param aiSizeBytes expected download size for the selected model — server-resolved when
+     *   available, otherwise the catalog constant. What the model *should* weigh, never what
+     *   is on disk; pair it with [aiOnDiskBytes] before calling a file complete.
+     * @param aiUnusable true when a model file failed the structural check, so its bytes are
+     *   wrong. Mutually exclusive with [aiReady]: the card shows a damaged state with a
+     *   re-download action, and "Go to chat" stays disabled since no retry can load it.
+     * @param aiOnDiskBytes actual length of the model file, when known. Lets the card show it
+     *   against the expected size rather than repeating the expected size over a partial file.
+     * @param aiCanRetryDownload false once the re-download budget for corrupt files is spent,
+     *   so the card stops offering a fix it would refuse to perform.
+     * @param loadError why the engine couldn't use a model that is on disk. Set only on the
+     *   bounce-back path — the user tapped "Go to chat", the load failed, they were returned
+     *   here — without which the screen looks inert. A short localized sentence; the native
+     *   cause goes to logcat.
      */
     data class SetupRequired(
         val downloadProgress: Int = -1,
@@ -62,6 +70,9 @@ sealed class ChatUiState {
         val aiRequired: Boolean = true,
         val aiReady: Boolean = false,
         val aiSizeBytes: Long? = null,
+        val aiUnusable: Boolean = false,
+        val aiOnDiskBytes: Long? = null,
+        val aiCanRetryDownload: Boolean = true,
         val loadError: String? = null,
     ) : ChatUiState()
 

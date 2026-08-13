@@ -189,6 +189,17 @@ data class MorningCardsResult(
     override val success get() = error == null
 }
 
+data class VideoProgressResult(
+    val count: Int = 0,
+    /** True when no CHW was signed in, so there was nothing to scope progress to. */
+    val skipped: Boolean = false,
+    val newWatermark: String? = null,
+    override val error: String? = null,
+    override val errorKind: SyncErrorKind? = null,
+) : SyncResult {
+    override val success get() = error == null
+}
+
 data class PublishedSourceDocumentsResult(
     val count: Int = 0,
     override val error: String? = null,
@@ -217,6 +228,19 @@ data class SourceDocumentsResult(
 data class AssignedVideosResult(
     val count: Int = 0,
     /** True when the pull ran (a CHW was signed in) vs. was skipped. */
+    val skipped: Boolean = false,
+    override val error: String? = null,
+    override val errorKind: SyncErrorKind? = null,
+) : SyncResult {
+    override val success get() = error == null
+}
+
+data class BadgesResult(
+    /** Rows written to `badge` — the tenant catalogue unioned with the CHW's earned badges. */
+    val count: Int = 0,
+    /** How many of [count] the CHW has earned, for the log line. */
+    val earnedCount: Int = 0,
+    /** True when the pull was skipped because no CHW was signed in. */
     val skipped: Boolean = false,
     override val error: String? = null,
     override val errorKind: SyncErrorKind? = null,

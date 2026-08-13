@@ -9,23 +9,48 @@ import com.medtroniclabs.microcoaching.data.db.entity.PublishedSourceDocumentEnt
 import kotlinx.coroutines.flow.Flow
 
 /**
- * Read/replace access for the published source-document catalogue that backs the
- * Knowledge section. The list is server-authoritative and refreshed wholesale
- * each sync, so the only mutating operation is the atomic [replaceAll].
+ * Read/replace access for the source-document catalogue. The list is
+ * server-authoritative and refreshed wholesale each sync, so the only mutating
+ * operation is the atomic [replaceAll].
+ *
+ * The table holds both module-linked and CHW-assigned documents. [getById] spans
+ * everything, because a chat citation can point at any document; the Knowledge
+ * grid uses [observeAssigned], which is narrower.
  */
 @Dao
 interface PublishedSourceDocumentDao {
 
-    /** Reactive Knowledge-grid source, ordered by the server-supplied [rank]. */
-    @Query("SELECT * FROM published_source_document ORDER BY rank ASC")
-    fun getAllOrdered(): Flow<List<PublishedSourceDocumentEntity>>
+    /**
+     * Reactive Knowledge-grid source: the documents assigned to this CHW, newest
+     * assignment first.
+     *
+     * Only video is excluded — it is the same catalogue row the Training sub-tab
+     * plays, so listing it here too would show one assignment in two places. Audio
+     * belongs here (the Knowledge preview streams it via ExoPlayer, same as video).
+     */
+    @Query(
+        """
+        SELECT * FROM published_source_document
+        WHERE assigned_at IS NOT NULL
+          AND LOWER(COALESCE(source_type, '')) <> 'video'
+        ORDER BY assigned_at DESC, rank ASC
+        """,
+    )
+    fun observeAssigned(): Flow<List<PublishedSourceDocumentEntity>>
+
+    /** How many documents the grid would show — drives the cold-start sync nudge. */
+    @Query(
+        """
+        SELECT COUNT(*) FROM published_source_document
+        WHERE assigned_at IS NOT NULL
+          AND LOWER(COALESCE(source_type, '')) <> 'video'
+        """,
+    )
+    suspend fun countAssigned(): Int
 
     /** The latest presigned URL for one document (used at download time). */
     @Query("SELECT * FROM published_source_document WHERE source_document_id = :id")
     suspend fun getById(id: String): PublishedSourceDocumentEntity?
-
-    @Query("SELECT COUNT(*) FROM published_source_document")
-    suspend fun count(): Int
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertAll(rows: List<PublishedSourceDocumentEntity>)

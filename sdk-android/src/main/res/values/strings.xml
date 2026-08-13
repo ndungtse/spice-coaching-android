@@ -62,7 +62,12 @@
     <string name="chat_mode_switch_to_online">Switch to online AI</string>
     <string name="chat_mode_switch_to_on_device">Switch to on-device AI</string>
     <string name="chat_model_unsupported">The downloaded AI model can\'t run on this app version. Please contact support or switch to online chat.</string>
-    <string name="chat_model_load_failed_retry">Couldn\'t start the AI model: %1$s. Tap “Go to chat” to try again.</string>
+    <!-- Shown when the model file itself is fine but the engine wouldn't start — retrying is worth a try. -->
+    <string name="chat_model_load_failed_transient">Couldn\'t start the AI model. Tap “Go to chat” to try again.</string>
+    <!-- Shown when the downloaded file failed its integrity check; only a re-download fixes this. -->
+    <string name="chat_model_file_damaged">The AI model download is incomplete, so it can\'t start. Download it again to fix this.</string>
+    <!-- Same situation, but the re-download allowance is spent — don't promise an action we'll refuse. -->
+    <string name="chat_model_file_damaged_no_retry">The AI model download keeps arriving incomplete. Please try again on a stronger connection, or contact support.</string>
     <string name="chat_today">Today</string>
     <string name="chat_welcome_message">How can I help you today? You can ask me about patient counselling, clinical protocols, or SPICE.</string>
     <string name="chat_close_sheet">Close chat</string>
@@ -209,7 +214,7 @@
     <string name="tts_language_missing">Voice not installed. Opening device settings.</string>
     <string name="module_detail_cards_stat">Cards</string>
     <string name="module_detail_questions_stat">Questions</string>
-    <string name="module_detail_duration_stat">Duration</string>
+    <string name="module_detail_duration_stat">Minutes</string>
     <string name="module_detail_min">%1$d min</string>
     <string name="lesson_player_progress">Learning %1$d of %2$d</string>
     <string name="lesson_player_next">Next</string>
@@ -429,7 +434,14 @@
 
     <!-- ── Download item cards on the coaching setup screen ─────────────────────── -->
     <string name="download_card_ai_title">AI Model</string>
+    <!-- Expected download size, still approximate while the exact size is unresolved. -->
     <string name="download_card_ai_size">~%1$s</string>
+    <!-- Exact size, once known from the catalog or a server probe. -->
+    <string name="download_card_ai_size_exact">%1$s</string>
+    <!-- What actually landed against what was expected, e.g. "280 MB of 290 MB". -->
+    <string name="download_card_ai_size_partial">%1$s of %2$s</string>
+    <string name="download_card_ai_damaged">Download incomplete</string>
+    <string name="download_card_ai_redownload">Download again</string>
     <string name="download_card_voice_title">Bengali Voice Model</string>
     <string name="download_card_voice_size">~90 MB</string>
     <string name="download_card_label_required">Required</string>
@@ -443,8 +455,9 @@
     <string name="download_card_status_preparing">Preparing…</string>
     <string name="download_card_status_extracting">Unpacking…</string>
     <string name="download_card_status_paused_progress">Paused at %1$d%%</string>
-    <string name="download_card_progress_mb">%1$d MB / %2$d MB · %3$d%%</string>
-    <string name="download_card_progress_indeterminate">%1$d MB downloaded</string>
+    <!-- Sizes are pre-formatted by the platform Formatter so every size on this card uses one unit system. -->
+    <string name="download_card_progress_mb">%1$s / %2$s · %3$d%%</string>
+    <string name="download_card_progress_indeterminate">%1$s downloaded</string>
     <string name="download_card_progress_percent">%1$d%%</string>
     <string name="download_card_tts_title">Read-aloud voice</string>
     <string name="download_card_tts_hint">For reading answers aloud</string>
@@ -503,7 +516,6 @@
     <string name="badges_journey_subtitle">Track the milestones you unlock as you learn</string>
     <string name="badges_journey_see_path">See your learning path</string>
     <string name="badges_milestones_count">%1$d of %2$d milestones</string>
-    <string name="badge_now">NOW</string>
     <string name="journey_start_lesson">Start lesson</string>
     <string name="knowledge_empty_none">No knowledge documents yet</string>
 
@@ -517,6 +529,12 @@
     <string name="po_metric_inactive">Non-Responsive SKs</string>
     <string name="po_metric_finished_modules">Finished Modules</string>
     <string name="po_metric_chatbot_engaged">Chatbot Engaged</string>
+    <!-- Metric-card info bottom sheet (no em-dashes) -->
+    <string name="po_metric_desc_active_now">SKs with at least one activity (a completed module or a chatbot session) during the selected period.</string>
+    <string name="po_metric_desc_inactive">SKs with no activity at all (no module progress and no chatbot use) during the selected period.</string>
+    <string name="po_metric_desc_finished_modules">SKs who completed at least one assigned module during the selected period.</string>
+    <string name="po_metric_desc_chatbot_engaged">SKs who used the chatbot at least once during the selected period.</string>
+    <string name="po_metric_info_dismiss">Got it</string>
     <string name="po_section_my_sks">My SKs</string>
     <string name="po_section_module_completion">Module Completion</string>
     <string name="po_section_top_searched_existing_modules">Top Searched Existing Modules</string>
@@ -546,6 +564,7 @@
     <string name="po_group_active">RESPONSIVE (%1$d)</string>
     <string name="po_group_needs_attention">NEEDS ATTENTION (%1$d)</string>
     <string name="po_group_inactive">NON-RESPONSIVE (%1$d)</string>
+    <string name="po_group_no_sks">No SKs in this period</string>
     <string name="po_group_using_chatbot">USING CHATBOT (%1$d)</string>
     <string name="po_group_not_using_chatbot">NOT USING CHATBOT (%1$d)</string>
     <string name="po_queries_count">%1$d queries</string>

@@ -24,7 +24,7 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles("consumer-rules.pro")
 
-        buildConfigField("String", "SDK_VERSION", "\"0.5.2-SNAPSHOT\"")
+        buildConfigField("String", "SDK_VERSION", "\"0.5.3-SNAPSHOT\"")
         // HF_TOKEN intentionally NOT baked into the SDK. The published .aar must
         // not ship a HuggingFace token; host apps that need one pass it at runtime
         // via MicroCoachingSDK.Builder.huggingFaceToken(). Models in the public
@@ -88,7 +88,7 @@ afterEvaluate {
                 from(components["release"])
                 groupId = "com.medtroniclabs.microcoaching"
                 artifactId = "sdk-android"
-                version = "0.5.2-SNAPSHOT"
+                version = "0.5.3-SNAPSHOT"
             }
         }
     }

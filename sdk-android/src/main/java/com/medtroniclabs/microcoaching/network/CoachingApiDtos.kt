@@ -278,28 +278,134 @@ data class SourceDocumentSyncDownloadItem(
     @SerialName("source_document_id") val sourceDocumentId: String,
     @SerialName("source_type") val sourceType: String? = null,
     @SerialName("title") val title: String? = null,
+    @SerialName("description") val description: String? = null,
     @SerialName("original_filename") val originalFilename: String? = null,
+    /**
+     * Bucket-prefixed object path (`{bucket}/{key}`). Persisted so an expired
+     * [presignedUrl] can be re-signed via
+     * [CoachingApiService.getPresignedUrls] without a full re-sync.
+     */
+    @SerialName("storage_path") val storagePath: String? = null,
+    @SerialName("thumbnail_storage_path") val thumbnailStoragePath: String? = null,
     @SerialName("assigned_at") val assignedAt: String? = null,
+    /** Playable length in ms; null until the backend has probed the media. */
+    @SerialName("duration_ms") val durationMs: Long? = null,
     @SerialName("presigned_url") val presignedUrl: String? = null,
     @SerialName("presigned_expires_seconds") val presignedExpiresSeconds: Long? = null,
     @SerialName("thumbnail_presigned_url") val thumbnailPresignedUrl: String? = null,
     @SerialName("thumbnail_presigned_expires_seconds") val thumbnailPresignedExpiresSeconds: Long? = null,
 ) {
-    /** True for the audio/video rows that back the Training sub-tab. */
+    /** True for streamable media (audio or video) — both play via ExoPlayer. */
     val isPlayableMedia: Boolean
-        get() = sourceType.equals("video", ignoreCase = true) ||
-            sourceType.equals("audio", ignoreCase = true)
+        get() = isVideo || sourceType.equals("audio", ignoreCase = true)
+
+    /**
+     * True only for video. Video is what backs the Training sub-tab; audio and every
+     * other type (pdf/pptx/docx) belong to the Knowledge grid.
+     */
+    val isVideo: Boolean
+        get() = sourceType.equals("video", ignoreCase = true)
 }
 
-// ── Media (rich-card image/video) presigned URL endpoint ──────────────────────
+// ── Video watch progress (GET /sync/video-progress) ───────────────────────────
+
+/**
+ * Watch progress the server holds for the CHW's assigned videos, changed since the
+ * requested watermark. Videos the CHW has never played are absent rather than zeroed.
+ *
+ * This is read-only: progress is still written by `video_progress_updated` telemetry.
+ * Its purpose is recovering a resume position the device no longer has — after a
+ * reinstall, a data clear, or a move to another handset.
+ */
+@Serializable
+data class VideoProgressSyncBundle(
+    @SerialName("videos") val videos: List<VideoProgressItem> = emptyList(),
+    @SerialName("server_time_utc") val serverTimeUtc: String? = null,
+)
+
+/** Server-side progress for one video, keyed by its `source_document_id`. */
+@Serializable
+data class VideoProgressItem(
+    @SerialName("source_document_id") val sourceDocumentId: String,
+    @SerialName("last_position_ms") val lastPositionMs: Long = 0,
+    @SerialName("percent_watched") val percentWatched: Double = 0.0,
+    @SerialName("completed") val completed: Boolean = false,
+    @SerialName("last_watched_at") val lastWatchedAt: String? = null,
+)
+
+// ── Batch presign (POST /sync/presigned-urls) ─────────────────────────────────
+
+/** At most [STORAGE_PATHS_PRESIGN_BATCH_SIZE] paths per request; the server rejects more. */
+@Serializable
+data class StoragePathsPresignRequest(
+    @SerialName("storage_paths") val storagePaths: List<String>,
+)
+
+/**
+ * Partial-success response: [urls] holds what the server signed, [missingPaths] what
+ * it declined. A declined path is a normal outcome — the object is gone, or the path
+ * isn't in a shape the server will sign — so callers report it separately from a
+ * transport failure rather than treating the whole call as an error.
+ */
+@Serializable
+data class StoragePathsPresignResponse(
+    @SerialName("urls") val urls: List<StoragePathPresignedUrl> = emptyList(),
+    @SerialName("missing_paths") val missingPaths: List<String> = emptyList(),
+    @SerialName("server_time_utc") val serverTimeUtc: String? = null,
+)
 
 @Serializable
-data class MediaPresignedUrlResponse(
-    @SerialName("url") val url: String,
-    @SerialName("bucket_name") val bucketName: String? = null,
-    @SerialName("object_name") val objectName: String? = null,
-    @SerialName("expires_seconds") val expiresSeconds: Long = 600,
+data class StoragePathPresignedUrl(
+    @SerialName("storage_path") val storagePath: String,
+    @SerialName("presigned_url") val presignedUrl: String,
+    @SerialName("expires_seconds") val expiresSeconds: Long = 0,
 )
+
+/** Server-side cap on one presign batch. */
+const val STORAGE_PATHS_PRESIGN_BATCH_SIZE: Int = 50
+
+// ── Badge catalogue (GET /sync/badges) ────────────────────────────────────────
+
+/**
+ * The tenant's active badges plus the ones this CHW has earned, in one response.
+ *
+ * A badge normally appears in both lists once earned; [earnedBadges] can also
+ * carry a badge that is no longer in [availableBadges] (its definition was
+ * deactivated after the CHW earned it), which is why consumers union the two
+ * rather than treating [availableBadges] as the whole catalogue.
+ */
+@Serializable
+data class BadgesSyncBundle(
+    @SerialName("available_badges") val availableBadges: List<BadgeSyncPayload> = emptyList(),
+    @SerialName("earned_badges") val earnedBadges: List<BadgeSyncPayload> = emptyList(),
+    @SerialName("server_time_utc") val serverTimeUtc: String? = null,
+)
+
+/**
+ * One badge. [imagePresignedExpiresSeconds] is a URL lifetime (relative seconds),
+ * converted to an absolute epoch-second expiry when persisted.
+ *
+ * [earnedAt] is the only field that separates the two lists — it is absent on
+ * `available_badges` rows. [sequence] orders the badge grid and the Your Journey
+ * path; [moduleIds] are the modules the badge is awarded for.
+ *
+ * Every backend-optional scalar is nullable rather than defaulted, for the same
+ * reason as [SourceDocumentSyncDownloadItem]: a default only covers an absent key,
+ * so an explicit `null` on a non-nullable field would fail the whole response.
+ */
+@Serializable
+data class BadgeSyncPayload(
+    @SerialName("id") val id: String,
+    @SerialName("name") val name: String? = null,
+    @SerialName("domain") val domain: String? = null,
+    @SerialName("image_storage_path") val imageStoragePath: String? = null,
+    @SerialName("image_presigned_url") val imagePresignedUrl: String? = null,
+    @SerialName("image_presigned_expires_seconds") val imagePresignedExpiresSeconds: Long? = null,
+    @SerialName("sequence") val sequence: Int? = null,
+    @SerialName("module_ids") val moduleIds: List<String> = emptyList(),
+    @SerialName("earned_at") val earnedAt: String? = null,
+)
+
 
 @Serializable
 data class ModuleFamilySyncPayload(

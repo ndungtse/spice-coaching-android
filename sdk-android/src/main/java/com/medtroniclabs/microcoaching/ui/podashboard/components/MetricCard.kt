@@ -7,8 +7,13 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.MenuBook
@@ -16,10 +21,19 @@ import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -42,15 +56,17 @@ private val MetricCardSize = 110.dp
  * One KPI card: the (i) affordance is pinned top-right; the metric icon, value/total and
  * label form a single horizontally-centred group anchored to the bottom of the tile. A fixed
  * square (the parent scrolls horizontally), with the label forced to a single line — the
- * renamed "Non-Responsive SKs" is too long to wrap gracefully in a tile. Tappable → its
- * drill-down.
+ * renamed "Non-Responsive SKs" is too long to wrap gracefully in a tile. Tapping the tile
+ * opens its drill-down; tapping the (i) opens an explanatory bottom sheet instead.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MetricCard(metric: PoMetric, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val alert = metric.key == MetricKey.INACTIVE
     val iconBg = if (alert) StatusRedBg else SpiceBlueContainer
     val iconTint = if (alert) StatusRed else SpiceBlue
     val valueColor = if (alert) StatusRed else MaterialTheme.colorScheme.onBackground
+    var showInfo by remember { mutableStateOf(false) }
 
     Box(
         modifier = modifier
@@ -59,13 +75,25 @@ fun MetricCard(metric: PoMetric, onClick: () -> Unit, modifier: Modifier = Modif
             .clickable(onClick = onClick)
             .padding(10.dp),
     ) {
-        // (i) stays in the top-right corner, enlarged for legibility.
-        Icon(
-            Icons.Outlined.Info,
-            contentDescription = null,
-            tint = MutedText,
-            modifier = Modifier.align(Alignment.TopEnd).size(18.dp),
-        )
+        // (i) has its OWN clickable, so a tap here opens the info sheet and is consumed —
+        // it never triggers the card's drill-down. The offset pushes the ~34dp tap target
+        // (8dp padding around an 18dp glyph) out into the corner so the icon stays put while
+        // the hit area grows — a small icon that's easy to hit and hard to miss.
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .offset(x = 8.dp, y = (-8).dp)
+                .clip(CircleShape)
+                .clickable { showInfo = true }
+                .padding(8.dp),
+        ) {
+            Icon(
+                Icons.Outlined.Info,
+                contentDescription = stringResource(R.string.po_metric_info_dismiss),
+                tint = MutedText,
+                modifier = Modifier.size(18.dp),
+            )
+        }
 
         // Metric icon · value/total · label — one centred stack pinned to the bottom.
         Column(
@@ -103,6 +131,36 @@ fun MetricCard(metric: PoMetric, onClick: () -> Unit, modifier: Modifier = Modif
             )
         }
     }
+
+    if (showInfo) {
+        ModalBottomSheet(
+            onDismissRequest = { showInfo = false },
+            sheetState = rememberModalBottomSheetState(),
+        ) {
+            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp)) {
+                Text(
+                    text = stringResource(metricLabel(metric.key)),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                )
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    text = stringResource(metricDescription(metric.key)),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MutedText,
+                )
+                Spacer(Modifier.height(24.dp))
+                Button(
+                    onClick = { showInfo = false },
+                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = SpiceBlue),
+                ) {
+                    Text(stringResource(R.string.po_metric_info_dismiss))
+                }
+                Spacer(Modifier.height(24.dp))
+            }
+        }
+    }
 }
 
 private fun metricIcon(key: MetricKey): ImageVector = when (key) {
@@ -118,4 +176,12 @@ private fun metricLabel(key: MetricKey): Int = when (key) {
     MetricKey.INACTIVE -> R.string.po_metric_inactive
     MetricKey.FINISHED_MODULES -> R.string.po_metric_finished_modules
     MetricKey.CHATBOT_ENGAGED -> R.string.po_metric_chatbot_engaged
+}
+
+@StringRes
+private fun metricDescription(key: MetricKey): Int = when (key) {
+    MetricKey.ACTIVE_NOW -> R.string.po_metric_desc_active_now
+    MetricKey.INACTIVE -> R.string.po_metric_desc_inactive
+    MetricKey.FINISHED_MODULES -> R.string.po_metric_desc_finished_modules
+    MetricKey.CHATBOT_ENGAGED -> R.string.po_metric_desc_chatbot_engaged
 }

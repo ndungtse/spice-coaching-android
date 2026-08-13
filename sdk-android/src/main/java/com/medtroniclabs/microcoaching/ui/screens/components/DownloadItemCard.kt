@@ -34,14 +34,14 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import android.text.format.Formatter
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.medtroniclabs.microcoaching.R
-
-private const val BYTES_PER_MB: Long = 1_048_576L
 
 /**
  * Predefined card icons. Keeps the call site to a single enum instead of
@@ -60,6 +60,9 @@ enum class DownloadItemIcon { AiSparkle, Microphone, ReadAloud }
  *   - [DownloadItemUiState.Extracting] → spinner only (extraction is short and uncancellable)
  *   - [DownloadItemUiState.Paused] → Resume + Cancel
  *   - [DownloadItemUiState.Done] → green check, no actions
+ *   - [DownloadItemUiState.Unusable] → warning glyph and "Download again", no check mark.
+ *     The action is suppressed when [DownloadItemUiState.Unusable.canRetry] is false, so the
+ *     card never offers a re-download the SDK would decline.
  */
 @Composable
 fun DownloadItemCard(
@@ -129,7 +132,7 @@ private fun LeadingIcon(icon: DownloadItemIcon, state: DownloadItemUiState) {
     val (iconColor, bgColor) = when (state) {
         is DownloadItemUiState.Done ->
             MaterialTheme.colorScheme.onPrimary to MaterialTheme.colorScheme.primary
-        is DownloadItemUiState.Failed ->
+        is DownloadItemUiState.Failed, is DownloadItemUiState.Unusable ->
             MaterialTheme.colorScheme.onErrorContainer to MaterialTheme.colorScheme.errorContainer
         else ->
             MaterialTheme.colorScheme.onSecondaryContainer to
@@ -145,6 +148,8 @@ private fun LeadingIcon(icon: DownloadItemIcon, state: DownloadItemUiState) {
         val vector: ImageVector = when {
             state is DownloadItemUiState.Done -> Icons.Filled.Check
             state is DownloadItemUiState.Failed -> Icons.Filled.WarningAmber
+            // Not a check: the file is on disk but cannot be used.
+            state is DownloadItemUiState.Unusable -> Icons.Filled.WarningAmber
             icon == DownloadItemIcon.AiSparkle -> Icons.Filled.AutoAwesome
             icon == DownloadItemIcon.ReadAloud -> Icons.AutoMirrored.Filled.VolumeUp
             else -> Icons.Filled.Mic
@@ -171,6 +176,7 @@ private fun SubtitleRow(
     val statusText: String? = when (state) {
         is DownloadItemUiState.Done -> stringResource(R.string.download_card_status_done)
         is DownloadItemUiState.Failed -> stringResource(R.string.download_card_status_failed)
+        is DownloadItemUiState.Unusable -> stringResource(R.string.download_card_ai_damaged)
         is DownloadItemUiState.Preparing ->
             stringResource(R.string.download_card_status_preparing)
         is DownloadItemUiState.Extracting ->
@@ -199,6 +205,15 @@ private fun TrailingAction(
         is DownloadItemUiState.Idle, is DownloadItemUiState.Failed -> {
             FilledTonalButton(onClick = onDownload) {
                 Text(actionLabel ?: stringResource(R.string.download_card_action_download))
+            }
+        }
+        is DownloadItemUiState.Unusable -> {
+            // Only offer the action when the SDK will perform it; past the re-download
+            // budget the subtitle states the problem and stops there.
+            if (state.canRetry) {
+                FilledTonalButton(onClick = onDownload) {
+                    Text(stringResource(R.string.download_card_ai_redownload))
+                }
             }
         }
         is DownloadItemUiState.Paused -> {
@@ -245,12 +260,19 @@ private fun ProgressRow(
         is DownloadItemUiState.Downloading -> {
             percent = state.progressPercent
             val hasBytes = state.totalBytes > 0L && state.progressPercent >= 0
-            val dl = (state.bytesDownloaded / BYTES_PER_MB).coerceAtLeast(0L).toInt()
-            val total = (state.totalBytes / BYTES_PER_MB).coerceAtLeast(0L).toInt()
+            // Formatted by the platform, as the size line above is — dividing by 1 MiB here
+            // and labelling it "MB" would make the two rows disagree about the same file.
+            val context = LocalContext.current
+            val downloaded = Formatter.formatShortFileSize(context, state.bytesDownloaded.coerceAtLeast(0L))
             statusText = if (hasBytes) {
-                stringResource(R.string.download_card_progress_mb, dl, total, percent)
-            } else if (dl > 0) {
-                stringResource(R.string.download_card_progress_indeterminate, dl)
+                stringResource(
+                    R.string.download_card_progress_mb,
+                    downloaded,
+                    Formatter.formatShortFileSize(context, state.totalBytes),
+                    percent,
+                )
+            } else if (state.bytesDownloaded > 0L) {
+                stringResource(R.string.download_card_progress_indeterminate, downloaded)
             } else {
                 stringResource(R.string.download_card_status_preparing)
             }

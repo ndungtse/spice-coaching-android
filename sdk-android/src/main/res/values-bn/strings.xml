@@ -62,7 +62,9 @@
     <string name="chat_mode_switch_to_online">অনলাইন এআই ব্যবহার করুন</string>
     <string name="chat_mode_switch_to_on_device">ডিভাইসের এআই ব্যবহার করুন</string>
     <string name="chat_model_unsupported">ডাউনলোড করা এআই মডেলটি এই অ্যাপ সংস্করণে চালানো যাচ্ছে না। অনুগ্রহ করে সহায়তায় যোগাযোগ করুন বা অনলাইন চ্যাটে যান।</string>
-    <string name="chat_model_load_failed_retry">এআই মডেল চালু করা যায়নি: %1$s। আবার চেষ্টা করতে “চ্যাটে যান”-এ ট্যাপ করুন।</string>
+    <string name="chat_model_load_failed_transient">এআই মডেল চালু করা যায়নি। আবার চেষ্টা করতে “চ্যাটে যান”-এ ট্যাপ করুন।</string>
+    <string name="chat_model_file_damaged">এআই মডেল ডাউনলোড সম্পূর্ণ হয়নি, তাই এটি চালু করা যাচ্ছে না। ঠিক করতে আবার ডাউনলোড করুন।</string>
+    <string name="chat_model_file_damaged_no_retry">এআই মডেল ডাউনলোড বারবার অসম্পূর্ণ থেকে যাচ্ছে। শক্তিশালী সংযোগে আবার চেষ্টা করুন, অথবা সহায়তার সঙ্গে যোগাযোগ করুন।</string>
     <string name="chat_today">আজ</string>
     <string name="chat_welcome_message">আজ আমি কীভাবে সাহায্য করতে পারি? আপনি রোগী কাউন্সেলিং, ক্লিনিকাল প্রটোকল, বা SPICE সম্পর্কে আমাকে জিজ্ঞাসা করতে পারেন।</string>
     <string name="chat_close_sheet">চ্যাট বন্ধ করুন</string>
@@ -209,7 +211,7 @@
     <string name="tts_language_missing">কণ্ঠ ইনস্টল নেই। ডিভাইস সেটিংস খোলা হচ্ছে।</string>
     <string name="module_detail_cards_stat">কার্ড</string>
     <string name="module_detail_questions_stat">প্রশ্ন</string>
-    <string name="module_detail_duration_stat">সময়কাল</string>
+    <string name="module_detail_duration_stat">মিনিট</string>
     <string name="module_detail_min">%1$d মিনিট</string>
     <string name="lesson_player_progress">শেখা %1$d / %2$d</string>
     <string name="lesson_player_next">পরবর্তী</string>
@@ -417,6 +419,10 @@
     <!-- ── Download item cards on the coaching setup screen ─────────────────────── -->
     <string name="download_card_ai_title">এআই মডেল</string>
     <string name="download_card_ai_size">~%1$s</string>
+    <string name="download_card_ai_size_exact">%1$s</string>
+    <string name="download_card_ai_size_partial">%2$s-এর মধ্যে %1$s</string>
+    <string name="download_card_ai_damaged">ডাউনলোড অসম্পূর্ণ</string>
+    <string name="download_card_ai_redownload">আবার ডাউনলোড করুন</string>
     <string name="download_card_voice_title">বাংলা ভয়েস মডেল</string>
     <string name="download_card_voice_size">~৯০ MB</string>
     <string name="download_card_label_required">প্রয়োজনীয়</string>
@@ -430,8 +436,8 @@
     <string name="download_card_status_preparing">প্রস্তুতি…</string>
     <string name="download_card_status_extracting">আনপ্যাক হচ্ছে…</string>
     <string name="download_card_status_paused_progress">%1$d%% এ বিরতি</string>
-    <string name="download_card_progress_mb">%1$d MB / %2$d MB · %3$d%%</string>
-    <string name="download_card_progress_indeterminate">%1$d MB ডাউনলোড হয়েছে</string>
+    <string name="download_card_progress_mb">%1$s / %2$s · %3$d%%</string>
+    <string name="download_card_progress_indeterminate">%1$s ডাউনলোড হয়েছে</string>
     <string name="download_card_progress_percent">%1$d%%</string>
     <string name="download_card_tts_title">পড়ে শোনানোর কণ্ঠ</string>
     <string name="download_card_tts_hint">উত্তর পড়ে শোনানোর জন্য</string>
@@ -488,7 +494,6 @@
     <string name="badges_journey_subtitle">শেখার সময় আপনি যেসব মাইলফলক অর্জন করেন তা ট্র্যাক করুন</string>
     <string name="badges_journey_see_path">আপনার শেখার পথ দেখুন</string>
     <string name="badges_milestones_count">%2$d-এর মধ্যে %1$d মাইলফলক</string>
-    <string name="badge_now">এখন</string>
     <string name="journey_start_lesson">পাঠ শুরু করুন</string>
     <string name="knowledge_empty_none">এখনও কোনো জ্ঞান ডকুমেন্ট নেই</string>
 
@@ -506,6 +511,12 @@
     <string name="po_metric_inactive">সাড়াহীন SK</string>
     <string name="po_metric_finished_modules">সম্পন্ন মডিউল</string>
     <string name="po_metric_chatbot_engaged">চ্যাটবট ব্যবহার</string>
+    <!-- Metric-card info bottom sheet -->
+    <string name="po_metric_desc_active_now">নির্বাচিত সময়ে অন্তত একটি কার্যকলাপ (একটি সম্পন্ন মডিউল বা চ্যাটবট সেশন) করেছেন এমন SK।</string>
+    <string name="po_metric_desc_inactive">নির্বাচিত সময়ে কোনো কার্যকলাপ করেননি (কোনো মডিউল অগ্রগতি বা চ্যাটবট ব্যবহার নেই) এমন SK।</string>
+    <string name="po_metric_desc_finished_modules">নির্বাচিত সময়ে অন্তত একটি নির্ধারিত মডিউল সম্পন্ন করেছেন এমন SK।</string>
+    <string name="po_metric_desc_chatbot_engaged">নির্বাচিত সময়ে অন্তত একবার চ্যাটবট ব্যবহার করেছেন এমন SK।</string>
+    <string name="po_metric_info_dismiss">বুঝেছি</string>
     <string name="po_section_my_sks">আমার SK</string>
     <string name="po_section_module_completion">মডিউল সম্পূর্ণতা</string>
     <string name="po_section_top_searched_existing_modules">সর্বাধিক অনুসন্ধানকৃত বিদ্যমান মডিউল</string>
@@ -535,6 +546,7 @@
     <string name="po_group_active">সাড়াদানকারী (%1$d)</string>
     <string name="po_group_needs_attention">মনোযোগ প্রয়োজন (%1$d)</string>
     <string name="po_group_inactive">সাড়াহীন (%1$d)</string>
+    <string name="po_group_no_sks">এই সময়ে কোনো SK নেই</string>
     <string name="po_group_using_chatbot">চ্যাটবট ব্যবহারকারী (%1$d)</string>
     <string name="po_group_not_using_chatbot">চ্যাটবট ব্যবহার করছে না (%1$d)</string>
     <string name="po_filter_all">সব</string>

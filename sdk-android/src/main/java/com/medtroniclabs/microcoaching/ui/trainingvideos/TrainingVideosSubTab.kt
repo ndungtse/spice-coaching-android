@@ -13,6 +13,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -75,6 +76,9 @@ fun TrainingVideosSubTab(
             if (videos.isEmpty()) {
                 EmptyState(stringResource(R.string.training_videos_empty))
             } else {
+                // Keyed on the ids so a refresh that brings new videos re-sweeps,
+                // while a progress tick that only changes a percentage does not.
+                LaunchedEffect(videos.map { it.id }) { vm.onVideosShown() }
                 videos.firstOrNull()?.let { featured ->
                     FeaturedVideoCard(
                         video = featured,

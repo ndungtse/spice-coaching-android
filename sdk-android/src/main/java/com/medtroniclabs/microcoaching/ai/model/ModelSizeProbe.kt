@@ -17,15 +17,17 @@ import java.util.concurrent.TimeUnit
  * card contradict the bar beneath it.
  *
  * Resolution order per variant:
- *  1. Cached value from an earlier probe (per variant id, survives restarts).
+ *  1. Cached value — from an earlier probe, or from the `Content-Length` actually
+ *     served during a download ([recordObservedSize]), which supersedes it.
  *  2. `HEAD` on the download URL. `x-linked-size` wins over `Content-Length`
  *     because on an LFS-backed path the latter can describe the pointer file.
  *  3. A one-byte ranged `GET`, reading the total out of `Content-Range`. Covers
  *     hosts that don't answer HEAD.
  *
- * Every failure returns null and the caller falls back to the catalog constant.
- * This is informational: it must never block the setup screen or prevent a
- * download from starting.
+ * Every failure returns null and the caller falls back to the catalog constant. This is
+ * informational: it must never block the setup screen or prevent a download from starting,
+ * and nothing here is used to reject a downloaded file — see the ordering in
+ * [com.medtroniclabs.microcoaching.ai.download.ResumableHttpDownloader.download].
  */
 internal object ModelSizeProbe {
 
@@ -45,6 +47,20 @@ internal object ModelSizeProbe {
     /** Last size resolved for [variant], or null if we've never successfully probed it. */
     fun cachedSize(context: Context, variant: ModelVariant): Long? =
         prefs(context).getLong(KEY_PREFIX + variant.id, 0L).takeIf { it > 0L }
+
+    /**
+     * Record the `Content-Length` served for [variant] during a download. It outranks a
+     * `HEAD` probe and the catalog constant, being the length of the bytes actually
+     * arriving, so caching it lets the displayed size follow a republished model.
+     *
+     * Ignores implausibly small values, which are error bodies rather than models.
+     */
+    fun recordObservedSize(context: Context, variant: ModelVariant, totalBytes: Long) {
+        if (totalBytes < MIN_PLAUSIBLE_BYTES) return
+        if (cachedSize(context, variant) == totalBytes) return
+        prefs(context).edit().putLong(KEY_PREFIX + variant.id, totalBytes).apply()
+        Log.i(TAG, "Observed size for '${variant.id}': $totalBytes bytes (was ${variant.sizeInBytes} in the catalog)")
+    }
 
     /**
      * The "this download is complete" floor for [variant], preferring the probed

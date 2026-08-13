@@ -35,6 +35,7 @@ import com.medtroniclabs.microcoaching.data.asset.AssetKind
 import com.medtroniclabs.microcoaching.data.asset.InsufficientStorageException
 import com.medtroniclabs.microcoaching.domain.telemetry.EventRecorder
 import com.medtroniclabs.microcoaching.network.MediaUrlResolver
+import com.medtroniclabs.microcoaching.network.SourceDocumentUrlStore
 import com.medtroniclabs.microcoaching.ui.SdkLocalizedTheme
 import com.medtroniclabs.microcoaching.ui.common.SdkScreenHeader
 import kotlinx.coroutines.Dispatchers
@@ -185,6 +186,7 @@ class VideoPlayerActivity : ComponentActivity() {
                                 val pct = if (total > 0L) ((downloaded * 100L) / total).toInt().coerceIn(0, 100) else null
                                 _download.value = DownloadUiState.Downloading(pct)
                             },
+                            renewUrl = { SourceDocumentUrlStore.renew(id) },
                         ) { MediaUrlResolver.resolveSourceDocument(id) }
                     }
                 } catch (e: InsufficientStorageException) {

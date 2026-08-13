@@ -34,17 +34,17 @@ class ApiPODashboardDataSource(
         // Each section is loaded best-effort — one failing endpoint (e.g. the analytics
         // spine returning 502) must not blank the whole dashboard.
         var summary = TeamActivitySummary()
-        val users = mutableListOf<TeamMemberActivityDetail>()
+        val members = mutableListOf<TeamMemberActivityDetail>()
         val spineError = runCatching {
             // Spine: pull the full roster (paginated) + the summary from the first page.
             var offset = 0
-            var totalUsers = Int.MAX_VALUE
-            while (offset < totalUsers) {
+            var totalMembers = Int.MAX_VALUE
+            while (offset < totalMembers) {
                 val page = api.getTeamActivity(from, to, limit = PAGE, offset = offset).bodyOrThrow()
                 if (offset == 0) summary = page.summary
-                totalUsers = page.totalUsers
-                users += page.users
-                if (page.users.size < PAGE) break
+                totalMembers = page.totalMembers.takeIf { it > 0 } ?: page.totalUsers
+                members += page.members
+                if (page.members.size < PAGE) break
                 offset += PAGE
             }
         }.exceptionOrNull()?.message
@@ -67,7 +67,7 @@ class ApiPODashboardDataSource(
         }.getOrNull()
 
         return mapDashboard(
-            range, summary, users,
+            range, summary, members,
             existing = existingResp?.modules ?: emptyList(),
             suggested = suggestedResp?.suggestions ?: emptyList(),
             spineError = spineError,
@@ -179,12 +179,12 @@ class ApiPODashboardDataSource(
     /** Locate one SK in the paginated team-activity roster. */
     private suspend fun findUser(skId: String, from: String, to: String): TeamMemberActivityDetail? {
         var offset = 0
-        var totalUsers = Int.MAX_VALUE
-        while (offset < totalUsers) {
+        var totalMembers = Int.MAX_VALUE
+        while (offset < totalMembers) {
             val page = api.getTeamActivity(from, to, limit = PAGE, offset = offset).bodyOrThrow()
-            totalUsers = page.totalUsers
-            page.users.firstOrNull { it.userId.toString() == skId }?.let { return it }
-            if (page.users.size < PAGE) break
+            totalMembers = page.totalMembers.takeIf { it > 0 } ?: page.totalUsers
+            page.members.firstOrNull { it.userId.toString() == skId }?.let { return it }
+            if (page.members.size < PAGE) break
             offset += PAGE
         }
         return null

@@ -61,6 +61,46 @@ internal object SourceDocumentUrlStore {
     /** Convenience for callers that only need the URL. */
     suspend fun presignedUrlFor(sourceDocumentId: String?): String? = resolve(sourceDocumentId)?.url
 
+    /**
+     * Re-sign this document from the storage path stored beside its URL, ignoring
+     * whatever is cached.
+     *
+     * This is the escape hatch for a URL that has lapsed between syncs: the stored
+     * expiry can still look fresh while object storage has already stopped honouring
+     * the signature. Returns null when the row predates storage paths — it will
+     * carry one after the next sync.
+     */
+    suspend fun renew(sourceDocumentId: String?): String? {
+        val id = sourceDocumentId?.takeIf { it.isNotBlank() } ?: return null
+        val sdk = runCatching { MicroCoachingSDK.getInstance() }.getOrNull() ?: return null
+
+        val storagePath = runCatching {
+            sdk.database.publishedSourceDocumentDao().getById(id)?.storagePath
+                ?: sdk.currentCHWId?.takeIf { it.isNotBlank() }?.let { chwId ->
+                    sdk.database.assignedVideoDao().getById(id, chwId)?.storagePath
+                }
+        }.getOrNull()?.takeIf { it.isNotBlank() }
+        if (storagePath == null) {
+            Log.d(TAG, "No storage path stored for $id — cannot re-sign.")
+            return null
+        }
+
+        return runCatching {
+            val response = sdk.apiService.getPresignedUrls(StoragePathsPresignRequest(listOf(storagePath)))
+            if (!response.isSuccessful) {
+                Log.w(TAG, "Re-sign failed for $id: HTTP ${response.code()}")
+                return@runCatching null
+            }
+            val body = response.body()
+            val entry = body?.urls?.firstOrNull { it.storagePath == storagePath }
+            if (entry == null || entry.presignedUrl.isBlank()) {
+                Log.w(TAG, "Re-sign declined for $id (missing_paths=${body?.missingPaths})")
+                return@runCatching null
+            }
+            entry.presignedUrl
+        }.onFailure { Log.w(TAG, "Re-sign error for $id: ${it.message}", it) }.getOrNull()
+    }
+
     private fun fresh(url: String?, expiresAt: Long?, nowSec: Long): PresignedRef? {
         if (url.isNullOrBlank() || expiresAt == null || expiresAt <= nowSec) return null
         return PresignedRef(url, expiresAt)

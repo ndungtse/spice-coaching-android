@@ -1,20 +1,17 @@
 package com.medtroniclabs.microcoaching.ui.badges
 
-import androidx.annotation.DrawableRes
-
 /**
  * Progress state of an achievement badge / journey milestone.
  *
- * Drives every visual difference in the Badges tab and the Your Journey path: full-colour
- * artwork for [EARNED] / [CURRENT], greyscale behind a lock for [LOCKED]; only [EARNED]
- * counts toward the "X of N earned" tally.
+ * A badge is earned or it isn't — there is no "next up" state, because the backend has no
+ * notion of one and guessing at it (the lowest-sequence unearned badge) claimed an order the
+ * catalogue doesn't actually promise. Drives every visual difference in the Badges tab and
+ * the Your Journey path: full-colour artwork for [EARNED], greyscale behind a lock for
+ * [LOCKED]; only [EARNED] counts toward the "X of N earned" tally.
  */
 enum class BadgeState {
     /** Unlocked — full-colour artwork with a completed marker. */
     EARNED,
-
-    /** The next badge within reach — full-colour artwork flagged "NOW". */
-    CURRENT,
 
     /** Not yet unlocked — greyscale artwork behind a lock. */
     LOCKED,
@@ -28,25 +25,27 @@ enum class BadgeState {
  * small red pending-count badge overlaid on the chat FAB. That's an unrelated concept (a
  * numeric count pill); this is an earned/locked milestone medallion, hence the more
  * specific name.
+ *
+ * [imageUrl] is the backend's presigned artwork URL, read through the shared asset
+ * cache so it renders offline after the first view.
  */
 data class AchievementBadge(
     val id: String,
     val name: String,
     val state: BadgeState,
-    @get:DrawableRes val image: Int,
+    val imageUrl: String?,
 )
 
 /**
- * One stop on the "Your Journey" learning path: a badge shown against the lesson it unlocks.
- * Shares [image]/[state] with the matching [AchievementBadge]; [code] and [title] are the
- * lesson's short code and name shown alongside the medallion on the path.
+ * One stop on the "Your Journey" learning path. Shares [imageUrl]/[state] with the matching
+ * [AchievementBadge]; [title] is the badge's name and [code] its position along the path.
  */
 data class JourneyMilestone(
     val id: String,
     val code: String,
     val title: String,
     val state: BadgeState,
-    @get:DrawableRes val image: Int,
+    val imageUrl: String?,
 )
 
 /**

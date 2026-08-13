@@ -256,6 +256,28 @@ interface CoachingEventDao {
     )
     suspend fun getModuleRequested(chwId: String): List<CoachingEventEntity>
 
+    /**
+     * How many distinct cards of [moduleFamilyId] this CHW has read.
+     *
+     * DISTINCT is the whole point: a CHW who pages back and forth over one card
+     * emits many rows, and counting those would report a module as read when it
+     * hasn't been. Cards recorded without an id are excluded — they can't be told
+     * apart, so counting them would reintroduce exactly that inflation.
+     *
+     * Keyed on `module_family_id` so reading history survives a version bump, the
+     * same way quiz mastery does.
+     */
+    @Query(
+        """
+        SELECT COUNT(DISTINCT card_family_id) FROM coaching_event
+        WHERE chw_id = :chwId
+          AND module_family_id = :moduleFamilyId
+          AND event_type = 'module_card_viewed'
+          AND card_family_id IS NOT NULL
+        """,
+    )
+    suspend fun countDistinctCardsViewed(chwId: String, moduleFamilyId: String): Int
+
     /** Delete all events that have been successfully synced (30-day retention cleanup). */
     @Query("DELETE FROM coaching_event WHERE sync_status = 'synced'")
     suspend fun deleteSynced()
