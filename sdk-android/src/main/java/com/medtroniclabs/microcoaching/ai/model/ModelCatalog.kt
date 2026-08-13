@@ -11,16 +11,20 @@ package com.medtroniclabs.microcoaching.ai.model
 enum class ModelRuntime { MEDIAPIPE, LITERT_LM, LLAMA_CPP }
 
 /**
- * One downloadable on-device model. The catalog is the **single source of truth** for a
- * model's URL, on-disk filename, expected size, runtime, and RAM class.
+ * One downloadable on-device model. The catalog is the source of truth for a model's URL,
+ * on-disk filename, runtime and RAM class; for its size it is only a fallback, since the
+ * serving host knows that better than a constant does.
  *
  * @property id              Stable key used by [MicroCoachingConfig.selectedModelId].
  * @property fileName        On-disk name — drives file resolution, so variants can
  *                           coexist and resolution stays deterministic (matched by
  *                           exact name, not "first `.task` on disk").
- * @property sizeInBytes     Approximate download size. Drives the per-variant
- *                           "is this download complete?" floor. Verify against the HF
- *                           repo before trusting the value.
+ * @property sizeInBytes     Display fallback, never a gate — the size shown before any
+ *                           server answer arrives. A constant here goes stale when the model
+ *                           is republished, so nothing rejects a download by comparing
+ *                           against it; `Content-Length` is authoritative and structure
+ *                           decides completeness without one. After a download the observed
+ *                           `Content-Length` supersedes it ([ModelSizeProbe.recordObservedSize]).
  * @property minDeviceMemoryGb RAM class for this variant. Stored but NOT yet enforced
  *                           below the global 3 GB gate
  *                           ([com.medtroniclabs.microcoaching.domain.system.DeviceCapability]).
@@ -70,10 +74,10 @@ object ModelCatalog {
             displayName = "Gemma 3 270M-IT (q8, MediaPipe)",
             fileName = "gemma3-270m-it-q8.task",
             downloadUrl = "https://huggingface.co/litert-community/gemma-3-270m-it/resolve/main/gemma3-270m-it-q8.task",
-            sizeInBytes = 319_000_000L,           // ~304 MiB — verify against repo
+            sizeInBytes = 303_950_933L,
             runtime = ModelRuntime.MEDIAPIPE,
             minDeviceMemoryGb = 2,
-            requiresAccessToken = false,          // non-gated repo — verify
+            requiresAccessToken = true,           // repo answers anonymous requests with GatedRepo
             params = "270M",
         ),
         ModelVariant(
@@ -81,10 +85,10 @@ object ModelCatalog {
             displayName = "Gemma 3 270M-IT (q4, MediaPipe)",
             fileName = "gemma3-270m-it-q4_0-web.task",
             downloadUrl = "https://huggingface.co/litert-community/gemma-3-270m-it/resolve/main/gemma3-270m-it-q4_0-web.task",
-            sizeInBytes = 261_000_000L,           // ~249 MiB — verify against repo
+            sizeInBytes = 249_233_408L,
             runtime = ModelRuntime.MEDIAPIPE,
             minDeviceMemoryGb = 2,
-            requiresAccessToken = false,
+            requiresAccessToken = true,
             params = "270M",
         ),
         ModelVariant(
@@ -94,10 +98,10 @@ object ModelCatalog {
             displayName = "Gemma 3 270M-IT (q8, LiteRT-LM — not yet runnable)",
             fileName = "gemma3-270m-it-q8.litertlm",
             downloadUrl = "https://huggingface.co/litert-community/gemma-3-270m-it/resolve/main/gemma3-270m-it-q8.litertlm",
-            sizeInBytes = 319_000_000L,
+            sizeInBytes = 304_005_120L,
             runtime = ModelRuntime.LITERT_LM,
             minDeviceMemoryGb = 2,
-            requiresAccessToken = false,
+            requiresAccessToken = true,
             params = "270M",
         ),
         ModelVariant(
@@ -105,7 +109,7 @@ object ModelCatalog {
             displayName = "Gemma 3 1B-IT (INT4, MediaPipe)",
             fileName = "gemma3-1b-it-int4.task",
             downloadUrl = ModelProvider.HF_TASK_MODEL_URL,
-            sizeInBytes = 555_000_000L,           // ~529 MiB — verify against repo
+            sizeInBytes = 554_661_243L,
             runtime = ModelRuntime.MEDIAPIPE,
             minDeviceMemoryGb = 3,
             requiresAccessToken = true,           // litert-community/Gemma3-1B-IT is gated
@@ -113,10 +117,15 @@ object ModelCatalog {
         ),
     )
 
-    /** Fraction of [ModelVariant.sizeInBytes] below which a download is treated as
-     *  truncated/incomplete. Generous so an approximate `sizeInBytes` never causes a
-     *  *complete* file to be wrongly deleted; the server `Content-Length` check in
-     *  [ModelDownloadWorker] is the precise guard when the server provides it. */
+    /**
+     * Fraction of [ModelVariant.sizeInBytes] below which a file is obviously not a model —
+     * an HTTP error body, a pointer file, a download that barely started.
+     *
+     * Last resort: consulted only when there is neither a server `Content-Length` nor a
+     * structural validator for the format, because anything derived from an expected size
+     * can reject a legitimately-resized model. It is also no completeness test on its own,
+     * since a zip's central directory lives at the end of the file.
+     */
     const val SIZE_FLOOR_FRACTION = 0.85
 
     fun byId(id: String): ModelVariant? = ALLOWLIST.firstOrNull { it.id == id }
@@ -132,6 +141,13 @@ object ModelCatalog {
 
     /** True when the variant's runtime is bundled and can actually load today. */
     fun isRunnable(variant: ModelVariant): Boolean = variant.runtime == ModelRuntime.MEDIAPIPE
+
+    /**
+     * True when the variant downloads a `.task` zip bundle, so
+     * [ModelFileIntegrity.validateTaskBundle] applies. A `.litertlm` is a different
+     * container and must not be judged by zip rules.
+     */
+    fun isTaskBundle(variant: ModelVariant): Boolean = variant.fileName.endsWith(".task")
 
     /** Per-variant minimum-valid-size floor in bytes. */
     fun minValidSizeBytes(variant: ModelVariant): Long =

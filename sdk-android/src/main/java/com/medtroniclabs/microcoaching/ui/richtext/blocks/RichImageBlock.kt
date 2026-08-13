@@ -57,7 +57,10 @@ internal fun RichImageBlock(image: RichBlock.Image, modifier: Modifier = Modifie
                 )
             }
     }
-    val file by rememberCachedImageFile(key) {
+    val file by rememberCachedImageFile(
+        key = key,
+        renewUrl = { MediaUrlResolver.resolve(image.src, image.objectName, forceFresh = true) },
+    ) {
         MediaUrlResolver.resolve(image.src, image.objectName)
     }
 

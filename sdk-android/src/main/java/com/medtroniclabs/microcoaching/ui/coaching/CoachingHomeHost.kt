@@ -39,7 +39,7 @@ fun CoachingHomeHost(
     knowledgeState: SectionState<List<KnowledgeDocument>>,
     onKnowledgeDocSelect: (KnowledgeDocument) -> Unit,
     onSeeAllKnowledge: () -> Unit,
-    onOpenActiveSks: () -> Unit = {},
+    onOpenActiveSks: (com.medtroniclabs.microcoaching.ui.podashboard.SkStatus) -> Unit = {},
     onOpenChatbotUsage: () -> Unit = {},
     onOpenModulesCompleted: () -> Unit = {},
     onOpenSkDetail: (String) -> Unit = {},

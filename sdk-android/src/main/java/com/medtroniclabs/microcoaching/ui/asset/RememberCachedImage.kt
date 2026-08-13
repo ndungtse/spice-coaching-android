@@ -24,6 +24,7 @@ import java.io.File
 @Composable
 fun rememberCachedImageFile(
     key: String?,
+    renewUrl: (suspend () -> String?)? = null,
     fetchUrl: suspend () -> String?,
 ): State<File?> = produceState<File?>(initialValue = null, key) {
     val k = key?.takeIf { it.isNotBlank() }
@@ -31,7 +32,12 @@ fun rememberCachedImageFile(
         null
     } else {
         runCatching {
-            MicroCoachingSDK.getInstance().assetCache.localFile(k, AssetKind.IMAGE, fetchUrl = fetchUrl)
+            MicroCoachingSDK.getInstance().assetCache.localFile(
+                key = k,
+                kind = AssetKind.IMAGE,
+                renewUrl = renewUrl,
+                fetchUrl = fetchUrl,
+            )
         }.getOrNull()
     }
 }

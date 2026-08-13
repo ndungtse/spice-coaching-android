@@ -99,6 +99,7 @@ class VisitCompletedHandlerTest {
         override fun getEventCountFlow(): Flow<Int> = flowOf(0)
         override fun observeModuleRequested(chwId: String): Flow<List<CoachingEventEntity>> = flowOf(emptyList())
         override suspend fun getModuleRequested(chwId: String): List<CoachingEventEntity> = emptyList()
+        override suspend fun countDistinctCardsViewed(chwId: String, moduleFamilyId: String): Int = 0
         override suspend fun markSynced(eventIds: List<String>, syncedAt: Long) = Unit
         override suspend fun markFailed(eventIds: List<String>) = Unit
         override suspend fun incrementRetryCount(eventIds: List<String>) = Unit

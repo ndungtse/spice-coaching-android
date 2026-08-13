@@ -17,6 +17,7 @@ import com.medtroniclabs.microcoaching.network.CoachingApiService
 import com.medtroniclabs.microcoaching.data.db.entity.AssignedVideoEntity
 import com.medtroniclabs.microcoaching.data.db.entity.PublishedSourceDocumentEntity
 import com.medtroniclabs.microcoaching.data.localized.toJsonString
+import com.medtroniclabs.microcoaching.network.SourceDocumentSyncDownloadItem
 import com.medtroniclabs.microcoaching.network.SyncDefaults
 import com.medtroniclabs.microcoaching.network.TelemetryBatch
 import kotlinx.serialization.json.JsonElement
@@ -28,6 +29,23 @@ import java.util.UUID
 
 // Asset sync (morning cards / source documents) — extension functions on SyncApi.
 private const val TAG = "SyncApi"
+
+/**
+ * Collapse the catalogue's two halves into the one table that stores them, so a
+ * document appearing in both keeps the assigned row.
+ *
+ * Assignment is the more specific fact and the only one the grid filters on, so
+ * losing it would hide a document the CHW was assigned. The reverse never
+ * matters: both rows describe the same document and carry the same URLs.
+ *
+ * Top-level + pure so the precedence rule is unit-testable without a Room or
+ * network harness.
+ */
+internal fun mergeSourceDocumentRows(
+    moduleLinked: List<PublishedSourceDocumentEntity>,
+    assigned: List<PublishedSourceDocumentEntity>,
+): List<PublishedSourceDocumentEntity> =
+    (moduleLinked + assigned).associateBy { it.sourceDocumentId }.values.toList()
 
 /**
  * Fetch the backend-prioritised morning-module list for the signed-in CHW and
@@ -66,15 +84,64 @@ suspend fun SyncApi.pullMorningCards(): MorningCardsResult = safeInbound(
 )
 
 /**
+ * Recover watch progress the server holds for this CHW's assigned videos.
+ *
+ * Progress is written by telemetry, so the device is normally ahead of the server
+ * and this pull changes nothing. It earns its place in the one case the device
+ * cannot recover alone: a reinstall, a cleared data directory, or a different
+ * handset, where the local position is gone but the server still has it.
+ *
+ * Writes go through the DAO's monotonic update rather than an entity upsert, so a
+ * server value that lags unsent local playback can never wind a video backwards.
+ * Unlike the catalogue pulls this one honours a real watermark — the response
+ * carries no presigned URLs, so a row skipped as unchanged loses nothing.
+ */
+suspend fun SyncApi.pullVideoProgress(sinceWatermark: String?): VideoProgressResult {
+    val userId = chwId
+    if (userId.isBlank()) {
+        Log.d(TAG, "Video progress: no CHW signed in — skipping.")
+        return VideoProgressResult(skipped = true)
+    }
+    return safeInbound(
+        label = "Video progress",
+        failureStage = "inbound_video_progress",
+        call = {
+            apiService.pullVideoProgress(
+                since = sinceWatermark?.takeIf { it.isNotBlank() } ?: SyncDefaults.EPOCH_ISO,
+            )
+        },
+        onSuccess = { bundle ->
+            bundle.videos.forEach { item ->
+                db.assignedVideoDao().updateProgress(
+                    videoId = item.sourceDocumentId,
+                    chwId = userId,
+                    positionMs = item.lastPositionMs,
+                    percent = item.percentWatched,
+                    completed = item.completed,
+                    watchedAt = item.lastWatchedAt,
+                )
+            }
+            Log.i(TAG, "Video progress sync OK: rows=${bundle.videos.size}")
+            VideoProgressResult(count = bundle.videos.size, newWatermark = bundle.serverTimeUtc)
+        },
+        onFailure = { error, kind -> VideoProgressResult(error = error, errorKind = kind) },
+    )
+}
+
+/**
  * Fetch the source-document catalogue and fan it out to the two tables that
- * consume it: `published_source_document` (the Knowledge grid) from
- * `source_documents`, and `assigned_video` (the Training sub-tab) from the
- * audio/video rows of `assigned_documents`.
+ * consume it.
+ *
+ * Both halves of the response go into `published_source_document`, because both
+ * are needed: the assigned rows are what the Knowledge grid lists, and the
+ * module-linked rows are what a chat citation chip resolves a URL against. The
+ * audio/video subset of the assigned rows additionally reconciles into
+ * `assigned_video`, which is the only table that carries watch progress.
  *
  * The request always asks for the full catalogue rather than passing a stored
  * watermark. Presigned URLs are only attached to the rows a response returns, so
  * a narrower `since` would leave every unchanged document holding a URL that
- * eventually expires with no way to refresh it — and the Knowledge table is
+ * eventually expires with no way to refresh it — and the document table is
  * replaced wholesale, which a partial response would truncate.
  *
  * Both writes are all-or-nothing per table: on any failure the previous contents
@@ -96,49 +163,66 @@ suspend fun SyncApi.pullSourceDocuments(): SourceDocumentsResult {
         val body = response.body()
             ?: return SourceDocumentsResult.failed("empty body", SyncErrorKind.UNEXPECTED)
 
-        // ── Knowledge grid ────────────────────────────────────────────────────
-        // De-dupe by id (the catalogue can repeat a source id across re-ingested
-        // files) keeping first-seen order; the table PK would otherwise drop
-        // later duplicates non-deterministically.
-        val publishedRows = body.sourceDocuments.mapIndexed { idx, item ->
-            PublishedSourceDocumentEntity(
-                sourceDocumentId = item.sourceDocumentId,
-                title = item.title,
-                originalFilename = item.originalFilename,
-                presignedUrl = item.presignedUrl,
-                presignedExpiresAt = item.presignedExpiresSeconds?.let { absoluteExpiry(nowSec, it) },
-                thumbnailUrl = item.thumbnailPresignedUrl,
-                thumbnailExpiresAt = item.thumbnailPresignedExpiresSeconds?.let { absoluteExpiry(nowSec, it) },
-                rank = idx,
-                lastSynced = now,
-            )
-        }.distinctBy { it.sourceDocumentId }
-        db.publishedSourceDocumentDao().replaceAll(publishedRows)
+        // ── Document catalogue ────────────────────────────────────────────────
+        // Both halves land in one table: the assigned rows are what the Knowledge
+        // grid lists, and the module-linked rows are what a chat citation chip
+        // resolves a URL against. Assigned rows are mapped last so that a document
+        // present in both keeps its `assigned_at` — being assigned is the more
+        // specific fact, and it is what puts the row in the grid.
+        //
+        // De-duping by id also protects the primary key, which would otherwise
+        // drop later duplicates non-deterministically.
+        fun documentRow(idx: Int, item: SourceDocumentSyncDownloadItem) = PublishedSourceDocumentEntity(
+            sourceDocumentId = item.sourceDocumentId,
+            sourceType = item.sourceType,
+            title = item.title,
+            description = item.description,
+            originalFilename = item.originalFilename,
+            storagePath = item.storagePath,
+            thumbnailStoragePath = item.thumbnailStoragePath,
+            assignedAt = item.assignedAt,
+            presignedUrl = item.presignedUrl,
+            presignedExpiresAt = item.presignedExpiresSeconds?.let { absoluteExpiry(nowSec, it) },
+            thumbnailUrl = item.thumbnailPresignedUrl,
+            thumbnailExpiresAt = item.thumbnailPresignedExpiresSeconds?.let { absoluteExpiry(nowSec, it) },
+            rank = idx,
+            lastSynced = now,
+        )
+
+        val moduleLinkedRows = body.sourceDocuments.mapIndexed(::documentRow)
+        val assignedRows = body.assignedDocuments.mapIndexed(::documentRow)
+        val documentRows = mergeSourceDocumentRows(moduleLinkedRows, assignedRows)
+        db.publishedSourceDocumentDao().replaceAll(documentRows)
 
         // ── Training sub-tab ──────────────────────────────────────────────────
-        // Assigned documents cover every file type; only the playable ones back
-        // the video list. The remainder are parsed but not yet surfaced.
+        // Video-only slice of the same assigned rows (audio stays in the Knowledge
+        // grid). They are stored twice on purpose: `assigned_video` carries watch
+        // progress and the resume anchor, which the document table has no notion of.
         val userId = chwId
         val videoResult = if (userId.isBlank()) {
             Log.d(TAG, "Assigned videos: no CHW signed in — skipping reconcile.")
             AssignedVideosResult(skipped = true)
         } else {
             val videoRows = body.assignedDocuments
-                .filter { it.isPlayableMedia }
+                .filter { it.isVideo }
                 .mapIndexed { idx, item ->
                     AssignedVideoEntity(
                         videoId = item.sourceDocumentId,
                         chwId = userId,
                         title = item.title,
+                        description = item.description,
+                        durationMs = item.durationMs ?: 0,
                         assignedAt = item.assignedAt,
+                        storagePath = item.storagePath,
                         presignedUrl = item.presignedUrl,
                         presignedExpiresAt = item.presignedExpiresSeconds?.let { absoluteExpiry(nowSec, it) },
                         thumbnailUrl = item.thumbnailPresignedUrl,
                         thumbnailExpiresAt = item.thumbnailPresignedExpiresSeconds
                             ?.let { absoluteExpiry(nowSec, it) },
-                        // The catalogue carries no watch progress or duration.
-                        // Leaving these at their defaults is what lets the DAO's
-                        // monotonic merge keep whatever the device already knows.
+                        // The catalogue carries no watch progress. Leaving those at
+                        // their defaults is what lets the DAO's monotonic merge keep
+                        // whatever the device already knows; progress is recovered
+                        // separately by [pullVideoProgress].
                         rank = idx,
                         lastSynced = now,
                     )
@@ -150,11 +234,12 @@ suspend fun SyncApi.pullSourceDocuments(): SourceDocumentsResult {
 
         Log.i(
             TAG,
-            "Source-documents sync OK: published=${publishedRows.size} " +
-                "assigned=${body.assignedDocuments.size} videos=${videoResult.count}",
+            "Source-documents sync OK: documents=${documentRows.size} " +
+                "(moduleLinked=${moduleLinkedRows.size} assigned=${assignedRows.size}) " +
+                "videos=${videoResult.count}",
         )
         SourceDocumentsResult(
-            published = PublishedSourceDocumentsResult(count = publishedRows.size),
+            published = PublishedSourceDocumentsResult(count = documentRows.size),
             assignedVideos = videoResult,
         )
     } catch (e: IOException) {

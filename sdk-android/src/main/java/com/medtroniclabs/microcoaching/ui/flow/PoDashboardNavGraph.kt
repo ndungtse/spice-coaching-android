@@ -47,6 +47,7 @@ import com.medtroniclabs.microcoaching.ui.learn.LearnUiState
 import com.medtroniclabs.microcoaching.ui.coaching.CoachingHomeHost
 import com.medtroniclabs.microcoaching.ui.podashboard.DateRange
 import com.medtroniclabs.microcoaching.ui.podashboard.PoDashboardSection
+import com.medtroniclabs.microcoaching.ui.podashboard.SkStatus
 import com.medtroniclabs.microcoaching.ui.podashboard.drilldown.ActiveSksScreen
 import com.medtroniclabs.microcoaching.ui.podashboard.drilldown.ChatbotUsageScreen
 import com.medtroniclabs.microcoaching.ui.podashboard.drilldown.ModulesCompletedScreen
@@ -81,9 +82,16 @@ internal fun NavGraphBuilder.poDashboardGraph(
     onFinish: () -> Unit,
 ) {
     // ── PO dashboard drill-downs ───────────────────────────────────────────
-    composable(CoachingRoute.ActiveSks.route) {
+    composable(
+        route = CoachingRoute.ActiveSks.route,
+        arguments = listOf(navArgument(CoachingRoute.ActiveSks.ARG_STATUS) { type = NavType.StringType }),
+    ) { backStack ->
+        val status = runCatching {
+            SkStatus.valueOf(backStack.arguments?.getString(CoachingRoute.ActiveSks.ARG_STATUS).orEmpty())
+        }.getOrDefault(SkStatus.ACTIVE)
         ActiveSksScreen(
             chwId = chwId,
+            status = status,
             onBack = { navController.whenSettled { navController.popOrFinish(onFinish) } },
             onHome = onFinish,
             onOpenSkDetail = { skId ->

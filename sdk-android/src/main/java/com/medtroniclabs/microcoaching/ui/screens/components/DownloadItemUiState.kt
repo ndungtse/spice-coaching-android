@@ -40,6 +40,23 @@ sealed class DownloadItemUiState {
 
     /** Download or extraction failed; surface a Retry button. */
     data class Failed(val reason: String) : DownloadItemUiState()
+
+    /**
+     * The bytes arrived but are not usable — a truncated or damaged bundle. Distinct from
+     * [Failed], where the transfer itself never finished, and from [Done], which would put a
+     * check mark next to an error the user can't act on.
+     *
+     * @param reason short, user-safe explanation.
+     * @param onDiskBytes what landed, so the card can show it against the expected size
+     *   instead of asserting the expected size over a partial file.
+     * @param canRetry false when the re-download budget is spent; the card then states the
+     *   problem without offering an action.
+     */
+    data class Unusable(
+        val reason: String,
+        val onDiskBytes: Long? = null,
+        val canRetry: Boolean = true,
+    ) : DownloadItemUiState()
 }
 
 /**
@@ -47,9 +64,17 @@ sealed class DownloadItemUiState {
  * into the shared card shape. Note we don't expose Paused directly from
  * the chat layer yet — Gemma's pause flag lives on `ChatUiState.SetupRequired`
  * but the existing UX folds it under `isDownloading=false isPaused=true`.
+ *
+ * [DownloadItemUiState.Unusable] is checked before [modelPresent] on purpose: a confirmed-bad
+ * file is present by any file-system test, so presence must not win.
  */
 fun ChatUiState.SetupRequired.toAiDownloadItemState(modelPresent: Boolean): DownloadItemUiState =
     when {
+        aiUnusable -> DownloadItemUiState.Unusable(
+            reason = loadError.orEmpty(),
+            onDiskBytes = aiOnDiskBytes,
+            canRetry = aiCanRetryDownload,
+        )
         modelPresent -> DownloadItemUiState.Done
         isDownloading && downloadProgress < 0 -> DownloadItemUiState.Preparing
         isDownloading -> DownloadItemUiState.Downloading(

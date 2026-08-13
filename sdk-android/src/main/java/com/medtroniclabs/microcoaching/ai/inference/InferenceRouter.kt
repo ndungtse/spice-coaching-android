@@ -85,6 +85,15 @@ class InferenceRouter(private val config: MicroCoachingConfig) {
             return null
         }
 
+        // Name, path and exact length of the file about to be handed to the engine, against
+        // the expected size. On a load failure this separates "wrong file" from "short file"
+        // from "right file, engine problem".
+        Log.i(
+            TAG,
+            "Resolved model: ${modelFile.name} (${modelFile.length()} bytes, " +
+                "expected ${variant.sizeInBytes}) at ${modelFile.absolutePath}",
+        )
+
         val service = serviceForFile(modelFile) ?: run {
             Log.w(TAG, "Unrecognised model file extension: ${modelFile.extension}")
             lastLoadError = "No bundled engine can load '${modelFile.name}'."
@@ -113,7 +122,12 @@ class InferenceRouter(private val config: MicroCoachingConfig) {
             lastLoadError = null
             Log.i(TAG, "Inference engine ready: ${service::class.simpleName} — ${modelFile.name}")
         }.onFailure { cause ->
-            Log.e(TAG, "Failed to load model ${modelFile.name}: ${cause.message}")
+            Log.e(
+                TAG,
+                "Failed to load ${modelFile.name} (${modelFile.length()} bytes, " +
+                    "expected ${variant.sizeInBytes}): ${cause.message}",
+                cause,
+            )
             lastLoadError = cause.message ?: cause::class.simpleName
             activeService = null
         }
@@ -175,14 +189,20 @@ class InferenceRouter(private val config: MicroCoachingConfig) {
          * than reading config, so the priority rule is testable without a Context.
          *
          * Priority:
-         *   1. [configuredModelPath] when it exists **and** [canLoad] accepts it.
+         *   1. [configuredModelPath] when it exists, [canLoad] accepts it, **and** its
+         *      filename is exactly [expectedFileName].
          *   2. [expectedFileName] inside [externalDir] — matched by exact name, not
          *      "first `.task` on disk", so coexisting variants stay deterministic.
          *
-         * The loadability check on (1) is what makes this self-healing. A host that
-         * scans the model dir and adopts whatever it finds can pass a file no
-         * bundled engine can load; preferring it unconditionally would strand chat
-         * on the setup screen even with a loadable file sitting right beside it.
+         * The two checks on (1) guard different failures:
+         *  - **Loadability**, for a host that scans its model dir and passes something no
+         *    bundled engine can load (a leftover `.litertlm`). Preferring it would strand
+         *    chat on the setup screen with a loadable file sitting beside it.
+         *  - **Filename**, for a host that passes some *other* `.task`. `listFiles()` is
+         *    unordered, so a scan can return a leftover from an earlier default model while
+         *    [ModelManager] reports the selected variant as ready — the engine and the UI
+         *    then describe different files. Matching the catalog is too weak a test here,
+         *    since a stale variant is in the catalog too; only the selected name will do.
          */
         internal fun resolveModelFile(
             configuredModelPath: String,
@@ -200,6 +220,13 @@ class InferenceRouter(private val config: MicroCoachingConfig) {
                             TAG,
                             "Configured modelPath '${explicit.name}' has no bundled engine — " +
                                 "ignoring it and falling back to the selected variant's file",
+                        )
+                    explicit.name != expectedFileName ->
+                        Log.w(
+                            TAG,
+                            "Configured modelPath '${explicit.name}' is not the selected variant " +
+                                "('$expectedFileName') — ignoring it so the engine and ModelManager " +
+                                "cannot disagree about which file is the model",
                         )
                     else -> return explicit
                 }

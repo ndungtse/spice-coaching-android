@@ -20,6 +20,15 @@ interface AssignedModuleDao {
     @Query("SELECT * FROM assigned_module WHERE user_id = :userId")
     fun getAssignedForUser(userId: String): Flow<List<AssignedModuleEntity>>
 
+    /**
+     * One-shot read of the same rows.
+     *
+     * Doubles as a module-version → family map that outlives `module_cache`, which
+     * only ever holds the newest version of each family.
+     */
+    @Query("SELECT * FROM assigned_module WHERE user_id = :userId")
+    suspend fun getAllForUser(userId: String): List<AssignedModuleEntity>
+
     @Query("SELECT COUNT(*) FROM assigned_module WHERE user_id = :userId")
     suspend fun countForUser(userId: String): Int
 

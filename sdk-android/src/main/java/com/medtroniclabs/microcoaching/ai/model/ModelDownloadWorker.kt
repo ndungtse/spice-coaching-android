@@ -47,6 +47,9 @@ class ModelDownloadWorker(
     params: WorkerParameters,
 ) : CoroutineWorker(context, params) {
 
+    /** Last `Content-Length` handed to [recordObservedSize]; dedupes the preference write. */
+    private var lastRecordedTotalBytes: Long = 0L
+
     override suspend fun getForegroundInfo(): ForegroundInfo =
         buildForegroundInfo(progress = 0, bytesDownloaded = 0L, totalBytes = 0L)
 
@@ -96,7 +99,12 @@ class ModelDownloadWorker(
 
             when (outcome) {
                 is DownloadOutcome.Success -> {
-                    Log.i(TAG, "Download complete via $providerName → ${outcome.file.name} (${outcome.file.length() / 1_048_576} MB)")
+                    // Exact bytes, not MB — a short file can round to the expected megabytes.
+                    Log.i(
+                        TAG,
+                        "Download complete via $providerName → ${outcome.file.name} " +
+                            "(${outcome.file.length()} bytes, expected ${variant.sizeInBytes})",
+                    )
                     // Persist the ready flag before returning so ModelManager.reconcileReadyState()
                     // on the next process start can emit Ready immediately even if the WorkInfo
                     // SUCCEEDED event was never observed by a live ModelManager (e.g. worker
@@ -155,6 +163,8 @@ class ModelDownloadWorker(
             headers = headers,
             outputFile = outputFile,
             minValidBytes = ModelSizeProbe.minValidSizeBytes(applicationContext, variant),
+            validate = validatorFor(variant),
+            variant = variant,
         )
     }
 
@@ -196,21 +206,46 @@ class ModelDownloadWorker(
             headers = headers,
             outputFile = outputFile,
             minValidBytes = ModelSizeProbe.minValidSizeBytes(applicationContext, variant),
+            validate = validatorFor(variant),
+            variant = variant,
         )
+    }
+
+    // ── Completeness validation ───────────────────────────────────────────────
+
+    /**
+     * Structural check for [variant]'s format, or null when there is none. Only `.task` is
+     * a zip; judging a `.litertlm` by zip rules would reject every good file.
+     */
+    private fun validatorFor(variant: ModelVariant): ((File) -> String?)? =
+        if (ModelCatalog.isTaskBundle(variant)) ModelFileIntegrity::validateTaskBundle else null
+
+    /**
+     * Caches the served `Content-Length` so the displayed size comes from the host instead
+     * of a constant that goes stale when the model is republished. Guarded to one write per
+     * distinct value, since progress fires repeatedly.
+     */
+    private fun recordObservedSize(variant: ModelVariant, totalBytes: Long) {
+        if (totalBytes <= 0L || totalBytes == lastRecordedTotalBytes) return
+        lastRecordedTotalBytes = totalBytes
+        ModelSizeProbe.recordObservedSize(applicationContext, variant, totalBytes)
     }
 
     // ── Shared streaming download ─────────────────────────────────────────────
 
     /**
-     * Streams [url] to [outputFile] (resume + throttled progress + size-floor check) via the
-     * shared [ResumableHttpDownloader], reporting progress through [emitProgress]. Maps the
-     * shared result back to this worker's provider-fallback [DownloadOutcome].
+     * Streams [url] to [outputFile] (resume + throttled progress + size floor + [validate])
+     * via the shared [ResumableHttpDownloader], reporting progress through [emitProgress].
+     * Maps the result to this worker's provider-fallback [DownloadOutcome], so a rejected
+     * file falls through to the next provider instead of being stored.
      */
     private suspend fun streamDownload(
         url: String,
         headers: Map<String, String>,
         outputFile: File,
         minValidBytes: Long,
+        validate: ((File) -> String?)?,
+        variant: ModelVariant,
     ): DownloadOutcome = when (
         val result = ResumableHttpDownloader.download(
             url = url,
@@ -218,7 +253,11 @@ class ModelDownloadWorker(
             minValidBytes = minValidBytes,
             headers = headers,
             logTag = TAG,
-        ) { percent, bytesDownloaded, totalBytes -> emitProgress(percent, bytesDownloaded, totalBytes) }
+            validate = validate,
+        ) { percent, bytesDownloaded, totalBytes ->
+            recordObservedSize(variant, totalBytes)
+            emitProgress(percent, bytesDownloaded, totalBytes)
+        }
     ) {
         is DownloadResult.Success -> DownloadOutcome.Success(outputFile)
         is DownloadResult.Failure -> DownloadOutcome.Failure(result.reason)

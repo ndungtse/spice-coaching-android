@@ -207,11 +207,27 @@ data class LearnModule(
      * the tile / detail header simply omits the image in that case.
      */
     val thumbnailUrl: String? = null,
+    /**
+     * Distinct cards of this module the CHW has read, from `module_card_viewed`
+     * telemetry. Populated **only for modules with no quiz** — those have no other
+     * progress signal, so reading is the progress. A module with questions is
+     * measured by [attemptedQuestionCount] and leaves this null.
+     *
+     * Cards recorded before card ids were sent don't count, so a CHW mid-way
+     * through such a module reads as further back than they are. It corrects
+     * itself as they keep reading.
+     */
+    val viewedCardCount: Int? = null,
 ) {
     /**
-     * Whether this module counts as **complete for progress/reminder purposes**
-     * (MED-1940 Req 2): the CHW has passed it ([status] == "completed"), OR has
-     * attempted every quiz question at least once (pass or fail).
+     * Whether this module counts as **complete for progress/reminder purposes**:
+     * the CHW has passed it ([status] == "completed"), OR has attempted every quiz
+     * question at least once (pass or fail), OR — for a module with no quiz — has
+     * read every card.
+     *
+     * The card clause keeps the ring and this flag agreeing. Without it a CHW who
+     * read every card but backed out before the completion screen would see a full
+     * ring on a module still counted as outstanding.
      *
      * This is the single definition shared by the All Modules progress ring
      * ([com.medtroniclabs.microcoaching.ui.learn.modules.components.progressFractionFor])
@@ -224,7 +240,8 @@ data class LearnModule(
      */
     val isProgressComplete: Boolean
         get() = status == "completed" ||
-            (questionCount > 0 && (attemptedQuestionCount ?: 0) >= questionCount)
+            (questionCount > 0 && (attemptedQuestionCount ?: 0) >= questionCount) ||
+            (questionCount == 0 && cardCount > 0 && (viewedCardCount ?: 0) >= cardCount)
 }
 
 /**

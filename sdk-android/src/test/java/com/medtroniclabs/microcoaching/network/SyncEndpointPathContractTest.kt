@@ -55,11 +55,27 @@ class SyncEndpointPathContractTest {
     }
 
     @Test
+    fun `badges endpoint is an unparameterised full snapshot`() {
+        val pullBadges = CoachingApiService::class.java.getDeclaredMethod(
+            "pullBadges",
+            kotlin.coroutines.Continuation::class.java,
+        )
+        assertEquals("sync/badges", pullBadges.getAnnotation(GET::class.java)?.value)
+        // Adding a `since` here would leave unchanged badges holding an artwork URL
+        // that expires with nothing able to re-presign it.
+        val queryNames = pullBadges.parameterAnnotations
+            .flatMap { it.toList() }
+            .filterIsInstance<Query>()
+            .map { it.value }
+        assertEquals(emptyList<String>(), queryNames)
+    }
+
+    @Test
     fun `token-derived identity is not sent as a query parameter`() {
         // The backend resolves the CHW and tenant from the auth token and ignores
         // these silently, so sending them would read as though they still scope
         // the response.
-        listOf("pullGaps", "pullChatFaqs", "getMorningCards").forEach { name ->
+        listOf("pullGaps", "pullChatFaqs", "getMorningCards", "pullBadges").forEach { name ->
             val method = CoachingApiService::class.java.declaredMethods.firstOrNull { it.name == name }
             assertNotNull("$name should still exist", method)
             val queryNames = method!!.parameterAnnotations

@@ -58,8 +58,11 @@ sealed class CoachingRoute(val route: String) {
 
     // ── PO dashboard drill-downs ───────────────────────────────────────────────
 
-    /** "Active this week" — SKs grouped by status. */
-    object ActiveSks : CoachingRoute("coaching_po_active_sks")
+    /** SKs for one KPI card, scoped to a single status (responsive / non-responsive). */
+    object ActiveSks : CoachingRoute("coaching_po_active_sks/{status}") {
+        const val ARG_STATUS = "status"
+        fun routeFor(status: String) = "coaching_po_active_sks/$status"
+    }
 
     /** "Chatbot Usage" — SKs grouped by chatbot usage. */
     object ChatbotUsage : CoachingRoute("coaching_po_chatbot_usage")

@@ -199,6 +199,18 @@ internal class LearnModuleMapper(
                 else -> (localCorrectIds + localWrongIds).size
             }
 
+            // A module with no quiz has reading as its only progress signal, so
+            // count the distinct cards read. Skipped entirely for modules with
+            // questions — those are measured by attempts, and this is a per-module
+            // query we shouldn't pay for where it means nothing. A recorded
+            // completion clamps to "all read" so a fresh device doesn't show a
+            // finished module as unread.
+            val viewedCards: Int? = when {
+                totalQ > 0 -> null
+                completion?.completedAt != null -> shell.cardCount
+                else -> dao.countDistinctCardsViewed(chwId, entity.moduleFamilyId)
+            }
+
             // Progress prioritization:
             //   passed-completion > partial > failed-completion > assigned
             val quizScore: Float? = when {
@@ -235,6 +247,7 @@ internal class LearnModuleMapper(
                 wrongQuestionCount = wrongCount,
                 reinforceQuestionCount = toReinforceCount,
                 attemptedQuestionCount = attemptedCount,
+                viewedCardCount = viewedCards,
                 severity = shell.behaviouralGapId?.let { gapSeverityById[it] },
                 // Backend "quiz"-source cards target ONE question; carried so the
                 // tile renders as a Quiz and the drill runs only that question.

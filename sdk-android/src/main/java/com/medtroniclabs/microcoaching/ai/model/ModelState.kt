@@ -35,9 +35,38 @@ sealed class ModelState {
     /** Download failed. */
     data class DownloadFailed(val reason: String) : ModelState()
 
-    /** Model file is present and integrity-verified. Ready for inference. */
+    /**
+     * Model file is present and has passed [ModelFileIntegrity.validateTaskBundle]. Ready
+     * for inference.
+     *
+     * Structure-verified, not hash-verified: the file is well-formed and complete, but not
+     * proven to be the exact blob the catalog names. [ModelManager.verifyIntegrity] is the
+     * opt-in SHA-256 check and nothing calls it.
+     */
     data class Ready(val modelFile: File) : ModelState()
 
-    /** Model failed to load into the inference engine. */
+    /**
+     * The engine rejected a file that passes the structural check — a transient native or
+     * mmap failure, or a model this engine version can't run. Retryable: the file is kept
+     * and re-entering chat re-attempts the load. Distinct from [Corrupt], where no retry
+     * can succeed.
+     */
     data class LoadFailed(val reason: String) : ModelState()
+
+    /**
+     * A model file failed the structural check, so its bytes are wrong. Already deleted;
+     * only a fresh download resolves it. Separate from [LoadFailed] because offering a load
+     * retry here would loop on the same bad bytes.
+     *
+     * @param onDiskBytes length of the rejected file, for the UI's "N of M".
+     * @param expectedBytes what the selected variant should weigh.
+     * @param canRetry false once the re-download budget is spent, so the UI stops offering
+     *   an action that would be refused.
+     */
+    data class Corrupt(
+        val reason: String,
+        val onDiskBytes: Long,
+        val expectedBytes: Long,
+        val canRetry: Boolean = true,
+    ) : ModelState()
 }

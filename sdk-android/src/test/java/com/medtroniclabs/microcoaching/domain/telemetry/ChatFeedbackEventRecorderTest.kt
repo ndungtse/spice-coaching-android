@@ -156,5 +156,6 @@ class ChatFeedbackEventRecorderTest {
         override suspend fun getAll(): List<CoachingEventEntity> = error("unused")
         override suspend fun deleteSynced() = error("unused")
         override suspend fun deleteAll() = error("unused")
+        override suspend fun countDistinctCardsViewed(chwId: String, moduleFamilyId: String): Int = 0
     }
 }

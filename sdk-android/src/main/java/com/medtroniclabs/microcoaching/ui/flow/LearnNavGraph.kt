@@ -167,8 +167,8 @@ internal fun NavGraphBuilder.learnGraph(
                     )
                 }
             },
-            onOpenActiveSks = {
-                navController.whenSettled { navController.navigate(CoachingRoute.ActiveSks.route) }
+            onOpenActiveSks = { status ->
+                navController.whenSettled { navController.navigate(CoachingRoute.ActiveSks.routeFor(status.name)) }
             },
             onOpenChatbotUsage = {
                 navController.whenSettled { navController.navigate(CoachingRoute.ChatbotUsage.route) }
@@ -399,6 +399,9 @@ internal fun NavGraphBuilder.learnGraph(
                 // quiz keep the direct onStartQuiz path below — no bridge screen.
                 hasQuiz = module.questionCount > 0,
                 onFinishCards = {
+                    // Reaching the end of the cards is what completes a quiz-less
+                    // module — it has no other way to get there.
+                    learnVm.onLessonCardsFinished()
                     navController.whenSettled {
                         navController.navigate(CoachingRoute.LessonComplete.route)
                     }

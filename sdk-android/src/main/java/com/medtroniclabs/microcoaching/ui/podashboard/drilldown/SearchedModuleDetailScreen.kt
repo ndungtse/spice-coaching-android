@@ -30,6 +30,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.medtroniclabs.microcoaching.R
@@ -114,7 +115,13 @@ private fun Content(detail: SearchedModuleDetail) {
 private fun StatCell(label: String, value: Int, color: Color, modifier: Modifier = Modifier) {
     Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Text("$value", color = color, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.headlineSmall)
-        Text(label, color = MutedText, style = MaterialTheme.typography.labelMedium)
+        Text(
+            text = label,
+            color = MutedText,
+            style = MaterialTheme.typography.labelMedium,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 }
 

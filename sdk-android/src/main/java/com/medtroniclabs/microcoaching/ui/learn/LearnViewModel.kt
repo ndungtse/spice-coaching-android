@@ -396,9 +396,15 @@ class LearnViewModel(
     /**
      * Emits a `module_card_viewed` telemetry event when the CHW views a card
      * in [LessonPlayerScreen]. Called via `LaunchedEffect(currentIndex)`.
+     *
+     * The card's own id rides along, which is what makes "how much of this module
+     * has been read" answerable: without it every card in a module is an
+     * indistinguishable row, so re-reading one card looks the same as reading
+     * several. A card with no id is still recorded — it just can't be counted.
      */
     fun recordCardShown(cardIndex: Int) {
         val module = activeModule ?: return
+        val cardId = getCurrentCards().getOrNull(cardIndex)?.cardFamilyId
         viewModelScope.launch {
             telemetry.recordCoachingEvent(
                 eventType = "module_card_viewed",
@@ -407,7 +413,36 @@ class LearnViewModel(
                 moduleFamilyId = module.moduleFamilyId,
                 moduleId = module.moduleId,
                 moduleVersion = module.moduleVersion,
+                cardFamilyId = cardId,
             )
+        }
+    }
+
+    /**
+     * Complete a module that has no quiz, having reached the end of its cards.
+     *
+     * Only quiz-less modules go through here — one with questions must still be
+     * answered, and completing it on cards alone would let a CHW skip the
+     * assessment. Records the same `module_completed` event the quiz path emits so
+     * the server converges on the same state the device just wrote.
+     */
+    fun onLessonCardsFinished() {
+        val module = activeModule ?: return
+        if (module.questionCount > 0) return
+        viewModelScope.launch {
+            val sdk = MicroCoachingSDK.getInstance()
+            sdk.onModuleCardsCompleted(module.moduleFamilyId, module.moduleId)
+            telemetry.recordCoachingEvent(
+                eventType = "module_completed",
+                clinicalDomain = module.clinicalDomain,
+                cardType = "info",
+                moduleFamilyId = module.moduleFamilyId,
+                moduleId = module.moduleId,
+                moduleVersion = module.moduleVersion,
+            )
+            // Finishing a module is a milestone worth reporting now rather than at
+            // the next periodic tick
+            sdk.flushTelemetryNow()
         }
     }
 

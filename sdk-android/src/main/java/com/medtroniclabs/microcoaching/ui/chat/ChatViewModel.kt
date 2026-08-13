@@ -217,6 +217,13 @@ class ChatViewModel(
                                     downloadProgress = modelState.progressPercent,
                                     downloadBytesDownloaded = modelState.bytesDownloaded,
                                     downloadTotalBytes = modelState.totalBytes,
+                                    // Bytes are moving, so an earlier verdict no longer
+                                    // describes anything. Cleared here rather than only where
+                                    // a retry is requested, so every route out of Corrupt
+                                    // drops styling that outranks this progress state.
+                                    aiUnusable = false,
+                                    aiOnDiskBytes = null,
+                                    loadError = null,
                                 )
                                 is ChatUiState.Ready -> it.copy(
                                     isModelDownloading = true,
@@ -294,6 +301,11 @@ class ChatViewModel(
                                         aiReady = true,
                                         isDownloading = false,
                                         isPaused = false,
+                                        // Ready is only reachable through the validation
+                                        // gate, so an earlier damaged verdict is stale.
+                                        aiUnusable = false,
+                                        aiOnDiskBytes = modelState.modelFile.length(),
+                                        loadError = null,
                                     ) ?: it
                                 }
                                 maybeAutoEnterChat()
@@ -302,16 +314,45 @@ class ChatViewModel(
                         }
                     }
                     is ModelState.LoadFailed -> {
-                        // Keep the "downloaded" fact honest. onModelLoadFailed only
-                        // deletes a *truncated* file; a complete-but-unloadable file
-                        // stays on disk. If it's still present, show it as ready
-                        // (→ "Go to chat" retries the load) rather than a Download CTA
-                        // that would wipe + re-fetch a good file — the on-device loop.
+                        // The file passed the structural check, so the bytes are fine and the
+                        // failure is transient — a load retry is worth offering. Shown as ready
+                        // so "Go to chat" retries, rather than a Download CTA that would wipe a
+                        // good file. Wrong bytes become Corrupt instead.
                         val present = sdk.modelManager.isModelPresent()
                         _uiState.value = ChatUiState.SetupRequired(
                             aiRequired = true,
                             aiReady = present,
                             aiSizeBytes = aiSizeBytes.value,
+                            aiOnDiskBytes = sdk.modelManager.localModelSizeBytes(),
+                            loadError = localizedString(R.string.chat_model_load_failed_transient),
+                        )
+                    }
+                    is ModelState.Corrupt -> {
+                        // The file is gone and no retry can load it, so report both byte counts
+                        // and the one action that resolves it. aiReady stays false to keep
+                        // "Go to chat" disabled.
+                        Log.e(
+                            TAG,
+                            "Model unusable: ${modelState.reason} " +
+                                "(${modelState.onDiskBytes} of ${modelState.expectedBytes} bytes, " +
+                                "canRetry=${modelState.canRetry})",
+                        )
+                        _uiState.value = ChatUiState.SetupRequired(
+                            aiRequired = true,
+                            aiReady = false,
+                            aiUnusable = true,
+                            aiSizeBytes = modelState.expectedBytes,
+                            aiOnDiskBytes = modelState.onDiskBytes,
+                            aiCanRetryDownload = modelState.canRetry,
+                            // Past the budget the card hides its action, so the wording must
+                            // stop pointing at a button that is no longer there.
+                            loadError = localizedString(
+                                if (modelState.canRetry) {
+                                    R.string.chat_model_file_damaged
+                                } else {
+                                    R.string.chat_model_file_damaged_no_retry
+                                },
+                            ),
                         )
                     }
                     is ModelState.Idle -> {
@@ -493,9 +534,10 @@ class ChatViewModel(
             // [enterChat] refuses to re-enter from Loading — every later tap
             // becomes a silent no-op behind a permanent spinner. Land on a state
             // the user can retry from instead.
+            // The exception text is a developer artefact, so it stays in logcat.
             Log.e(TAG, "loadReadyChat failed unexpectedly: ${e.message}", e)
             _uiState.value = currentSetupRequiredState(aiRequired = !sdk.isLowEndDevice)
-                .copy(loadError = e.message ?: e::class.simpleName)
+                .copy(loadError = localizedString(R.string.chat_model_load_failed_transient))
         }
     }
 
@@ -521,12 +563,10 @@ class ChatViewModel(
             return
         }
 
-        // Load the engine, retrying briefly on failure. A model that JUST finished
-        // downloading can transiently fail to load (file still flushing / mmap race
-        // on slower physical devices). Retrying a couple of times with a short
-        // backoff clears the common case — critical, because the failure path below
-        // used to revert to a Download CTA whose re-tap wiped the (complete) file
-        // and re-downloaded it, an endless loop the user hit on device.
+        // Load the engine, retrying briefly on failure. A model that just finished
+        // downloading can transiently fail to load (file still flushing / mmap race on
+        // slower devices), and a short backoff clears that common case before the failure
+        // path below has to decide whether the file is worth keeping.
         var service = inferenceRouter.initializeIfModelPresent()
         var attempt = 1
         while (service == null && attempt < MODEL_LOAD_MAX_ATTEMPTS && sdk.modelManager.isModelPresent()) {
@@ -553,20 +593,23 @@ class ChatViewModel(
                 return
             }
             if (sdk.modelManager.isModelPresent()) {
-                // File on disk but engine couldn't load — let the manager decide
-                // whether to wipe it (truncated) or keep it for retry (size OK).
+                // File on disk but the engine couldn't load it. The manager runs the
+                // structural check and decides: wipe + Corrupt when the bytes are wrong,
+                // keep + LoadFailed when they aren't. The native cause is logged, not shown.
+                Log.e(TAG, "Engine load failure, native cause: ${inferenceRouter.lastLoadError}")
                 sdk.modelManager.onModelLoadFailed()
+                // onModelLoadFailed may have emitted Corrupt, which observeModelState renders
+                // as a damaged card; don't overwrite it with the retry state below.
+                if (sdk.modelManager.state.value is ModelState.Corrupt) return
             }
-            // Reflect reality: if a complete file is still on disk after that, the
-            // model IS downloaded → keep aiReady=true so the AI card shows "Done"
-            // and the user retries via "Go to chat" (which re-attempts the load).
-            // We must NOT show a Download button here — re-tapping it wipes and
-            // re-fetches a perfectly good file, the loop reported on device. Only
-            // when the file is genuinely gone (absent, or just deleted as truncated)
-            // do we fall back to the Download CTA.
-            // Carry the engine's reason back to the setup screen; without it the
-            // bounce is indistinguishable from the button doing nothing.
-            val loadError = inferenceRouter.lastLoadError
+            // A structurally valid file still on disk means the model IS downloaded, so
+            // aiReady stays true and "Go to chat" re-attempts the load. A Download button
+            // here would wipe and re-fetch a good file on every tap; the CTA is only right
+            // once the file is genuinely gone.
+            //
+            // A localized sentence, not `lastLoadError`: that field carries the engine's
+            // native text, which is logged above and belongs in logcat only.
+            val loadError = localizedString(R.string.chat_model_load_failed_transient)
             _uiState.value = if (sdk.modelManager.isModelPresent()) {
                 Log.e(TAG, "Engine failed to load a present model after $attempt attempt(s) — offering retry, not re-download")
                 currentSetupRequiredState(aiRequired = true)
@@ -758,12 +801,23 @@ class ChatViewModel(
             is ModelState.Ready -> ChatUiState.SetupRequired(
                 aiRequired = aiRequired,
                 aiReady = true,
+                aiOnDiskBytes = s.modelFile.length(),
             )
             is ModelState.LoadFailed -> ChatUiState.SetupRequired(
-                // A complete-but-unloadable file is kept on disk; treat it as
+                // A structurally valid but unloadable file is kept on disk; treat it as
                 // downloaded so the UI offers a load retry, not a re-download.
                 aiRequired = aiRequired,
                 aiReady = sdk.modelManager.isModelPresent(),
+                aiOnDiskBytes = sdk.modelManager.localModelSizeBytes(),
+            )
+            is ModelState.Corrupt -> ChatUiState.SetupRequired(
+                // Present-but-wrong. Never aiReady: the file has already been deleted and
+                // only a fresh download resolves it.
+                aiRequired = aiRequired,
+                aiReady = false,
+                aiUnusable = true,
+                aiOnDiskBytes = s.onDiskBytes,
+                aiCanRetryDownload = s.canRetry,
             )
             else -> ChatUiState.SetupRequired(aiRequired = aiRequired)
         }
@@ -1122,9 +1176,27 @@ class ChatViewModel(
             return
         }
         sdk.modelManager.triggerDownload()
+
+        // triggerDownload can decline, notably when the corrupt-file re-download budget is
+        // spent, so the optimistic update is conditional on a download having started.
+        // Otherwise the card shows a progress row for work nobody is doing.
+        val started = sdk.modelManager.state.value is ModelState.Downloading
+        if (!started) {
+            Log.i(TAG, "requestModelDownload: manager did not start a download — leaving UI as-is")
+            return
+        }
+
         _uiState.update {
             when (it) {
-                is ChatUiState.SetupRequired -> it.copy(isDownloading = true)
+                // Cleared here rather than left to the state observer: aiUnusable outranks
+                // every other field in toAiDownloadItemState, so a stale true would keep the
+                // damaged subtitle over a live progress bar.
+                is ChatUiState.SetupRequired -> it.copy(
+                    isDownloading = true,
+                    aiUnusable = false,
+                    aiOnDiskBytes = null,
+                    loadError = null,
+                )
                 is ChatUiState.Ready -> it.copy(isModelDownloading = true, modelDownloadProgress = 0)
                 else -> it
             }
