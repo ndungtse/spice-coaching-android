@@ -3,19 +3,21 @@ package com.medtroniclabs.microcoaching.progress
 import com.medtroniclabs.microcoaching.data.db.entity.ChwModuleCompletionEntity
 
 /**
- * Update [ChwModuleCompletionEntity] after a quiz attempt. Returns the new row that the
+ * Update [ChwModuleCompletionEntity] after a module attempt. Returns the new row that the
  * caller is expected to upsert.
  *
- * Moved out of `domain/triggers/TriggerEvaluator.kt` (it has nothing to do with trigger
- * evaluation — it's module-completion/progress logic) into the `progress` package that owns
- * that concept. Behaviour unchanged.
+ * Owns the two rules that outlive any single attempt: `completedAt` is sticky, so a later
+ * failure never un-completes a module, and the reinforcement clock restarts only on a pass.
+ *
+ * @param scoreFraction 0–1 quiz score, or null for a module that has no quiz — a synthetic
+ *   100% would otherwise flow into score reporting as if it had been answered.
  */
 fun buildModuleCompletion(
     previous: ChwModuleCompletionEntity?,
     chwId: String,
     moduleFamilyId: String,
     moduleId: String?,
-    scoreFraction: Float,
+    scoreFraction: Float?,
     passed: Boolean,
     reinforcementDays: Int,
     nowMillis: Long = System.currentTimeMillis(),

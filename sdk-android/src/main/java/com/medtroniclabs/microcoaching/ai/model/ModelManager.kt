@@ -22,8 +22,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.security.MessageDigest
+import java.util.concurrent.TimeUnit
 
 /**
  * Manages the on-device model lifecycle: detection, download scheduling, and state.
@@ -32,14 +34,19 @@ import java.security.MessageDigest
  * and respects [MicroCoachingConfig.wifiOnlyModelDownload]. Provider fallback order is
  * driven by [MicroCoachingConfig.modelProviders].
  *
- * A completed download is detected by a size floor ([ModelCatalog.minValidSizeBytes]);
- * there is no automatic hash check. [verifyIntegrity] offers opt-in SHA-256 but nothing
- * calls it today.
+ * A download counts as complete when the file opens as a valid bundle
+ * ([ModelFileIntegrity.validateTaskBundle]). This manager compares against no expected
+ * size: a configured constant goes stale when the model is republished, so gating adoption
+ * on it would reject good downloads. Sizes appear here only in logs and in what the UI
+ * displays; the authoritative length check is the server's `Content-Length`, enforced in
+ * [com.medtroniclabs.microcoaching.ai.download.ResumableHttpDownloader]. There is no
+ * automatic hash check — [verifyIntegrity] offers opt-in SHA-256 and nothing calls it.
  *
- * Readiness is persisted to [PREFS_NAME] so it survives process death without depending
- * on WorkInfo replay: the [KEY_MODEL_READY] flag is set once the file is on disk. On
- * construction the manager reconciles the flag against the file system and emits
- * [ModelState.Ready] when both agree.
+ * Readiness is persisted to [PREFS_NAME] so it survives process death without depending on
+ * WorkInfo replay: [KEY_MODEL_READY] is set once a file has passed validation. On
+ * construction the manager reconciles that flag against the file system and re-validates
+ * before emitting [ModelState.Ready]. Every transition to Ready goes through
+ * [emitReadyOrCorrupt]; there is no other way to reach it.
  */
 class ModelManager(private val config: MicroCoachingConfig) {
 
@@ -91,19 +98,22 @@ class ModelManager(private val config: MicroCoachingConfig) {
      * Reconcile the persisted "model ready" flag against on-disk state.
      *
      * Truth table (prefsReady × fileOnDisk):
-     *   - true  × true   → emit [ModelState.Ready] immediately (happy path post-restart)
+     *   - true  × true   → validate, then emit [ModelState.Ready] (happy path post-restart)
      *   - true  × false  → flag is stale; clear it. State stays [ModelState.Idle].
      *   - false × true   → file was sideloaded or downloaded before this flag existed.
-     *                      Emit [ModelState.Ready] and persist the flag.
+     *                      Validate, then emit [ModelState.Ready] and persist the flag.
      *   - false × false  → genuine fresh-install / wiped state. No change.
+     *
+     * Both file-present branches go through [emitReadyOrCorrupt], so an unusable file is
+     * caught here rather than at load time.
      */
     private fun reconcileReadyState() {
         val prefsReady = prefs.getBoolean(KEY_MODEL_READY, false)
         val file = findLocalModel()
         when {
             prefsReady && file != null -> {
-                Log.i(TAG, "Reconcile: model ready (prefs+file) → ${file.absolutePath}")
-                _state.value = ModelState.Ready(file)
+                Log.i(TAG, "Reconcile: prefs+file agree — validating ${file.name} (${file.length()} bytes)")
+                emitReadyOrCorrupt(file)
             }
             prefsReady && file == null -> {
                 Log.w(TAG, "Reconcile: prefs says ready but file is missing — clearing flag")
@@ -115,32 +125,142 @@ class ModelManager(private val config: MicroCoachingConfig) {
                 //       version that didn't persist the flag yet, or
                 //   (b) a partial download still in flight from a background worker.
                 //
-                // Distinguish by size: only adopt if the file is plausibly complete
-                // (≥ the selected variant's size floor). Otherwise leave state at Idle
-                // and let WorkManager finish the job — the SUCCEEDED branch will persist
-                // the flag when the worker truly completes.
-                val sizeMb = file.length() / 1_048_576
-                if (file.length() >= minValidModelSizeBytes()) {
-                    Log.i(TAG, "Reconcile: file present ($sizeMb MB) without flag — adopting → ${file.absolutePath}")
-                    persistReadyFlag(file)
-                    _state.value = ModelState.Ready(file)
-                } else {
-                    Log.i(TAG, "Reconcile: file present but partial ($sizeMb MB) — skipping adoption, awaiting worker")
-                }
+                // The structural check separates them without consulting an expected size:
+                // (b) cannot be opened as a bundle, (a) can, at whatever size the model is.
+                // [emitReadyOrCorrupt] protects a live download from deletion mid-write.
+                Log.i(TAG, "Reconcile: file present (${file.length()} bytes) without flag — validating before adoption")
+                emitReadyOrCorrupt(file)
             }
             else -> { /* clean slate */ }
         }
     }
 
+    /**
+     * Single gate between "a file is on disk" and [ModelState.Ready].
+     *
+     * Passing the check persists the ready flag and emits Ready. Failing it deletes the file
+     * — a re-download replaces anything lost — clears the flag, and emits
+     * [ModelState.Corrupt] with both byte counts for the UI to report.
+     *
+     * Exception: while a download is in flight ([isDownloadWorkActive]) a failing check
+     * means "not finished yet", so the file is left alone and no state is emitted. Every
+     * partial download fails the check by definition.
+     *
+     * Variants with no validator are adopted without a structural check.
+     */
+    private fun emitReadyOrCorrupt(file: File) {
+        val defect = validateLocalModel(file)
+        if (defect == null) {
+            val expected = config.selectedModelVariant().sizeInBytes
+            Log.i(TAG, "Model ready: ${file.name} (${file.length()} bytes) → ${file.absolutePath}")
+            // Informational, never fatal: a mismatch means a stale constant or a host URL
+            // override, not a bad file. Length is the server's call, not the catalog's.
+            if (file.length() != expected) {
+                Log.w(TAG, "Model size differs from the catalog: ${file.length()} vs $expected bytes")
+            }
+            persistReadyFlag(file)
+            _state.value = ModelState.Ready(file)
+            return
+        }
+
+        val onDiskBytes = file.length()
+        val expectedBytes = config.selectedModelVariant().sizeInBytes
+
+        // An in-flight worker's output file is supposed to fail the check: it stays an
+        // invalid bundle until the last byte lands. Deleting it would destroy a healthy
+        // transfer and leave the worker writing to an unlinked inode, so a live download
+        // wins. Reachable when the process restarts mid-download.
+        if (isDownloadWorkActive()) {
+            Log.i(
+                TAG,
+                "Model file incomplete ($onDiskBytes of $expectedBytes bytes) but a download " +
+                    "is in flight — leaving it alone and awaiting the worker",
+            )
+            return
+        }
+
+        Log.e(
+            TAG,
+            "Model file rejected: ${file.name} is $onDiskBytes bytes (expected $expectedBytes) — $defect. Deleting.",
+        )
+        if (file.delete()) Log.w(TAG, "Deleted unusable model file: ${file.name}")
+        clearReadyFlag()
+        _state.value = ModelState.Corrupt(
+            reason = defect,
+            onDiskBytes = onDiskBytes,
+            expectedBytes = expectedBytes,
+            canRetry = corruptRetriesRemaining() > 0,
+        )
+    }
+
+    /**
+     * True when the unique download work is queued, running, or waiting to retry — i.e.
+     * when the model file on disk may still be growing.
+     *
+     * [_state] answers first and for free, covering the in-process cases. The blocking
+     * WorkManager lookup covers the one it can't: a freshly constructed manager reconciling
+     * against a download that survived process death. That path runs on [Dispatchers.IO],
+     * and [WORK_QUERY_TIMEOUT_SECONDS] bounds a call arriving from the main thread.
+     *
+     * Fails safe — a query that throws or times out reports "active", since a false positive
+     * only delays readiness whereas a false negative deletes a healthy transfer.
+     */
+    private fun isDownloadWorkActive(): Boolean {
+        val current = _state.value
+        if (current is ModelState.Downloading || current is ModelState.Paused) return true
+
+        return runCatching {
+            WorkManager.getInstance(config.context)
+                .getWorkInfosForUniqueWork(UNIQUE_WORK_NAME)
+                .get(WORK_QUERY_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                .any { !it.state.isFinished }
+        }.getOrElse { cause ->
+            Log.w(TAG, "Could not determine download work state (${cause.message}) — assuming active")
+            true
+        }
+    }
+
+    /**
+     * Structural verdict for [file] — null when usable, else a short reason.
+     *
+     * Returns null (i.e. "no objection") for variants whose container we can't cheaply
+     * assert, so an unvalidatable format is never reported as corrupt.
+     */
+    private fun validateLocalModel(file: File): String? {
+        val variant = config.selectedModelVariant()
+        if (!ModelCatalog.isTaskBundle(variant)) return null
+        return ModelFileIntegrity.validateTaskBundle(file)
+    }
+
+    /**
+     * Marks [file] as the ready model and resets the corrupt-retry budget, so a later
+     * corruption starts with a fresh allowance instead of inheriting a spent one.
+     */
     private fun persistReadyFlag(file: File) {
         prefs.edit()
             .putBoolean(KEY_MODEL_READY, true)
             .putString(KEY_MODEL_PATH, file.absolutePath)
+            .remove(KEY_CORRUPT_RETRIES)
             .apply()
     }
 
     private fun clearReadyFlag() {
         prefs.edit().remove(KEY_MODEL_READY).remove(KEY_MODEL_PATH).apply()
+    }
+
+    /**
+     * Re-downloads still allowed after a confirmed-corrupt file. The model runs to hundreds
+     * of MB and [MicroCoachingConfig.wifiOnlyModelDownload] may be off, so refetching until
+     * it works is not free. Past the budget the UI still reports the file as unusable but
+     * stops offering a retry.
+     */
+    private fun corruptRetriesRemaining(): Int =
+        (MAX_CORRUPT_RETRIES - prefs.getInt(KEY_CORRUPT_RETRIES, 0)).coerceAtLeast(0)
+
+    private fun recordCorruptRetry() {
+        val used = prefs.getInt(KEY_CORRUPT_RETRIES, 0) + 1
+        prefs.edit().putInt(KEY_CORRUPT_RETRIES, used).apply()
+        Log.i(TAG, "Corrupt-model re-download $used of $MAX_CORRUPT_RETRIES")
     }
 
     /**
@@ -155,10 +275,6 @@ class ModelManager(private val config: MicroCoachingConfig) {
         val expected = config.selectedModelVariant().fileName
         return dir.listFiles()?.firstOrNull { it.name == expected }
     }
-
-    /** Per-variant lower bound for "this download is complete". */
-    private fun minValidModelSizeBytes(): Long =
-        ModelSizeProbe.minValidSizeBytes(config.context, config.selectedModelVariant())
 
     /**
      * The selected variant's real download size — network on the first call,
@@ -176,6 +292,13 @@ class ModelManager(private val config: MicroCoachingConfig) {
     fun isModelPresent(): Boolean = findLocalModel() != null
 
     /**
+     * Actual on-disk length of the model file, or null when none is present. Callers pair it
+     * with the expected size so the UI can state both rather than asserting the expected one
+     * over a partial file.
+     */
+    fun localModelSizeBytes(): Long? = findLocalModel()?.length()
+
+    /**
      * Schedule a download via WorkManager if no model is present.
      * Download respects [MicroCoachingConfig.wifiOnlyModelDownload].
      *
@@ -188,9 +311,14 @@ class ModelManager(private val config: MicroCoachingConfig) {
             config.modelDownloadStrategy == ModelDownloadStrategy.MANUAL
         ) return
 
-        if (isModelPresent()) {
-            Log.i(TAG, "Model already present — skipping download")
-            _state.value = ModelState.Ready(findLocalModel()!!)
+        val existing = findLocalModel()
+        if (existing != null) {
+            // Present is not the same as usable, so this goes through the validation gate
+            // rather than announcing Ready on the strength of a filename. No replacement is
+            // queued for a rejected file: a refetch that large is the user's call via the
+            // setup card, not a side effect of opening the app.
+            Log.i(TAG, "Model already present — validating instead of downloading")
+            emitReadyOrCorrupt(existing)
             return
         }
 
@@ -202,9 +330,11 @@ class ModelManager(private val config: MicroCoachingConfig) {
      * Safe to call multiple times — WorkManager deduplicates by unique work name.
      *
      * State-aware behaviour:
-     *   - [ModelState.LoadFailed]: treat a user re-tap as "wipe and retry" — delete the
-     *     file, clear the ready flag, and re-download. This is the escape hatch for the
-     *     size-passing-but-unloadable files [onModelLoadFailed] deliberately keeps.
+     *   - [ModelState.Corrupt]: the file was deleted when that state was emitted, so this is
+     *     a fresh download spending one unit of the retry budget. Refused once it is gone.
+     *   - [ModelState.LoadFailed]: a re-tap means "wipe and retry" — delete the file, clear
+     *     the ready flag, re-download. The escape hatch for the structurally-valid but
+     *     unloadable files [onModelLoadFailed] keeps.
      *   - Model present AND ready flag set: no-op, re-emit [ModelState.Ready] so a re-tap
      *     doesn't re-fetch an already-downloaded model.
      *   - Otherwise: schedule a new download.
@@ -212,7 +342,27 @@ class ModelManager(private val config: MicroCoachingConfig) {
     fun triggerDownload() {
         Log.i(TAG, "triggerDownload entry — currentState=${_state.value::class.simpleName}")
         logNetworkSnapshot("triggerDownload")
-        if (_state.value is ModelState.LoadFailed) {
+
+        val current = _state.value
+        if (current is ModelState.Corrupt) {
+            if (corruptRetriesRemaining() <= 0) {
+                Log.w(TAG, "triggerDownload: corrupt-model retry budget spent — refusing to re-download")
+                _state.value = current.copy(canRetry = false)
+                return
+            }
+            Log.i(TAG, "triggerDownload: state=Corrupt → fresh download")
+            // emitReadyOrCorrupt already deleted the file and cleared the flag; guard
+            // anyway so a stale duplicate can't be resumed into.
+            findLocalModel()?.let { f ->
+                if (f.delete()) Log.w(TAG, "Deleted leftover unusable model file: ${f.name}")
+            }
+            clearReadyFlag()
+            recordCorruptRetry()
+            scheduleDownload()
+            return
+        }
+
+        if (current is ModelState.LoadFailed) {
             Log.i(TAG, "triggerDownload: state=LoadFailed → wipe + redownload")
             findLocalModel()?.let { f ->
                 if (f.delete()) Log.w(TAG, "Deleted unloadable model file: ${f.name}")
@@ -355,6 +505,11 @@ class ModelManager(private val config: MicroCoachingConfig) {
                         return@collect
                     }
                     if (current is ModelState.LoadFailed) return@collect
+                    // Corrupt is terminal in the same way: the file is gone and only an
+                    // explicit re-download moves us on (which sets Downloading first, so
+                    // this guard can't block the recovery it enables). Without it, the
+                    // SUCCEEDED replay window would re-announce the deleted file as Ready.
+                    if (current is ModelState.Corrupt) return@collect
 
                     when (info.state) {
                         WorkInfo.State.ENQUEUED, WorkInfo.State.BLOCKED -> {
@@ -380,13 +535,19 @@ class ModelManager(private val config: MicroCoachingConfig) {
                         WorkInfo.State.SUCCEEDED -> {
                             val path = info.outputData.getString(ModelDownloadWorker.KEY_FILE_PATH)
                             val file = path?.let { File(it) }?.takeIf { it.exists() }
-                            _state.value = if (file != null) {
-                                Log.i(TAG, "Model ready at: ${file.absolutePath}")
-                                persistReadyFlag(file)
-                                ModelState.Ready(file)
+                            if (file != null) {
+                                // The worker already validated before reporting success; re-checking
+                                // here costs milliseconds and closes the gap where a replayed
+                                // SUCCEEDED refers to a file that has since been truncated or
+                                // swapped. Ready is only ever emitted through this gate.
+                                //
+                                // This collector runs on Main.immediate, so the check is hopped to
+                                // IO — it opens a file, unlike the rest of this branch.
+                                withContext(Dispatchers.IO) { emitReadyOrCorrupt(file) }
                             } else {
                                 clearReadyFlag()
-                                ModelState.DownloadFailed("Model file missing after download completed")
+                                _state.value =
+                                    ModelState.DownloadFailed("Model file missing after download completed")
                             }
                         }
                         WorkInfo.State.FAILED -> {
@@ -414,17 +575,16 @@ class ModelManager(private val config: MicroCoachingConfig) {
     }
 
     /**
-     * Called when the inference engine fails to load the model file. The keep-or-delete
-     * decision is gated on the size floor so a transient load failure (file still
-     * flushing, momentary I/O denial, fresh-download race) doesn't wipe a complete file:
+     * Called when the inference engine fails to load the model file. The structural check,
+     * not the file's length, decides its fate, because the two causes need opposite handling:
      *
-     *   - size < variant floor → definitely truncated: delete, clear the flag, and
-     *     surface [ModelState.LoadFailed] so the UI re-prompts for a download.
-     *   - size ≥ variant floor → structurally complete: keep it, surface
-     *     [ModelState.LoadFailed] with a retry CTA, leave the flag so next-launch
-     *     reconciliation can retry the engine.
+     *   - fails validation → the bytes are wrong and no retry can load it. Delete and
+     *     surface [ModelState.Corrupt], which offers a re-download.
+     *   - passes validation → the bytes are fine and something else failed (transient
+     *     native/mmap error, engine version mismatch). Keep it and surface
+     *     [ModelState.LoadFailed] so re-entering chat re-attempts the load.
      *
-     * For a positively-confirmed bad file, callers use [deleteModelAndReset] instead.
+     * To delete without consulting the validator, use [deleteModelAndReset].
      */
     fun onModelLoadFailed(reason: String = "Model file failed to load") {
         // A load failure while a download is in flight means the engine raced the
@@ -440,17 +600,26 @@ class ModelManager(private val config: MicroCoachingConfig) {
         }
 
         val file = findLocalModel()
-        if (file != null) {
-            val sizeMb = file.length() / 1_048_576
-            if (file.length() < minValidModelSizeBytes()) {
-                if (file.delete()) {
-                    Log.w(TAG, "Deleted truncated model file ($sizeMb MB < min): ${file.name}")
-                }
-                clearReadyFlag()
-            } else {
-                Log.w(TAG, "Load failed but file size OK ($sizeMb MB) — keeping for retry: $reason")
-            }
+        if (file == null) {
+            Log.w(TAG, "onModelLoadFailed with no file on disk: $reason")
+            _state.value = ModelState.LoadFailed(reason)
+            return
         }
+
+        val defect = validateLocalModel(file)
+        if (defect != null) {
+            Log.e(
+                TAG,
+                "Load failed and the file is unusable (${file.length()} bytes, $defect) — deleting so a re-download can fix it",
+            )
+            emitReadyOrCorrupt(file)   // validation already failed → deletes and emits Corrupt
+            return
+        }
+
+        Log.w(
+            TAG,
+            "Load failed but ${file.name} is structurally valid (${file.length()} bytes) — keeping for retry: $reason",
+        )
         _state.value = ModelState.LoadFailed(reason)
     }
 
@@ -509,5 +678,12 @@ class ModelManager(private val config: MicroCoachingConfig) {
         private const val PREFS_NAME = com.medtroniclabs.microcoaching.util.PrefsNames.MODEL
         private const val KEY_MODEL_READY = "model_ready"
         private const val KEY_MODEL_PATH = "model_path"
+
+        /** Re-download attempts allowed after a confirmed-corrupt file, per good copy. */
+        private const val MAX_CORRUPT_RETRIES = 2
+        private const val KEY_CORRUPT_RETRIES = "corrupt_retries"
+
+        /** Cap on the blocking WorkManager lookup in [isDownloadWorkActive]. */
+        private const val WORK_QUERY_TIMEOUT_SECONDS = 1L
     }
 }

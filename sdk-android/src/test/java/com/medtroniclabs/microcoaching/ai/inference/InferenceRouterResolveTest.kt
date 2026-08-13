@@ -83,4 +83,39 @@ class InferenceRouterResolveTest {
     fun `returns null when the external dir is unavailable`() {
         assertNull(resolve("", null))
     }
+
+    /**
+     * A host scanning for the first `.task` gets an unordered answer from `listFiles()`, so
+     * it can pass a leftover from an earlier default model while `ModelManager` reports the
+     * selected variant as ready. Resolution must not let the two disagree.
+     */
+    @Test
+    fun `ignores a configured modelPath naming a different variant`() {
+        val dir = temp.newFolder("files")
+        val stale = File(dir, "gemma3-1b-it-int4.task").apply { writeText("older default model") }
+        val task = File(dir, expected).apply { writeText("model") }
+
+        assertEquals(task, resolve(stale.absolutePath, dir))
+    }
+
+    /**
+     * Same rule with nothing to fall back on: a foreign `.task` is no substitute for the
+     * selected variant, so resolution fails and the caller shows the download CTA.
+     */
+    @Test
+    fun `returns null when only a different variant's task is configured`() {
+        val dir = temp.newFolder("files")
+        val stale = File(dir, "gemma3-1b-it-int4.task").apply { writeText("older default model") }
+
+        assertNull(resolve(stale.absolutePath, dir))
+    }
+
+    /** A path outside the model dir is still fine, as long as it names the right file. */
+    @Test
+    fun `accepts a configured modelPath outside the external dir`() {
+        val dir = temp.newFolder("files")
+        val sideloaded = File(temp.newFolder("sideload"), expected).apply { writeText("model") }
+
+        assertEquals(sideloaded, resolve(sideloaded.absolutePath, dir))
+    }
 }

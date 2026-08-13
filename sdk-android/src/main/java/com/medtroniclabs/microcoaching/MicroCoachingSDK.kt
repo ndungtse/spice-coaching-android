@@ -20,6 +20,8 @@ import com.medtroniclabs.microcoaching.domain.gaps.ondevice.MorningSourcesConfig
 import com.medtroniclabs.microcoaching.domain.gaps.ondevice.OnDeviceMorningGenerator
 import com.medtroniclabs.microcoaching.domain.morning.MorningModuleResolver
 import com.medtroniclabs.microcoaching.domain.triggers.TriggerEvaluator
+import com.medtroniclabs.microcoaching.progress.badgesNewlyEarned
+import com.medtroniclabs.microcoaching.progress.moduleIdList
 import com.medtroniclabs.microcoaching.progress.buildModuleCompletion
 import com.medtroniclabs.microcoaching.sdk.chat.ChatKnowledgeIndexBootstrap
 import com.medtroniclabs.microcoaching.sdk.context.ChwContextStore
@@ -868,9 +870,134 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
                     reinforcementDays = config.periodicRefreshDays,
                 )
                 dao.upsert(updated)
+                refreshLocalBadgeEarning()
             } catch (e: Exception) {
                 Log.w(TAG, "onModuleQuizCompleted persist failed: ${e.message}")
             }
+        }
+    }
+
+    /**
+     * Mark a module with no quiz as complete, having read every card.
+     *
+     * A quiz-less module has no other way to complete: the quiz path is the only
+     * writer of `completed_at`, so without this it stays at 0% forever and keeps
+     * counting toward the outstanding-training reminder. Reaching the end of the
+     * cards is the equivalent act, and the caller only invokes this from the screen
+     * the CHW lands on after the last card.
+     *
+     * `passed = true` restarts the reinforcement clock the same way a quiz pass
+     * does; the score stays null because none was taken.
+     */
+    fun onModuleCardsCompleted(moduleFamilyId: String, moduleId: String?) {
+        val chwId = currentCHWId ?: return
+        sdkScope.launch {
+            try {
+                val dao = database.chwModuleCompletionDao()
+                val updated = buildModuleCompletion(
+                    previous = dao.get(chwId, moduleFamilyId),
+                    chwId = chwId,
+                    moduleFamilyId = moduleFamilyId,
+                    moduleId = moduleId,
+                    scoreFraction = null,
+                    passed = true,
+                    reinforcementDays = config.periodicRefreshDays,
+                )
+                dao.upsert(updated)
+                refreshLocalBadgeEarning()
+                // Opening the lesson stamped an in-session "in_progress" overlay, and
+                // the mapper reads that overlay ahead of the table — so writing the row
+                // alone leaves the tile unchanged until the process restarts clears it.
+                // Move the overlay too; this recomputes the pipeline as a side effect.
+                coachingModuleStore.setInSessionStatus(moduleFamilyId, "completed")
+            } catch (e: Exception) {
+                Log.w(TAG, "onModuleCardsCompleted persist failed: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * Award any badge whose modules are all complete, without waiting for the
+     * server to notice.
+     *
+     * Runs after a completion is written and after badges sync, since either side
+     * can be the one that arrives last. Writing only newly-earned rows keeps it
+     * idempotent, so calling it more often than strictly needed costs nothing.
+     *
+     * Failures are swallowed: a missed award is corrected by the next sync, and
+     * this must never take down the completion write that triggered it.
+     */
+    internal suspend fun refreshLocalBadgeEarning() {
+        val chwId = currentCHWId ?: return
+        try {
+            val badges = database.badgeDao().getAllForUser(chwId)
+            if (badges.isEmpty()) return
+
+            val completions = database.chwModuleCompletionDao().getAllForChw(chwId)
+            val completed = completions.filter { it.completedAt != null }
+            if (completed.isEmpty()) return
+            val completedFamilyIds = completed.map { it.moduleFamilyId }.toSet()
+            val completedModuleIds = completed.mapNotNull { it.latestCompletedModuleId }.toSet()
+
+            // Resolve each referenced module version to its family, in one pass, from
+            // every source that knows the mapping. `module_cache` alone is not enough:
+            // it keeps only the newest version of a family, so a badge naming an older
+            // one finds nothing there — which is exactly how a badge ends up looking
+            // unearnable. `assigned_module` and the completion rows both retain the
+            // pairing for versions the cache has since pruned.
+            val moduleDao = database.moduleDao()
+            val referencedIds = badges.flatMap { it.moduleIdList() }.distinct()
+            val familyByModuleId = buildMap {
+                database.assignedModuleDao().getAllForUser(chwId).forEach { assigned ->
+                    assigned.moduleFamilyId?.let { put(assigned.moduleId, it) }
+                }
+                completions.forEach { row ->
+                    row.latestCompletedModuleId?.let { put(it, row.moduleFamilyId) }
+                    row.latestAttemptModuleId?.let { put(it, row.moduleFamilyId) }
+                }
+                referencedIds.forEach { id ->
+                    if (id !in this) moduleDao.getById(id)?.moduleFamilyId?.let { put(id, it) }
+                }
+            }
+
+            val newlyEarned = badgesNewlyEarned(
+                badges = badges,
+                completedModuleIds = completedModuleIds,
+                completedFamilyIds = completedFamilyIds,
+                familyOf = familyByModuleId::get,
+            )
+            if (newlyEarned.isEmpty()) {
+                if (BuildConfig.DEBUG) logBadgeEarningMisses(badges, referencedIds, familyByModuleId)
+                return
+            }
+
+            val earnedAt = java.time.Instant.now().toString()
+            newlyEarned.forEach { database.badgeDao().markLocallyEarned(it.badgeId, earnedAt) }
+            Log.i(TAG, "Badges earned on-device: ${newlyEarned.size}")
+        } catch (e: Exception) {
+            Log.w(TAG, "refreshLocalBadgeEarning failed: ${e.message}")
+        }
+    }
+
+    /**
+     * Say why no badge was awarded, so a badge that looks stuck can be diagnosed from
+     * a log rather than by guessing. Debug builds only — this runs after every module
+     * completion.
+     */
+    private fun logBadgeEarningMisses(
+        badges: List<com.medtroniclabs.microcoaching.data.db.entity.BadgeEntity>,
+        referencedIds: List<String>,
+        familyByModuleId: Map<String, String>,
+    ) {
+        val unresolved = referencedIds.filterNot { it in familyByModuleId }
+        Log.d(
+            TAG,
+            "Badges: none newly earned — badges=${badges.size} " +
+                "alreadyEarned=${badges.count { it.earnedAt != null || it.locallyEarnedAt != null }} " +
+                "referencedModules=${referencedIds.size} unresolvedToFamily=${unresolved.size}",
+        )
+        if (unresolved.isNotEmpty()) {
+            Log.d(TAG, "Badges: module versions with no known family: ${unresolved.take(10)}")
         }
     }
 

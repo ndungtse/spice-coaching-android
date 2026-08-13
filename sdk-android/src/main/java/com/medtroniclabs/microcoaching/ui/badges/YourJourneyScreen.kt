@@ -5,25 +5,23 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -38,11 +36,11 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.ui.badges.components.BadgeArtwork
 import com.medtroniclabs.microcoaching.ui.theme.MutedText
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlue
 import com.medtroniclabs.microcoaching.ui.theme.SpiceGreen
 import com.medtroniclabs.microcoaching.ui.theme.SpiceNavy
 import com.medtroniclabs.microcoaching.ui.theme.SurfaceBackground
@@ -62,12 +60,17 @@ private const val NodeColumnFraction = 0.25f
 /** Locked connector/segment colour — a light neutral so upcoming path recedes. */
 private val LockedPath = Color(0xFFD7DCE4)
 
+/** Screen margin on a milestone label's outer side. */
+private val EdgePadding = 20.dp
+
+/** Breathing room between a label's text edge and the medallion it points at. */
+private val LabelGap = 12.dp
+
 /**
  * The "Your Journey" learning-path screen, opened from the Badges tab's
  * [com.medtroniclabs.microcoaching.ui.badges.components.YourJourneyBanner]. Renders the
  * milestones as a winding path — each node the badge medallion, joined by a connector
- * coloured by the reached milestone's state (green earned → blue current → grey locked). The
- * current milestone shows a "Start lesson" action.
+ * coloured by the reached milestone's state (green earned, grey locked).
  *
  * Hosted in-place inside [BadgesTab] (not a nav route), so [onBack] returns to the badge
  * grid; the coaching chat FAB keeps overlaying as on any Badges-tab content.
@@ -77,7 +80,6 @@ fun YourJourneyScreen(
     snapshot: BadgesSnapshot,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
-    onStartMilestone: (JourneyMilestone) -> Unit = {},
 ) {
     Column(modifier = modifier.fillMaxSize().background(SurfaceBackground)) {
         JourneyHeader(
@@ -94,10 +96,7 @@ fun YourJourneyScreen(
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState()),
         ) {
-            JourneyPath(
-                milestones = snapshot.milestones,
-                onStartMilestone = onStartMilestone,
-            )
+            JourneyPath(milestones = snapshot.milestones)
             Spacer(Modifier.height(80.dp)) // chat-FAB clearance
         }
     }
@@ -144,10 +143,7 @@ private fun JourneyHeader(
  * connectors drawn behind the nodes and coloured by the reached milestone's state.
  */
 @Composable
-private fun JourneyPath(
-    milestones: List<JourneyMilestone>,
-    onStartMilestone: (JourneyMilestone) -> Unit,
-) {
+private fun JourneyPath(milestones: List<JourneyMilestone>) {
     Box(modifier = Modifier.fillMaxWidth()) {
         Canvas(modifier = Modifier.matchParentSize()) {
             val rowPx = RowHeight.toPx()
@@ -175,7 +171,6 @@ private fun JourneyPath(
                 }
                 val color = when (milestones[i + 1].state) {
                     BadgeState.EARNED -> SpiceGreen
-                    BadgeState.CURRENT -> SpiceBlue
                     BadgeState.LOCKED -> LockedPath
                 }
                 drawPath(
@@ -191,7 +186,6 @@ private fun JourneyPath(
                 MilestoneRow(
                     milestone = milestone,
                     nodeOnRight = index % 2 == 0,
-                    onStart = { onStartMilestone(milestone) },
                 )
             }
         }
@@ -199,105 +193,107 @@ private fun JourneyPath(
 }
 
 /**
- * One path row split into two equal halves — the badge node centred in one, its
- * code/title/action in the other — so nodes land on the ¼ / ¾ columns the connectors run
- * between and the text fills the space toward the centre.
+ * One path row: the badge node on its ¼ / ¾ column, and the label filling the space from the
+ * screen edge up to the node.
+ *
+ * The node's centre is placed by fraction rather than by layout weight so it stays on the
+ * column the connectors are drawn between. The label then takes whatever is left on the
+ * node's inner side and aligns its text toward the node — so the text reads as belonging to
+ * that badge rather than sitting against the far margin.
  */
 @Composable
 private fun MilestoneRow(
     milestone: JourneyMilestone,
     nodeOnRight: Boolean,
-    onStart: () -> Unit,
 ) {
-    Row(
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxWidth()
             .height(RowHeight),
-        verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (nodeOnRight) {
-            MilestoneLabel(milestone, onStart, Modifier.weight(1f).padding(start = 20.dp, end = 8.dp))
-            NodeCell(milestone, Modifier.weight(1f))
-        } else {
-            NodeCell(milestone, Modifier.weight(1f))
-            MilestoneLabel(milestone, onStart, Modifier.weight(1f).padding(start = 8.dp, end = 20.dp))
-        }
+        val nodeCentre = maxWidth * if (nodeOnRight) 1f - NodeColumnFraction else NodeColumnFraction
+        val nodeStart = nodeCentre - NodeSize / 2
+        val nodeEnd = nodeCentre + NodeSize / 2
+        val labelStart = if (nodeOnRight) EdgePadding else nodeEnd + LabelGap
+        val labelEnd = if (nodeOnRight) nodeStart - LabelGap else maxWidth - EdgePadding
+
+        MilestoneLabel(
+            milestone = milestone,
+            alignTowardEnd = nodeOnRight,
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .offset(x = labelStart)
+                .width((labelEnd - labelStart).coerceAtLeast(0.dp)),
+        )
+        NodeCell(
+            milestone = milestone,
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .offset(x = nodeStart),
+        )
     }
 }
 
-/** The badge medallion centred in its half of the row, with a lock marker when locked. */
+/**
+ * The badge medallion with a lock marker when locked. The marker is the one thing allowed to
+ * break the medallion's circle — [BadgeArtwork] clips the artwork itself to it.
+ */
 @Composable
 private fun NodeCell(milestone: JourneyMilestone, modifier: Modifier = Modifier) {
-    Box(modifier = modifier, contentAlignment = Alignment.Center) {
-        Box(modifier = Modifier.size(NodeSize)) {
-            BadgeArtwork(
-                image = milestone.image,
-                state = milestone.state,
-                contentDescription = milestone.title,
-                size = NodeSize,
-                showRing = true,
-            )
-            if (milestone.state == BadgeState.LOCKED) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .size(24.dp)
-                        .border(2.dp, Color.White, CircleShape)
-                        .background(Color(0xFFE4E8EF), CircleShape),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(Icons.Filled.Lock, null, tint = MutedText, modifier = Modifier.size(13.dp))
-                }
+    Box(modifier = modifier.size(NodeSize)) {
+        BadgeArtwork(
+            imageUrl = milestone.imageUrl,
+            state = milestone.state,
+            contentDescription = milestone.title,
+            size = NodeSize,
+            showRing = true,
+        )
+        if (milestone.state == BadgeState.LOCKED) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .size(24.dp)
+                    .border(2.dp, Color.White, CircleShape)
+                    .background(Color(0xFFE4E8EF), CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.Filled.Lock, null, tint = MutedText, modifier = Modifier.size(13.dp))
             }
         }
     }
 }
 
+/**
+ * The milestone's number and name, aligned toward the node it belongs to: text ends against a
+ * node on the right, starts against a node on the left. Wrapped titles follow the same edge,
+ * so a two-line name still reads as one block pointing at its badge.
+ */
 @Composable
 private fun MilestoneLabel(
     milestone: JourneyMilestone,
-    onStart: () -> Unit,
+    alignTowardEnd: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val accent = when (milestone.state) {
-        BadgeState.EARNED -> SpiceGreen
-        BadgeState.CURRENT -> SpiceBlue
-        BadgeState.LOCKED -> MutedText
-    }
+    val earned = milestone.state == BadgeState.EARNED
+    val textAlign = if (alignTowardEnd) TextAlign.End else TextAlign.Start
     Column(
         modifier = modifier,
-        horizontalAlignment = Alignment.Start,
+        horizontalAlignment = if (alignTowardEnd) Alignment.End else Alignment.Start,
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Text(
             text = milestone.code,
             style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
-            color = accent,
+            color = if (earned) SpiceGreen else MutedText,
+            textAlign = textAlign,
+            modifier = Modifier.fillMaxWidth(),
         )
         Text(
             text = milestone.title,
             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-            color = if (milestone.state == BadgeState.LOCKED) MutedText else SpiceNavy,
+            color = if (earned) SpiceNavy else MutedText,
+            textAlign = textAlign,
+            modifier = Modifier.fillMaxWidth(),
         )
-        if (milestone.state == BadgeState.CURRENT) {
-            Button(
-                onClick = onStart,
-                shape = RoundedCornerShape(50),
-                colors = ButtonDefaults.buttonColors(containerColor = SpiceBlue),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-            ) {
-                Text(
-                    text = stringResource(R.string.journey_start_lesson),
-                    color = Color.White,
-                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
-                )
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(18.dp),
-                )
-            }
-        }
     }
 }

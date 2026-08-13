@@ -60,7 +60,7 @@ import com.medtroniclabs.microcoaching.util.shortDateTimeLabel
 @Composable
 fun PODashboardTab(
     chwId: String,
-    onOpenActiveSks: () -> Unit,
+    onOpenActiveSks: (SkStatus) -> Unit,
     onOpenChatbotUsage: () -> Unit,
     onOpenModulesCompleted: () -> Unit,
     onOpenSkDetail: (String) -> Unit,
@@ -151,7 +151,7 @@ private const val SECTION_PREVIEW_LIMIT = 5
 private fun DashboardBody(
     dashboard: PoDashboard,
     expandedModules: androidx.compose.runtime.snapshots.SnapshotStateMap<Int, Boolean>,
-    onOpenActiveSks: () -> Unit,
+    onOpenActiveSks: (SkStatus) -> Unit,
     onOpenChatbotUsage: () -> Unit,
     onOpenModulesCompleted: () -> Unit,
     onOpenSkDetail: (String) -> Unit,
@@ -180,7 +180,8 @@ private fun DashboardBody(
                     metric = metric,
                     onClick = {
                         when (metric.key) {
-                            MetricKey.ACTIVE_NOW, MetricKey.INACTIVE -> onOpenActiveSks()
+                            MetricKey.ACTIVE_NOW -> onOpenActiveSks(SkStatus.ACTIVE)
+                            MetricKey.INACTIVE -> onOpenActiveSks(SkStatus.INACTIVE)
                             MetricKey.FINISHED_MODULES -> onOpenModulesCompleted()
                             MetricKey.CHATBOT_ENGAGED -> onOpenChatbotUsage()
                         }
@@ -191,34 +192,42 @@ private fun DashboardBody(
 
         Spacer(Modifier.height(16.dp))
         SectionTitle(stringResource(R.string.po_section_my_sks))
-        Column(
-            modifier = Modifier.padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            d.sks.take(SECTION_PREVIEW_LIMIT).forEach { sk ->
-                SkListRow(sk = sk, onClick = { onOpenSkDetail(sk.id) })
+        if (d.sks.isEmpty()) {
+            SectionEmptyRow()
+        } else {
+            Column(
+                modifier = Modifier.padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                d.sks.take(SECTION_PREVIEW_LIMIT).forEach { sk ->
+                    SkListRow(sk = sk, onClick = { onOpenSkDetail(sk.id) })
+                }
             }
-        }
-        if (d.sks.size > SECTION_PREVIEW_LIMIT) {
-            ShowAllRow(d.sks.size) { onShowAllSection(PoDashboardSection.MY_SKS, d.range) }
+            if (d.sks.size > SECTION_PREVIEW_LIMIT) {
+                ShowAllRow(d.sks.size) { onShowAllSection(PoDashboardSection.MY_SKS, d.range) }
+            }
         }
 
         Spacer(Modifier.height(16.dp))
         SectionTitle(stringResource(R.string.po_section_module_completion))
-        Column(
-            modifier = Modifier.padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            d.moduleCompletion.take(SECTION_PREVIEW_LIMIT).forEachIndexed { index, mc ->
-                ModuleCompletionRow(
-                    item = mc,
-                    expanded = expandedModules[index] == true,
-                    onToggle = { expandedModules[index] = !(expandedModules[index] ?: false) },
-                )
+        if (d.moduleCompletion.isEmpty()) {
+            SectionEmptyRow()
+        } else {
+            Column(
+                modifier = Modifier.padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                d.moduleCompletion.take(SECTION_PREVIEW_LIMIT).forEachIndexed { index, mc ->
+                    ModuleCompletionRow(
+                        item = mc,
+                        expanded = expandedModules[index] == true,
+                        onToggle = { expandedModules[index] = !(expandedModules[index] ?: false) },
+                    )
+                }
             }
-        }
-        if (d.moduleCompletion.size > SECTION_PREVIEW_LIMIT) {
-            ShowAllRow(d.moduleCompletion.size) { onShowAllSection(PoDashboardSection.MODULE_COMPLETION, d.range) }
+            if (d.moduleCompletion.size > SECTION_PREVIEW_LIMIT) {
+                ShowAllRow(d.moduleCompletion.size) { onShowAllSection(PoDashboardSection.MODULE_COMPLETION, d.range) }
+            }
         }
     }
 
@@ -305,9 +314,9 @@ private fun DashboardBody(
     }
 }
 
-/** Empty-state row for a "Top Searched" section that has no activity in the range. */
+/** Generic "No items found" row for a section with no data in the range. */
 @Composable
-private fun TopSearchedEmptyRow() {
+private fun SectionEmptyRow() {
     Text(
         text = stringResource(R.string.po_section_empty),
         color = MutedText,
@@ -316,6 +325,10 @@ private fun TopSearchedEmptyRow() {
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 24.dp),
     )
 }
+
+/** Empty-state row for a "Top Searched" section that has no activity in the range. */
+@Composable
+private fun TopSearchedEmptyRow() = SectionEmptyRow()
 
 /** Empty-state row for the document-usage section when nothing was opened in the range. */
 @Composable

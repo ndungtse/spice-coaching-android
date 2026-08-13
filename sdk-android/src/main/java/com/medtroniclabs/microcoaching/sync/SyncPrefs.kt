@@ -89,6 +89,11 @@ class SyncPrefs(context: Context) {
         get() = prefs.getString(KEY_CHAT_FAQS_WATERMARK, null)
         set(value) = prefs.edit().putString(KEY_CHAT_FAQS_WATERMARK, value).apply()
 
+    /** Cursor for `GET /sync/video-progress`; see [SyncApi.pullVideoProgress]. */
+    var videoProgressWatermark: String?
+        get() = prefs.getString(KEY_VIDEO_PROGRESS_WATERMARK, null)
+        set(value) = prefs.edit().putString(KEY_VIDEO_PROGRESS_WATERMARK, value).apply()
+
     // ── Config thresholds (formerly delivered via ScenarioSyncBundle; now defaults
     //    until the SDK consumes /config/sync — see Phase 3+ in
     //    docs/spice-2.0/04-integration-timeline.md). ──
@@ -144,6 +149,7 @@ class SyncPrefs(context: Context) {
         .remove(KEY_GAPS_WATERMARK)
         .remove(KEY_TRIGGERS_WATERMARK)
         .remove(KEY_CONFIG_WATERMARK)
+        .remove(KEY_VIDEO_PROGRESS_WATERMARK)
         .remove(KEY_CHAT_FAQS_WATERMARK)
         .remove(KEY_RETIRED_FAMILY_IDS)
         .apply()
@@ -158,6 +164,7 @@ class SyncPrefs(context: Context) {
         private const val KEY_TRIGGERS_WATERMARK = "triggers_watermark"
         private const val KEY_CONFIG_WATERMARK = "config_watermark"
         private const val KEY_CHAT_FAQS_WATERMARK = "chat_faqs_watermark"
+        private const val KEY_VIDEO_PROGRESS_WATERMARK = "video_progress_watermark"
         private const val KEY_MORNING_CARDS_MAX = "morning_cards_max"
         private const val KEY_GAP_RESOLVE_THRESHOLD = "gap_resolve_threshold"
         private const val KEY_SOFT_TRIGGER_WRONG_COUNT = "soft_trigger_wrong_count_threshold"

@@ -231,7 +231,11 @@ class DocumentPreviewActivity : ComponentActivity() {
                 // Durable, offline-capable: cache hit returns the local file (no
                 // network); online miss fetches a presigned URL, downloads & stores
                 // it under filesDir. Offline miss → null → "unavailable".
-                sdk.assetCache.localFile(sourceDocumentId, AssetKind.DOCUMENT) {
+                sdk.assetCache.localFile(
+                    key = sourceDocumentId,
+                    kind = AssetKind.DOCUMENT,
+                    renewUrl = { SourceDocumentUrlStore.renew(sourceDocumentId) },
+                ) {
                     fetchPresignedUrl(sourceDocumentId)
                 }
             } catch (e: InsufficientStorageException) {

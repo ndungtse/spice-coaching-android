@@ -100,13 +100,19 @@ class AssetCache(
      *   invoked (throttled) only while actually downloading. `totalBytes <= 0` means the
      *   server didn't send a Content-Length → caller should show an indeterminate bar.
      *   Not called on a cache hit. Default null = no progress (existing callers unaffected).
-     * @param fetchUrl supplies a fresh presigned URL; only called on a cache miss
+     * @param renewUrl re-signs [key] from scratch, bypassing any cached URL. Called
+     *   once if the download itself fails, which is what an expired signature looks
+     *   like from here — object storage rejects it long after the resolver was happy
+     *   to hand it over. Omit for sources that cannot re-sign; the download then
+     *   simply fails as before.
+     * @param fetchUrl supplies a presigned URL; only called on a cache miss
      *   while online. May itself return null (e.g. resolver failed).
      */
     suspend fun localFile(
         key: String,
         kind: AssetKind = AssetKind.IMAGE,
         onProgress: ((downloaded: Long, total: Long) -> Unit)? = null,
+        renewUrl: (suspend () -> String?)? = null,
         fetchUrl: suspend () -> String?,
     ): File? {
         if (key.isBlank()) {
@@ -138,7 +144,23 @@ class AssetCache(
                 return null
             }
             Log.d(TAG, "resolved url for key=$key host=${url.toHttpUrlOrNull()?.host} path=${url.toHttpUrlOrNull()?.encodedPath}")
-            return downloadAndStore(keyHash, key, kind, url, onProgress)
+            downloadAndStore(keyHash, key, kind, url, onProgress)?.let { return it }
+
+            // The download failed on a URL something was willing to hand us, which
+            // is what an expired signature looks like from here: the resolver's own
+            // expiry says fresh, object storage disagrees. Re-sign once and retry,
+            // so a stale URL self-heals instead of leaving a permanent blank.
+            val renewed = renewUrl?.let { renew ->
+                runCatching { renew() }
+                    .onFailure { Log.w(TAG, "renewUrl threw for key=$key: ${it.message}", it) }
+                    .getOrNull()
+            }
+            if (renewed.isNullOrBlank() || renewed == url) {
+                if (renewed == url) Log.d(TAG, "renewUrl returned the same URL for key=$key — not retrying")
+                return null
+            }
+            Log.i(TAG, "retrying download for key=$key with a re-signed URL")
+            return downloadAndStore(keyHash, key, kind, renewed, onProgress)
         }
     }
 
@@ -188,9 +210,16 @@ class AssetCache(
         key: String,
         kind: AssetKind = AssetKind.VIDEO,
         onProgress: ((downloaded: Long, total: Long) -> Unit)? = null,
+        renewUrl: (suspend () -> String?)? = null,
         fetchUrl: suspend () -> String?,
     ): File? {
-        val file = localFile(key, kind, onProgress, fetchUrl) ?: return null
+        val file = localFile(
+            key = key,
+            kind = kind,
+            onProgress = onProgress,
+            renewUrl = renewUrl,
+            fetchUrl = fetchUrl,
+        ) ?: return null
         runCatching { dao.setPinned(sha256(key), true) }
             .onFailure { Log.w(TAG, "pin failed for key=$key: ${it.message}") }
         return file

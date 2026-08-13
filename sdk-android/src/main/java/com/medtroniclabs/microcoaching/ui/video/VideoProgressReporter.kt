@@ -72,6 +72,10 @@ internal class VideoProgressReporter(
         scope.launch(Dispatchers.IO) {
             runCatching { dao.updateProgress(videoId, chwId, pos, percent, completed = false, watchedAt = watchedAt) }
                 .onFailure { Log.w(TAG, "progress DB update failed: ${it.message}") }
+            // The player already knows the exact length, so record it here rather
+            // than paying to discover it elsewhere. A no-op once it is known.
+            runCatching { dao.updateDurationIfUnknown(videoId, chwId, dur) }
+                .onFailure { Log.w(TAG, "duration DB update failed: ${it.message}") }
         }
 
         val now = System.currentTimeMillis()

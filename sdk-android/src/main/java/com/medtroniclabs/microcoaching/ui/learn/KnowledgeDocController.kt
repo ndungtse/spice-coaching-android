@@ -38,16 +38,17 @@ import com.medtroniclabs.microcoaching.ui.common.sectionStateFor
  * The document **list** is built reactively here (not in the SDK store) because
  * it's a modules-screen-only surface and needs a [Context] for the localised
  * default title; the cross-Activity sharing that justifies the store doesn't
- * apply. Reads the `published_source_document` table — the durable mirror of the
- * source-document catalogue — so the Knowledge grid lists **every** published
- * source document, not only those a module happens to reference.
+ * apply. Reads the assigned rows of `published_source_document`, so the grid
+ * lists the documents assigned to this CHW rather than the whole published
+ * catalogue. Audio and video are excluded — those assignments are the Training
+ * sub-tab's.
  */
 internal class KnowledgeDocController(
     private val scope: CoroutineScope,
     private val context: Context,
 ) {
 
-    /** The Knowledge grid's documents, as the last catalogue sync left them. */
+    /** The documents assigned to this CHW, as the last catalogue sync left them. */
     private val _knowledgeDocuments = MutableStateFlow<List<KnowledgeDocument>>(emptyList())
     val knowledgeDocuments: StateFlow<List<KnowledgeDocument>> = _knowledgeDocuments.asStateFlow()
 
@@ -61,8 +62,9 @@ internal class KnowledgeDocController(
             _knowledgeDocuments,
             MicroCoachingSDK.getInstance().syncStatus.outcomeFor(SyncDomain.PUBLISHED_DOCS),
             MicroCoachingSDK.getInstance().networkAvailable,
-        ) { docs, outcome, online ->
-            sectionStateFor(rows = docs, outcome = outcome, offline = !online)
+            MicroCoachingSDK.getInstance().syncStatus.isSyncing,
+        ) { docs, outcome, online, syncing ->
+            sectionStateFor(rows = docs, outcome = outcome, offline = !online, syncing = syncing)
         }.stateIn(scope, SharingStarted.WhileSubscribed(5_000), SectionState.Loading)
 
     /**
@@ -94,13 +96,13 @@ internal class KnowledgeDocController(
             // only) so the grid populates promptly instead of waiting for the
             // periodic worker tick.
             runCatching {
-                if (sdk.database.publishedSourceDocumentDao().count() == 0 &&
+                if (sdk.database.publishedSourceDocumentDao().countAssigned() == 0 &&
                     sdk.config.backendUrl.isNotBlank() && sdk.isNetworkAvailable()
                 ) {
                     sdk.syncCoordinator.triggerNow()
                 }
             }
-            sdk.database.publishedSourceDocumentDao().getAllOrdered()
+            sdk.database.publishedSourceDocumentDao().observeAssigned()
                 .collectLatest { entities ->
                     val docs = buildKnowledgeDocuments(entities)
                     _knowledgeDocuments.value = docs
@@ -143,6 +145,7 @@ internal class KnowledgeDocController(
                         val pct = if (total > 0L) ((downloaded * 100L) / total).toInt().coerceIn(0, 100) else null
                         _downloadProgress.value = DownloadProgress(label, pct, downloaded, total)
                     },
+                    renewUrl = { SourceDocumentUrlStore.renew(doc.sourceDocumentId) },
                 ) {
                     presignedUrlFor(doc.sourceDocumentId)
                 }

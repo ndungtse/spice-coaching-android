@@ -200,7 +200,6 @@ fun ModuleDetailScreen(
                     CurriculumRow(
                         number = index + 1,
                         title = translatedText(bn = card.titleBn, en = card.titleEn),
-                        minuteLabel = stringResource(R.string.module_detail_min, 1),
                     )
                     if (index < cards.size - 1) {
                         HorizontalDivider(color = DividerColor, thickness = 0.5.dp)
@@ -219,7 +218,7 @@ fun ModuleDetailScreen(
                 CurriculumRow(
                     number = cards.size + 1,
                     title = stringResource(R.string.module_detail_knowledge_check),
-                    minuteLabel = stringResource(R.string.module_detail_questions_stat) + " · $questionCount",
+                    subtitle = stringResource(R.string.module_detail_questions_stat) + " · $questionCount",
                     isQuiz = true,
                 )
             }
@@ -348,11 +347,19 @@ private fun StatItem(
     }
 }
 
+/**
+ * One numbered entry in the module curriculum — a content card, or the closing
+ * knowledge check.
+ *
+ * [subtitle] is whatever detail that entry can offer beneath its title, and is
+ * omitted when there is none: the quiz knows its question count, while a card has
+ * no per-card metadata on the wire to show.
+ */
 @Composable
 private fun CurriculumRow(
     number: Int,
     title: String,
-    minuteLabel: String,
+    subtitle: String? = null,
     isQuiz: Boolean = false,
 ) {
     Row(
@@ -384,11 +391,13 @@ private fun CurriculumRow(
                 style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
                 color = TitleColor,
             )
-            Text(
-                text = minuteLabel,
-                style = MaterialTheme.typography.labelSmall,
-                color = MetadataColor,
-            )
+            subtitle?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MetadataColor,
+                )
+            }
         }
         Icon(
             imageVector = Icons.AutoMirrored.Filled.ArrowForward,
