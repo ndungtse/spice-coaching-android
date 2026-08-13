@@ -2,7 +2,7 @@
 
 An Android library that embeds AI coaching directly inside the SPICE clinical app, delivering on-device guidance to Community Health Workers (CHWs) in Bangladesh — with full OpenTelemetry observability, an exportable chat UI, and offline-first data storage.
 
-> **Version:** `0.5.2-SNAPSHOT` · **Min SDK:** 24 (Android 7.0) · **ABI:** `arm64-v8a` · **Language:** Kotlin
+> **Version:** `0.5.3-SNAPSHOT` · **Min SDK:** 24 (Android 7.0) · **ABI:** `arm64-v8a` · **Language:** Kotlin
 
 ---
 
