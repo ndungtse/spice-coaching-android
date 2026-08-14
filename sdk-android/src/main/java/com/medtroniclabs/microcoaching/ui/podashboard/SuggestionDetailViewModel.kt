@@ -12,7 +12,7 @@ import kotlinx.coroutines.launch
 /** UI state for the "Top Searched Suggested" module/topic drill-down. */
 sealed class SuggestionDetailUiState {
     object Loading : SuggestionDetailUiState()
-    data class Error(val message: String) : SuggestionDetailUiState()
+    data class Error(val message: String, val isAuth: Boolean = false) : SuggestionDetailUiState()
     data class Ready(val detail: SuggestionDetail) : SuggestionDetailUiState()
 }
 
@@ -40,7 +40,7 @@ class SuggestionDetailViewModel(
                         if (detail != null) SuggestionDetailUiState.Ready(detail)
                         else SuggestionDetailUiState.Error("Suggestion not found")
                     },
-                    onFailure = { SuggestionDetailUiState.Error(it.message ?: "Failed to load suggestion") },
+                    onFailure = { SuggestionDetailUiState.Error(it.message ?: "Failed to load suggestion", it.isDashboardAuthError()) },
                 )
         }
     }

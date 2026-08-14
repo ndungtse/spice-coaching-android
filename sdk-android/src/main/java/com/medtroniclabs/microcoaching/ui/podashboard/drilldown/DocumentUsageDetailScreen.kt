@@ -60,7 +60,7 @@ fun DocumentUsageDetailScreen(documentId: String, onBack: () -> Unit, onHome: ()
         when (val s = state) {
             is DocumentUsageDetailUiState.Loading -> CenterProgress()
             is DocumentUsageDetailUiState.Error ->
-                DashboardErrorState(offline = !networkAvailable, message = s.message, onRetry = vm::retry)
+                DashboardErrorState(offline = !networkAvailable, message = s.message, onRetry = vm::retry, isAuth = s.isAuth)
             is DocumentUsageDetailUiState.Ready -> Content(s.detail)
         }
     }

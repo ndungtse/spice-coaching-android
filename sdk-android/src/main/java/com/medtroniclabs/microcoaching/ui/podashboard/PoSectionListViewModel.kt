@@ -19,7 +19,7 @@ data class SectionListPayload(
 
 sealed class PoSectionListUiState {
     object Loading : PoSectionListUiState()
-    data class Error(val message: String) : PoSectionListUiState()
+    data class Error(val message: String, val isAuth: Boolean = false) : PoSectionListUiState()
     data class Ready(val payload: SectionListPayload) : PoSectionListUiState()
 }
 
@@ -50,7 +50,7 @@ class PoSectionListViewModel(
             _uiState.value = runCatching { fetchPayload() }
                 .fold(
                     onSuccess = { PoSectionListUiState.Ready(it) },
-                    onFailure = { PoSectionListUiState.Error(it.message ?: "Failed to load") },
+                    onFailure = { PoSectionListUiState.Error(it.message ?: "Failed to load", it.isDashboardAuthError()) },
                 )
         }
     }

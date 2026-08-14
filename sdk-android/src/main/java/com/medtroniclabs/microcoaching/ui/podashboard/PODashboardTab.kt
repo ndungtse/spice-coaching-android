@@ -89,15 +89,6 @@ fun PODashboardTab(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Text(stringResource(R.string.po_showing_data_for), style = MaterialTheme.typography.bodyMedium)
-                DateRangeSelector(
-                    fromMillis = range.fromMillis,
-                    toMillis = range.toMillis,
-                    onRangeChange = { from, to -> vm.selectRange(DateRange(from, to)) },
-                    modifier = Modifier.fillMaxWidth(),
-                    // Freeze the picker offline — offline shows the last-synced snapshot (AC5/D2).
-                    enabled = networkAvailable,
-                )
                 // Freshness of the on-screen dashboard numbers — mirrors the
                 // coaching header's "Last synced …" subtitle, but sourced from the
                 // dashboard's own live loads (see PODashboardViewModel.lastLoadedAt).
@@ -110,13 +101,24 @@ fun PODashboardTab(
                     style = MaterialTheme.typography.bodySmall,
                     color = MutedText,
                 )
+                Text(stringResource(R.string.po_showing_data_for), style = MaterialTheme.typography.bodyMedium)
+                DateRangeSelector(
+                    fromMillis = range.fromMillis,
+                    toMillis = range.toMillis,
+                    onRangeChange = { from, to -> vm.selectRange(DateRange(from, to)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    // Freeze the picker offline — offline shows the last-synced snapshot (AC5/D2).
+                    enabled = networkAvailable,
+                )
             }
             
             when (val s = state) {
                 is PODashboardUiState.Loading -> CenterProgress()
 
                 is PODashboardUiState.Error -> ErrorNotice(
-                    if (!networkAvailable) stringResource(R.string.common_error_offline) else s.message,
+                    message = if (!networkAvailable) stringResource(R.string.common_error_offline) else s.message,
+                    // Auth guidance only applies online — offline shows the offline message.
+                    isAuth = networkAvailable && s.isAuth,
                 )
 
                 is PODashboardUiState.Ready -> {
@@ -165,7 +167,7 @@ private fun DashboardBody(
     // Spine sections (KPIs, My SKs, module completion) — replaced by an inline notice
     // when team-activity failed but the rest of the dashboard loaded.
     if (d.spineError != null) {
-        ErrorNotice(d.spineError)
+        ErrorNotice(d.spineError, isAuth = d.spineErrorIsAuth)
     } else {
         // 4 KPI cards — horizontal scroller so the longer labels stay on one line.
         Row(
@@ -271,16 +273,14 @@ private fun DashboardBody(
     SectionTitle(stringResource(R.string.po_section_document_usage))
     if (d.documentUsage.isNotEmpty()) {
         d.documentUsageSummary?.let { summary ->
+            // Three fixed stats → an even 3-up grid that fills the width.
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                DocumentUsageStat(stringResource(R.string.po_document_total_opens), summary.totalViews)
-                DocumentUsageStat(stringResource(R.string.po_document_unique_documents), summary.uniqueDocuments)
-                DocumentUsageStat(stringResource(R.string.po_document_unique_readers), summary.uniqueUsers)
+                DocumentUsageStat(stringResource(R.string.po_document_total_opens), summary.totalViews, Modifier.weight(1f))
+                DocumentUsageStat(stringResource(R.string.po_document_unique_documents), summary.uniqueDocuments, Modifier.weight(1f))
+                DocumentUsageStat(stringResource(R.string.po_document_unique_readers), summary.uniqueUsers, Modifier.weight(1f))
             }
             Spacer(Modifier.height(8.dp))
         }
@@ -344,9 +344,9 @@ private fun DocumentUsageEmptyRow() {
 
 /** One headline number in the document-usage summary strip (total / documents / readers). */
 @Composable
-private fun DocumentUsageStat(label: String, value: Int) {
+private fun DocumentUsageStat(label: String, value: Int, modifier: Modifier = Modifier) {
     Column(
-        modifier = Modifier.poCard().padding(horizontal = 16.dp, vertical = 12.dp),
+        modifier = modifier.poCard().padding(horizontal = 16.dp, vertical = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
@@ -355,16 +355,26 @@ private fun DocumentUsageStat(label: String, value: Int) {
             fontWeight = FontWeight.Bold,
             style = MaterialTheme.typography.titleLarge,
         )
-        Text(text = label, color = MutedText, style = MaterialTheme.typography.labelMedium)
+        Text(
+            text = label,
+            color = MutedText,
+            style = MaterialTheme.typography.labelMedium,
+            textAlign = TextAlign.Center,
+        )
     }
 }
 
-/** Inline error card with a pull-to-refresh hint (used for full and spine-only failures). */
+/**
+ * Inline error card (used for full and spine-only failures). A 401 ([isAuth]) is a stale
+ * session — a pull-to-refresh can't fix it, so show "log out and back in" guidance instead.
+ */
 @Composable
-private fun ErrorNotice(message: String) {
+private fun ErrorNotice(message: String, isAuth: Boolean = false) {
     NoticeBanner(
-        text = message,
+        text = if (isAuth) stringResource(R.string.po_error_session_expired) else message,
         tone = NoticeTone.Warning,
-        hint = stringResource(R.string.po_error_pull_to_refresh),
+        hint = stringResource(
+            if (isAuth) R.string.po_error_session_expired_hint else R.string.po_error_pull_to_refresh,
+        ),
     )
 }

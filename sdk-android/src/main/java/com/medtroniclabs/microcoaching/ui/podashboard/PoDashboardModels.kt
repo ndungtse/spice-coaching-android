@@ -164,6 +164,8 @@ data class PoDashboard(
      * sections (KPIs / SKs / completion / refreshers) instead of blanking.
      */
     val spineError: String? = null,
+    /** True when [spineError] is a 401 (expired session) → show "log out and back in", not retry. */
+    val spineErrorIsAuth: Boolean = false,
     /** Epoch millis the server data was fetched. Drives the "Last synced" subtitle (AC3). */
     val fetchedAt: Long = 0L,
     /** True when this snapshot was served from the offline cache rather than a fresh fetch. */

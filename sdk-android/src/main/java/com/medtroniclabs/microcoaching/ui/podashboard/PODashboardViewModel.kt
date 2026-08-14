@@ -77,7 +77,9 @@ class PODashboardViewModel(
                         _lastLoadedAt.value = it.fetchedAt
                         PODashboardUiState.Ready(it)
                     },
-                    onFailure = { PODashboardUiState.Error(it.message ?: "Failed to load dashboard") },
+                    onFailure = {
+                        PODashboardUiState.Error(it.message ?: "Failed to load dashboard", it.isDashboardAuthError())
+                    },
                 )
             _isRefreshing.value = false
         }

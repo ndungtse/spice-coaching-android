@@ -401,11 +401,15 @@ class DocumentPreviewActivity : ComponentActivity() {
          * @param title Chip label the user just tapped — surfaced in the
          *   toolbar while the presigned URL resolves so the screen isn't
          *   empty during the fetch.
-         * @param startPage 1-indexed PDF page to land on. Ignored for image
+         * @param startPage 1-indexed PDF page to land on — the full document is shown
+         *   and scrolled to it. This is what chat citation chips use, since a cited
+         *   page is a starting point rather than the whole answer. Ignored for image
          *   and external formats. Null falls back to page 1.
          * @param selectedPage 1-indexed PDF page to show in isolation. When set,
          *   ONLY that page is rendered — no scroll to or nav toward the rest of the
-         *   document — and [startPage] is ignored. Null = normal full-document view.
+         *   document — and [startPage] is ignored. Reserved for Knowledge-section
+         *   entry points that mean to excerpt a single page; no caller passes it
+         *   today. Null = normal full-document view.
          * @param recordView Emit a document-view telemetry event once the document
          *   resolves. True only for the Knowledge library, whose opens are what the
          *   document-usage analytics measure; chat citation chips reach the same

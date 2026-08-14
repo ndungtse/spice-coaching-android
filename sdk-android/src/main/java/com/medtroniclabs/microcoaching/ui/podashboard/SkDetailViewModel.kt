@@ -33,7 +33,7 @@ class SkDetailViewModel(
                         if (detail != null) SkDetailUiState.Ready(detail)
                         else SkDetailUiState.Error("SK not found")
                     },
-                    onFailure = { SkDetailUiState.Error(it.message ?: "Failed to load SK") },
+                    onFailure = { SkDetailUiState.Error(it.message ?: "Failed to load SK", it.isDashboardAuthError()) },
                 )
         }
     }

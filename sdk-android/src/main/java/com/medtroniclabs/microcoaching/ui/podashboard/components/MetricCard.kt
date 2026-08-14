@@ -37,9 +37,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -139,13 +144,15 @@ fun MetricCard(metric: PoMetric, onClick: () -> Unit, modifier: Modifier = Modif
         ) {
             Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp)) {
                 Text(
-                    text = stringResource(metricLabel(metric.key)),
+                    text = stringResource(metricSheetTitle(metric.key)),
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                 )
                 Spacer(Modifier.height(12.dp))
+                val full = stringResource(metricDescription(metric.key))
+                val highlight = metricHighlight(metric.key)?.let { stringResource(it) }
                 Text(
-                    text = stringResource(metricDescription(metric.key)),
+                    text = highlighted(full, highlight, SpiceBlue),
                     style = MaterialTheme.typography.bodyLarge,
                     color = MutedText,
                 )
@@ -185,3 +192,38 @@ private fun metricDescription(key: MetricKey): Int = when (key) {
     MetricKey.FINISHED_MODULES -> R.string.po_metric_desc_finished_modules
     MetricKey.CHATBOT_ENGAGED -> R.string.po_metric_desc_chatbot_engaged
 }
+
+/** Sheet heading — Finished Modules gets its own title; the rest reuse the card label. */
+@StringRes
+private fun metricSheetTitle(key: MetricKey): Int = when (key) {
+    MetricKey.FINISHED_MODULES -> R.string.po_metric_sheet_title_finished
+    else -> metricLabel(key)
+}
+
+/** Phrase to highlight inside the description, or null for none. */
+@StringRes
+private fun metricHighlight(key: MetricKey): Int? = when (key) {
+    MetricKey.FINISHED_MODULES -> R.string.po_metric_hl_finished
+    MetricKey.CHATBOT_ENGAGED -> R.string.po_metric_hl_chatbot
+    else -> null
+}
+
+/**
+ * [full] with [phrase] styled in [color] (semibold). Falls back to plain text when the
+ * phrase is absent — so a locale whose translation doesn't contain the exact substring
+ * still renders the whole sentence, just unhighlighted.
+ */
+private fun highlighted(full: String, phrase: String?, color: Color): AnnotatedString =
+    buildAnnotatedString {
+        val p = phrase?.takeIf { it.isNotBlank() }
+        val at = p?.let { full.indexOf(it) } ?: -1
+        if (p == null || at < 0) {
+            append(full)
+        } else {
+            append(full.substring(0, at))
+            withStyle(SpanStyle(color = color, fontWeight = FontWeight.SemiBold)) {
+                append(full.substring(at, at + p.length))
+            }
+            append(full.substring(at + p.length))
+        }
+    }

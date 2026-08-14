@@ -12,15 +12,14 @@ import java.util.Locale
 import java.util.UUID
 
 /**
- * Locale-agnostic Android Text-to-Speech wrapper.
+ * Locale-agnostic Android Text-to-Speech wrapper, used by the chat and the lesson
+ * player.
  *
- * Used by both the chat (Bangla) and the lesson player (SDK-language-driven).
- * Differs from the previous Bangla-only helper in three ways:
- *  - Locale is a constructor argument, not hardcoded.
- *  - Wires an [UtteranceProgressListener] so callers can react to completion
- *    (the lesson player auto-advances on `onDone`).
- *  - Exposes a [state] flow so UI can swap icons / disable controls based on
- *    `Initializing / Idle / Speaking / LanguageMissing / Error`.
+ * [locale] is the default voice; [speak] can override it per utterance so mixed-
+ * language content is read by the voice matching each string (see
+ * [localeForSpokenText]). Wires an [UtteranceProgressListener] so callers can react
+ * to completion — the lesson player auto-advances on `onDone` — and exposes a
+ * [state] flow so UI can swap icons or disable controls.
  */
 class CoachingTtsHelper(
     private val context: Context,
@@ -29,7 +28,15 @@ class CoachingTtsHelper(
 
     private var tts: TextToSpeech? = null
     private var pendingText: String? = null
+    private var pendingLocale: Locale? = null
     private var pendingOnDone: (() -> Unit)? = null
+
+    /**
+     * The voice currently loaded into the engine, or null while no usable voice has
+     * been applied. Tracked so [speak] only pays for `setLanguage` when the voice
+     * actually has to change.
+     */
+    private var currentLocale: Locale? = null
 
     /** Completion callback keyed by the utterance id that produced it. */
     private var activeUtteranceId: String? = null
@@ -49,19 +56,25 @@ class CoachingTtsHelper(
             _state.value = TtsState.Error
             return
         }
-        val result = tts?.isLanguageAvailable(locale)
-        when (result) {
+        // Wired before the availability check: a device missing the default voice
+        // can still speak another one via [speak]'s per-utterance override, and
+        // without the listener its `onDone` would never fire, stalling the lesson
+        // player's auto-advance.
+        tts?.setOnUtteranceProgressListener(progressListener)
+        when (tts?.isLanguageAvailable(locale)) {
             TextToSpeech.LANG_AVAILABLE,
             TextToSpeech.LANG_COUNTRY_AVAILABLE,
             TextToSpeech.LANG_COUNTRY_VAR_AVAILABLE -> {
                 tts?.language = locale
-                tts?.setOnUtteranceProgressListener(progressListener)
+                currentLocale = locale
                 _state.value = TtsState.Idle
                 pendingText?.let { text ->
                     val cb = pendingOnDone
+                    val pending = pendingLocale
                     pendingText = null
+                    pendingLocale = null
                     pendingOnDone = null
-                    speak(text, cb ?: {})
+                    speak(text, pending, cb ?: {})
                 }
             }
             TextToSpeech.LANG_MISSING_DATA -> {
@@ -74,6 +87,27 @@ class CoachingTtsHelper(
             }
             else -> _state.value = TtsState.Error
         }
+    }
+
+    /**
+     * Point the engine at [target], returning whether a usable voice is now loaded.
+     *
+     * A voice the device doesn't have leaves [currentLocale] alone, so the caller can
+     * fall back to whatever is already loaded rather than going silent.
+     */
+    private fun applyLocale(target: Locale): Boolean {
+        if (target == currentLocale) return true
+        val engine = tts ?: return false
+        val usable = when (engine.isLanguageAvailable(target)) {
+            TextToSpeech.LANG_AVAILABLE,
+            TextToSpeech.LANG_COUNTRY_AVAILABLE,
+            TextToSpeech.LANG_COUNTRY_VAR_AVAILABLE -> true
+            else -> false
+        }
+        if (!usable) return false
+        engine.language = target
+        currentLocale = target
+        return true
     }
 
     /**
@@ -120,8 +154,12 @@ class CoachingTtsHelper(
     /**
      * Speak [text] aloud, interrupting any current utterance. [onDone] runs on
      * successful completion of this exact utterance (later requests cancel it).
+     *
+     * [utteranceLocale] overrides the default voice for this utterance only; null
+     * uses the constructor locale. When the requested voice isn't installed the
+     * currently-loaded one speaks instead — a wrong-accent reading beats silence.
      */
-    fun speak(text: String, onDone: () -> Unit = {}) {
+    fun speak(text: String, utteranceLocale: Locale? = null, onDone: () -> Unit = {}) {
         if (text.isBlank()) {
             onDone()
             return
@@ -130,10 +168,20 @@ class CoachingTtsHelper(
         if (current == null || _state.value is TtsState.Initializing) {
             // Queue until the engine finishes initialising.
             pendingText = text
+            pendingLocale = utteranceLocale
             pendingOnDone = onDone
             return
         }
-        if (_state.value is TtsState.LanguageMissing || _state.value is TtsState.Error) return
+        if (_state.value is TtsState.Error) return
+        if (applyLocale(utteranceLocale ?: locale)) {
+            // The default voice may be missing while this utterance's one is not, so
+            // clear the prompt that says read-aloud is unusable — it plainly works.
+            if (_state.value is TtsState.LanguageMissing) _state.value = TtsState.Idle
+        } else if (currentLocale == null) {
+            // No voice has ever loaded: nothing can be spoken. [state] already says
+            // LanguageMissing, which is what surfaces the installer action.
+            return
+        }
         current.stop()
         val id = UUID.randomUUID().toString()
         activeUtteranceId = id
@@ -149,6 +197,7 @@ class CoachingTtsHelper(
         activeUtteranceId = null
         activeOnDone = null
         pendingText = null
+        pendingLocale = null
         pendingOnDone = null
         if (_state.value is TtsState.Speaking) _state.value = TtsState.Idle
     }
