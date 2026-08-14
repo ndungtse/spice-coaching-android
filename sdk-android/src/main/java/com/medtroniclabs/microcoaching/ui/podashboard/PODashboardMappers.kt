@@ -26,6 +26,7 @@ internal fun mapDashboard(
     existing: List<DigitalHelpModuleUsageItem>,
     suggested: List<ModuleCreationSuggestionListItem>,
     spineError: String? = null,
+    spineErrorIsAuth: Boolean = false,
     existingTotal: Int = existing.size,
     suggestedTotal: Int = suggested.size,
     documentUsage: DocumentUsageResponse? = null,
@@ -50,6 +51,7 @@ internal fun mapDashboard(
         .coerceAtLeast(documentUsage?.documents?.size ?: 0),
     documentUsageSummary = documentUsage?.toDocumentUsageSummary(),
     spineError = spineError,
+    spineErrorIsAuth = spineErrorIsAuth,
 )
 
 // ── Document usage ──────────────────────────────────────────────────────────

@@ -35,7 +35,7 @@ class ApiPODashboardDataSource(
         // spine returning 502) must not blank the whole dashboard.
         var summary = TeamActivitySummary()
         val members = mutableListOf<TeamMemberActivityDetail>()
-        val spineError = runCatching {
+        val spineFailure = runCatching {
             // Spine: pull the full roster (paginated) + the summary from the first page.
             var offset = 0
             var totalMembers = Int.MAX_VALUE
@@ -47,7 +47,8 @@ class ApiPODashboardDataSource(
                 if (page.members.size < PAGE) break
                 offset += PAGE
             }
-        }.exceptionOrNull()?.message
+        }.exceptionOrNull()
+        val spineError = spineFailure?.message
 
         val existingResp = runCatching {
             api.getDigitalHelpModules(from, to, limit = TOP_K).bodyOrThrow()
@@ -71,6 +72,7 @@ class ApiPODashboardDataSource(
             existing = existingResp?.modules ?: emptyList(),
             suggested = suggestedResp?.suggestions ?: emptyList(),
             spineError = spineError,
+            spineErrorIsAuth = spineFailure.isDashboardAuthError(),
             documentUsage = documentUsageResp,
             // total_modules can be 0 in some responses — fall back to the page size so
             // "Show all" still appears when a full page came back.
@@ -196,7 +198,13 @@ class ApiPODashboardDataSource(
         val problem = errorBody()?.string()?.takeIf { it.isNotBlank() }?.let {
             runCatching { LenientJson.decodeFromString<ProblemDetail>(it) }.getOrNull()
         }
-        error(problem?.detail ?: problem?.title ?: "The dashboard service is unavailable (HTTP ${code()})")
+        val message = problem?.detail ?: problem?.title ?: "The dashboard service is unavailable (HTTP ${code()})"
+        // A 401 is a stale/expired session — a pull-to-refresh retry can't fix it, so surface it
+        // as a distinct auth error the UI can turn into "log out and back in" guidance.
+        if (code() == 401 || problem?.status == 401 || problem?.code == "not_authenticated") {
+            throw DashboardAuthException(message)
+        }
+        error(message)
     }
 
     private companion object {
@@ -211,6 +219,12 @@ class ApiPODashboardDataSource(
         const val DOCUMENT_TOP_LIMIT_MAX = 50
     }
 }
+
+/** A dashboard call failed with HTTP 401 — the session is invalid/expired (auth, not network). */
+class DashboardAuthException(message: String) : Exception(message)
+
+/** True when a failure is an expired/invalid session (HTTP 401), i.e. a re-login is needed. */
+internal fun Throwable?.isDashboardAuthError(): Boolean = this is DashboardAuthException
 
 /** Last-7-days window (inclusive), as UTC start-of-day millis. */
 internal fun defaultRange(): DateRange {

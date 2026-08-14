@@ -12,7 +12,7 @@ import kotlinx.coroutines.launch
 /** UI state for the document-usage drill-down. */
 sealed class DocumentUsageDetailUiState {
     object Loading : DocumentUsageDetailUiState()
-    data class Error(val message: String) : DocumentUsageDetailUiState()
+    data class Error(val message: String, val isAuth: Boolean = false) : DocumentUsageDetailUiState()
     data class Ready(val detail: DocumentUsageDetail) : DocumentUsageDetailUiState()
 }
 
@@ -43,7 +43,7 @@ class DocumentUsageDetailViewModel(
                         if (detail != null) DocumentUsageDetailUiState.Ready(detail)
                         else DocumentUsageDetailUiState.Error("Document not found")
                     },
-                    onFailure = { DocumentUsageDetailUiState.Error(it.message ?: "Failed to load document") },
+                    onFailure = { DocumentUsageDetailUiState.Error(it.message ?: "Failed to load document", it.isDashboardAuthError()) },
                 )
         }
     }

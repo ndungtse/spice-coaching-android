@@ -9,6 +9,8 @@ import com.medtroniclabs.microcoaching.Language
 import com.medtroniclabs.microcoaching.MicroCoachingSDK
 import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.ai.voice.CoachingTtsHelper
+import com.medtroniclabs.microcoaching.ai.voice.localeForSpokenText
+import com.medtroniclabs.microcoaching.ai.voice.ttsLocaleFor
 import com.medtroniclabs.microcoaching.data.repository.ModuleRepository
 import com.medtroniclabs.microcoaching.data.repository.ModuleRepositoryImpl
 import com.medtroniclabs.microcoaching.domain.telemetry.EventRecorder
@@ -106,8 +108,8 @@ class LearnViewModel(
 
     // ── Listen-aloud (TTS) ────────────────────────────────────────────────────
 
-    /** Speaks lesson card bodies in the SDK's current language. */
-    private val tts: CoachingTtsHelper = CoachingTtsHelper(context, ttsLocaleForSdkLanguage())
+    /** Speaks lesson card bodies; [speakAloud] picks the voice per utterance. */
+    private val tts: CoachingTtsHelper = CoachingTtsHelper(context, defaultTtsLocale())
 
     private val _autoSpeakEnabled = MutableStateFlow(false)
     /**
@@ -124,9 +126,13 @@ class LearnViewModel(
         if (!next) tts.stop()
     }
 
-    /** Speak [text] aloud; [onDone] fires when the utterance completes. */
+    /**
+     * Speak [text] aloud in the voice matching the script it is written in, so a card
+     * served in the other language (see `LocalizedText.forLang`) is still read by the
+     * right voice. [onDone] fires when the utterance completes.
+     */
     fun speakAloud(text: String, onDone: () -> Unit = {}) {
-        tts.speak(text, onDone)
+        tts.speak(text, localeForSpokenText(text, defaultTtsLocale()), onDone)
     }
 
     /** Stop any in-flight TTS utterance. */
@@ -143,10 +149,14 @@ class LearnViewModel(
         super.onCleared()
     }
 
-    private fun ttsLocaleForSdkLanguage(): Locale = when (MicroCoachingSDK.getInstance().config.language) {
-        Language.ENGLISH -> Locale.US
-        Language.BANGLA -> Locale("bn", "BD")
-    }
+    /**
+     * Voice used when a string's own script can't decide (digits, punctuation).
+     * Reads `sdk.language` rather than `config.language` so a runtime
+     * [MicroCoachingSDK.setLanguage] is honoured, matching how `SdkLocalizedTheme`
+     * resolves strings.
+     */
+    private fun defaultTtsLocale(): Locale =
+        ttsLocaleFor(MicroCoachingSDK.getInstance().language)
 
     // ── Init ──────────────────────────────────────────────────────────────────
 

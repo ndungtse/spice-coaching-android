@@ -57,18 +57,18 @@ import com.medtroniclabs.microcoaching.ui.learn.selectAnswer
 import com.medtroniclabs.microcoaching.ui.learn.QuizQuestion
 
 /**
- * Shared quiz-in-progress composable used by both:
- * - [RefresherQuizContent] (inside the bottom sheet)
- * - Module-end quiz flow triggered from [LessonPlayerScreen]
+ * Shared quiz-in-progress composable for the refresher bottom sheet: both phases of
+ * [RefresherContent], plus [RefresherQuizContent].
  *
  * Renders a sequential question flow: top nav (back / next / optional close) →
- * progress bar → question text → answer cards → [AnswerFeedbackOverlay] on
- * selection → advances to next question or calls [onAllAnswered] when the last
- * question is dismissed.
+ * progress bar → question text → answer cards → [InlineAnswerFeedback] on
+ * selection → advances to the next question or calls [onAllAnswered] when the last
+ * question's CTA is tapped.
  *
- * Once an answer is selected for a question, navigating back to that question
- * shows the explanation in read-only mode — the answer cards no longer accept
- * taps. The CHW cannot re-answer a question in the same session.
+ * Once an answer is selected for a question, navigating back to that question shows
+ * the explanation in read-only mode — the answer cards no longer accept taps. The
+ * CHW cannot re-answer a question within one composition, so a caller offering a
+ * retry must re-key this composable to clear its index and answer map.
  *
  * @param onClose Optional close handler. When non-null, an X icon is rendered
  *   in the top nav (used by the bottom-sheet callers). Pass `null` from
@@ -185,10 +185,10 @@ fun SharedQuizInProgressContent(
                 )
             }
 
-            // Inline reveal directly below the option cards — no more pinned
-            // bottom overlay that hid scrollable content and complicated layout.
-            // On the last question a caller-supplied footer (e.g. the refresher
-            // "Next refresher / Done" actions) replaces the default Next button.
+            // Inline reveal directly below the option cards. On the last question a
+            // caller-supplied footer (e.g. the refresher "Next refresher / Done"
+            // actions) replaces the default button; without one, the flag turns that
+            // button into "Finish".
             val isLastQuestion = safeIndex + 1 >= total
             InlineAnswerFeedback(
                 visible = showingFeedback,
@@ -197,6 +197,7 @@ fun SharedQuizInProgressContent(
                     if (isLastQuestion) onAllAnswered()
                     else currentIndex = safeIndex + 1
                 },
+                isLastQuestion = isLastQuestion,
                 footerOverride = if (isLastQuestion) lastQuestionFooter else null,
             )
         }

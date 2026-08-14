@@ -213,10 +213,12 @@ fun QuizQuestionScreen(
                 }
             }
 
-            // Inline reveal: "Why this matters" callout + "Next Question"
-            // button, animated in once the CHW has answered. No overlay /
-            // popup — the answer cards already carry the correct/wrong
-            // colouring, so the dedicated headline is unnecessary.
+            // Inline reveal: "Why this matters" callout + the forward button,
+            // animated in once the CHW has answered. No overlay / popup — the answer
+            // cards already carry the correct/wrong colouring, so the dedicated
+            // headline is unnecessary. On the final question the button reads
+            // "Finish"; [onNext] then routes to the result screen rather than
+            // advancing.
             InlineAnswerFeedback(
                 visible = showFeedback,
                 explanation = question.explanation,
@@ -224,6 +226,7 @@ fun QuizQuestionScreen(
                     showFeedback = false
                     onNext()
                 },
+                isLastQuestion = questionIndex + 1 >= totalQuestions,
             )
 
             Spacer(Modifier.height(24.dp))

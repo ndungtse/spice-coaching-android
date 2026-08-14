@@ -96,8 +96,15 @@ fun TrainingVideosSubTab(
                     modifier = Modifier.padding(horizontal = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    videos.drop(1).forEach { video ->
-                        TrainingVideoRow(video = video, onClick = { onOpen(video) })
+                    val rest = videos.drop(1)
+                    if (rest.isEmpty()) {
+                        // The only assigned video is the featured one above, so this
+                        // section would otherwise be a heading over blank space.
+                        EmptyState(stringResource(R.string.training_videos_no_more))
+                    } else {
+                        rest.forEach { video ->
+                            TrainingVideoRow(video = video, onClick = { onOpen(video) })
+                        }
                     }
                 }
             }

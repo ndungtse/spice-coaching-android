@@ -65,7 +65,7 @@ fun SuggestionDetailScreen(suggestionId: String, onBack: () -> Unit, onHome: () 
         when (val s = state) {
             is SuggestionDetailUiState.Loading -> CenterProgress()
             is SuggestionDetailUiState.Error ->
-                DashboardErrorState(offline = !networkAvailable, message = s.message, onRetry = vm::retry)
+                DashboardErrorState(offline = !networkAvailable, message = s.message, onRetry = vm::retry, isAuth = s.isAuth)
             is SuggestionDetailUiState.Ready -> Content(s.detail)
         }
     }

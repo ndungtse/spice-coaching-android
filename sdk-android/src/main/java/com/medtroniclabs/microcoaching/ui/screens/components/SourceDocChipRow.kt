@@ -43,6 +43,9 @@ import com.medtroniclabs.microcoaching.network.SourceDocumentRef
  *   active SDK locale, used only as a fallback when a document has no title.
  * @param onTap Invoked when the user taps a chip. Caller fires the
  *   presigned-url fetch + preview navigation.
+ * @param startPage Cited page, forwarded to [onTap] so the viewer can land on it.
+ *   Deliberately not shown in the label: a page number is a retrieval detail the
+ *   reader can't act on, and it crowded out the document title it was appended to.
  */
 @Composable
 fun SourceDocChipRow(
@@ -69,7 +72,6 @@ fun SourceDocChipRow(
                 ?: defaultLabel
             SourceDocChip(
                 label = label,
-                pageLabel = startPage?.let { "p. $it" },
                 onClick = { onTap(doc.id, label, startPage) },
             )
         }
@@ -79,7 +81,6 @@ fun SourceDocChipRow(
 @Composable
 private fun SourceDocChip(
     label: String,
-    pageLabel: String? = null,
     onClick: () -> Unit,
 ) {
     Surface(
@@ -103,7 +104,7 @@ private fun SourceDocChip(
             )
             Spacer(Modifier.width(6.dp))
             Text(
-                text = if (pageLabel != null) "$label · $pageLabel" else label,
+                text = label,
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
                 maxLines = 2,

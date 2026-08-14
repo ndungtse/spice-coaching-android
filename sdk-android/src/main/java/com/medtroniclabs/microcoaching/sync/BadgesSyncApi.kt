@@ -13,8 +13,9 @@ private const val TAG = "SyncApi"
  * Fetch the CHW's badge catalogue and replace their rows in `badge`.
  *
  * The endpoint takes no `since`: every call returns the full snapshot, which is
- * also what re-signs each badge's artwork URL. On any failure the previous rows
- * stay intact, so the Badges tab still renders what it last knew.
+ * also what re-signs each badge's artwork URL — and what lets the swap prune
+ * badges the tenant no longer has. On any failure the previous rows stay intact,
+ * so the Badges tab still renders what it last knew.
  */
 suspend fun SyncApi.pullBadges(): BadgesResult {
     val userId = chwId
@@ -33,10 +34,13 @@ suspend fun SyncApi.pullBadges(): BadgesResult {
                 chwId = userId,
                 nowMillis = System.currentTimeMillis(),
             )
-            db.badgeDao().replaceForUser(userId, rows)
+            val dao = db.badgeDao()
+            val before = dao.getAllForUser(userId).map { it.badgeId }.toSet()
+            dao.replaceForUser(userId, rows)
             val earnedCount = rows.count { it.earnedAt != null }
-            Log.i(TAG, "Badges sync OK: total=${rows.size} earned=$earnedCount")
-            BadgesResult(count = rows.size, earnedCount = earnedCount)
+            val pruned = (before - rows.map { it.badgeId }.toSet()).size
+            Log.i(TAG, "Badges sync OK: total=${rows.size} earned=$earnedCount pruned=$pruned")
+            BadgesResult(count = rows.size, earnedCount = earnedCount, prunedCount = pruned)
         },
         onFailure = { error, kind -> BadgesResult(error = error, errorKind = kind) },
     )
@@ -47,9 +51,12 @@ suspend fun SyncApi.pullBadges(): BadgesResult {
  *
  * The lists are unioned by id rather than treating `available_badges` as the whole
  * catalogue: a badge whose definition was deactivated after the CHW earned it
- * appears only in `earned_badges`, and dropping it would take an earned badge away
- * from them. Earned entries win on metadata, since they are the fresher record for
+ * appears only in `earned_badges`, and dropping it would take away a badge they
+ * earned. Earned entries win on metadata, since they are the fresher record for
  * a badge that appears in both.
+ *
+ * A badge absent from *both* lists is gone from the tenant entirely and is pruned by
+ * the swap in [com.medtroniclabs.microcoaching.data.db.dao.BadgeDao.replaceForUser].
  *
  * Ordering is by `sequence` (badges missing one sort last, then by name) and is
  * written into `rank`, so reads reproduce this order without re-sorting. Ids repeat

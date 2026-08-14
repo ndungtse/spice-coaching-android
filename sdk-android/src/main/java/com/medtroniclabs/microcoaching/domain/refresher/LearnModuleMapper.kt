@@ -8,6 +8,7 @@ import com.medtroniclabs.microcoaching.data.localized.readLocalizedBody
 import com.medtroniclabs.microcoaching.data.mapper.decodeIncompleteQuizIds
 import com.medtroniclabs.microcoaching.data.repository.GapProfileRepositoryImpl
 import com.medtroniclabs.microcoaching.domain.gaps.ondevice.ActionGapLink
+import com.medtroniclabs.microcoaching.progress.refresherDrillQuestionIds
 import com.medtroniclabs.microcoaching.progress.toReinforceQuestionIds
 import com.medtroniclabs.microcoaching.ui.learn.LearnModule
 import com.medtroniclabs.microcoaching.ui.learn.parseInlineQuiz
@@ -27,9 +28,9 @@ import java.util.concurrent.ConcurrentHashMap
  * parsing, DB progress reads (completions / partials / per-question outcomes), morning-card
  * + action-gap resolution, severity/status ranking, and the list-slim copy.
  *
- * Extracted verbatim from [CoachingModuleStore] (which now keeps only the Flow wiring). This
- * class owns the in-session status overlay it reads, so `setInSessionStatus` writes here and
- * the store just re-triggers its pipeline.
+ * [CoachingModuleStore] keeps only the Flow wiring around this. The in-session status
+ * overlay lives here rather than in the store because this is what reads it, so
+ * `setInSessionStatus` writes here and the store just re-triggers its pipeline.
  */
 internal class LearnModuleMapper(
     private val database: MicroCoachingDatabase,
@@ -175,16 +176,21 @@ internal class LearnModuleMapper(
             // "To reinforce" = questions not yet mastered, INCLUDING never-attempted
             // ones — the right notion for the progress bar. Computed via the pure
             // overload so it adds NO extra per-module DB queries.
-            val toReinforceCount: Int = if (totalQ == 0) {
-                0
+            val toReinforceIds: Set<String> = if (totalQ == 0) {
+                emptySet()
             } else {
                 toReinforceQuestionIds(
                     allQuestionIds = questionIds,
                     localCorrect = localCorrectIds,
                     localWrong = localWrongIds,
                     serverIncomplete = partial?.decodeIncompleteQuizIds()?.toSet(),
-                ).size
+                )
             }
+            val toReinforceCount = toReinforceIds.size
+            // What the refresher tile advertises must be what its sheet drills, so the
+            // card's targeted question narrows the count the same way it narrows the
+            // question set (see [refresherDrillQuestionIds]).
+            val drillCount = refresherDrillQuestionIds(toReinforceIds, card?.quizId).size
 
             // wrongQuestionCount = questions whose LATEST local attempt was wrong —
             // the CHW's local gap. A never-attempted module reports 0.
@@ -245,7 +251,7 @@ internal class LearnModuleMapper(
             shell.copy(
                 quizScorePct = quizScore,
                 wrongQuestionCount = wrongCount,
-                reinforceQuestionCount = toReinforceCount,
+                reinforceQuestionCount = drillCount,
                 attemptedQuestionCount = attemptedCount,
                 viewedCardCount = viewedCards,
                 severity = shell.behaviouralGapId?.let { gapSeverityById[it] },

@@ -36,6 +36,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.medtroniclabs.microcoaching.R
@@ -76,7 +77,7 @@ fun SkDetailScreen(skId: String, onBack: () -> Unit, onHome: () -> Unit) {
             when (val s = state) {
                 is SkDetailUiState.Loading -> CenterProgress()
                 is SkDetailUiState.Error ->
-                    DashboardErrorState(offline = !networkAvailable, message = s.message, onRetry = vm::retry)
+                    DashboardErrorState(offline = !networkAvailable, message = s.message, onRetry = vm::retry, isAuth = s.isAuth)
                 is SkDetailUiState.Ready -> SkDetailBody(s.detail)
             }
         }
@@ -86,10 +87,13 @@ fun SkDetailScreen(skId: String, onBack: () -> Unit, onHome: () -> Unit) {
 @Composable
 private fun SkDetailBody(d: SkDetail) {
     Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        // Streak dropped (not backed by the API); the two real stats fill the width.
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
             SummaryCard("${d.modulesDone}/${d.modulesTotal}", stringResource(R.string.po_sk_summary_modules), Modifier.weight(1f))
             SummaryCard("${d.queries}", stringResource(R.string.po_sk_summary_queries), Modifier.weight(1f))
-            SummaryCard("🔥${d.streakDays}", stringResource(R.string.po_sk_summary_streak), Modifier.weight(1f))
         }
         Spacer(Modifier.height(12.dp))
         DetailCard(stringResource(R.string.po_sk_summary_modules)) {
@@ -138,11 +142,11 @@ private fun SkDetailHeader(d: SkDetail, onBack: () -> Unit, onHome: () -> Unit) 
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(d.name, color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
-                    Text(
+                    /*Text(
                         text = d.location.ifBlank { stringResource(R.string.po_na) },
                         color = Color.White.copy(alpha = 0.8f),
                         style = MaterialTheme.typography.bodyMedium,
-                    )
+                    )*/
                 }
                 Text(
                     text = stringResource(skStatusLabel(d.status)),
@@ -208,17 +212,33 @@ private fun ModuleStatusRow(m: SkModuleStatus) {
     }
 }
 
+/**
+ * One "Activity" key/value line, split strictly down the middle.
+ *
+ * Both halves are weighted rather than laid out with `SpaceBetween`: an unweighted
+ * value takes whatever width it wants first, so a long module title (Bengali titles
+ * routinely run past a line) squeezed the label into a ragged column instead of
+ * wrapping itself. Equal weights give the value a fixed half to wrap inside, and
+ * keep the labels aligned down the card whatever the values do.
+ */
 @Composable
 private fun ActivityRow(label: String, value: String) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text(label, color = MutedText, style = MaterialTheme.typography.bodyMedium)
+        Text(
+            text = label,
+            color = MutedText,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.weight(1f),
+        )
         Text(
             text = value.ifBlank { stringResource(R.string.po_na) },
             fontWeight = FontWeight.Bold,
             style = MaterialTheme.typography.bodyMedium,
+            textAlign = TextAlign.End,
+            modifier = Modifier.weight(1f),
         )
     }
 }
