@@ -21,6 +21,7 @@ import com.medtroniclabs.microcoaching.ai.retrieval.ModuleKnowledgeIndex
 import com.medtroniclabs.microcoaching.ai.retrieval.OffTopicGuard
 import com.medtroniclabs.microcoaching.ai.retrieval.ScopeClassifier
 import com.medtroniclabs.microcoaching.ai.voice.CoachingTtsHelper
+import com.medtroniclabs.microcoaching.ai.voice.ttsLocaleFor
 import com.medtroniclabs.microcoaching.ai.voice.stt.SttModelState
 import com.medtroniclabs.microcoaching.network.RagQueryRequest
 import com.medtroniclabs.microcoaching.network.RagQueryResponse
@@ -77,11 +78,10 @@ class ChatViewModel(
     // the same .task (double model memory, native MediaPipe crash). Paired
     // with SharedInferenceRouter.release() in onCleared.
     internal val inferenceRouter = SharedInferenceRouter.acquire(config)
-    // TTS locale must track the SDK language, NOT be hardcoded to Bangla — the
-    // chat message text is now language-matched (an English app shows/speaks the
-    // EN translation of the bn-only backend answer; Bangla speaks bn). A Bangla
-    // voice reading English text is what produced the "mixed BN+EN" audio.
-    // Mirrors LearnViewModel.ttsLocaleForSdkLanguage().
+    // TTS locale tracks the SDK language rather than being hardcoded to Bangla: chat
+    // message text is language-matched (an English app shows and speaks the EN
+    // translation of a bn-only backend answer), and a Bangla voice reading English text
+    // is unintelligible.
     internal val tts = CoachingTtsHelper(application.applicationContext, ttsLocaleForSdkLanguage())
     // Lazy because it depends on `session` which is declared below.
     internal val eventRecorder: EventRecorder by lazy {
@@ -118,15 +118,11 @@ class ChatViewModel(
     fun setPreferOnline(value: Boolean) = chatModePrefs.setPreferOnline(value)
 
     /**
-     * The TTS voice locale for the chat, derived from the SDK language so the
-     * spoken voice matches the (now language-matched) message text. English →
-     * en-US, Bangla → bn-BD. Read once at VM construction, consistent with the
-     * lesson player; a mid-session language switch recreates the chat surface.
+     * The TTS voice locale for the chat, derived from the SDK language so the spoken
+     * voice matches the (language-matched) message text. Read once at VM construction;
+     * a mid-session language switch recreates the chat surface.
      */
-    internal fun ttsLocaleForSdkLanguage(): Locale = when (sdk.language) {
-        Language.ENGLISH -> Locale.US
-        Language.BANGLA -> Locale("bn", "BD")
-    }
+    internal fun ttsLocaleForSdkLanguage(): Locale = ttsLocaleFor(sdk.language)
 
     /**
      * Resolves a string resource through the SDK-configured locale rather than
@@ -217,10 +213,11 @@ class ChatViewModel(
                                     downloadProgress = modelState.progressPercent,
                                     downloadBytesDownloaded = modelState.bytesDownloaded,
                                     downloadTotalBytes = modelState.totalBytes,
-                                    // Bytes are moving, so an earlier verdict no longer
-                                    // describes anything. Cleared here rather than only where
-                                    // a retry is requested, so every route out of Corrupt
-                                    // drops styling that outranks this progress state.
+                                    // Bytes are moving, so any earlier verdict — damaged OR
+                                    // ready — no longer describes anything. aiReady matters
+                                    // here because it outranks isDownloading on the card: a
+                                    // stale true renders "Downloaded" over a live download.
+                                    aiReady = false,
                                     aiUnusable = false,
                                     aiOnDiskBytes = null,
                                     loadError = null,
@@ -242,6 +239,8 @@ class ChatViewModel(
                                     isDownloading = false,
                                     isPaused = true,
                                     downloadProgress = modelState.progressPercent,
+                                    // A paused partial is present but not loadable.
+                                    aiReady = false,
                                 )
                                 else -> it
                             }
@@ -254,6 +253,8 @@ class ChatViewModel(
                                     isDownloading = false,
                                     isPaused = false,
                                     downloadProgress = -1,
+                                    // Any partial kept for Range-resume is not a model yet.
+                                    aiReady = false,
                                 )
                                 is ChatUiState.Ready -> it.copy(isModelDownloading = false, modelDownloadProgress = -1)
                                 else -> it
@@ -384,7 +385,12 @@ class ChatViewModel(
      */
     internal fun maybeAutoEnterChat() {
         val s = _uiState.value as? ChatUiState.SetupRequired ?: return
-        val aiOk = !s.aiRequired || s.aiReady
+        // The manager's Ready is required alongside the UI flag: entering is an engine
+        // load, and only ModelState knows whether the file is actually loadable right
+        // now. This also keeps LoadFailed from auto-entering — retrying a failed load
+        // is the user's tap, not a surprise transition.
+        val aiOk = !s.aiRequired ||
+            (s.aiReady && sdk.modelManager.state.value is ModelState.Ready)
         val voiceOk = sdk.language != Language.BANGLA ||
             sdk.sttModelManager.state.value is SttModelState.Ready
         if (aiOk && voiceOk) enterChat()
@@ -489,13 +495,20 @@ class ChatViewModel(
             return
         }
 
-        if (!sdk.modelManager.isModelPresent()) {
-            Log.i(TAG, "AI model not present — showing setup screen")
-            _uiState.value = currentSetupRequiredState(aiRequired = true)
-            return
+        // Entry keys on ModelState, not on a file existing: the worker streams into the
+        // final filename, so mid-download a presence check is true while the bytes are
+        // still arriving. Only Ready (which is validation-gated) may reach the engine;
+        // every other state renders its own setup card via currentSetupRequiredState.
+        when (sdk.modelManager.state.value) {
+            is ModelState.Ready -> loadReadyChat()
+            else -> {
+                Log.i(
+                    TAG,
+                    "Model not ready (${sdk.modelManager.state.value::class.simpleName}) — showing setup screen",
+                )
+                _uiState.value = currentSetupRequiredState(aiRequired = true)
+            }
         }
-
-        loadReadyChat()
     }
 
     /**
@@ -563,6 +576,17 @@ class ChatViewModel(
             return
         }
 
+        // A download in flight must never reach the engine: the worker is writing into
+        // the very file a load would mmap, and the file is by definition incomplete.
+        // Guarded here — not only at the entry decision — so every caller (Go to chat,
+        // auto-enter) is covered.
+        val stateAtEntry = sdk.modelManager.state.value
+        if (stateAtEntry is ModelState.Downloading || stateAtEntry is ModelState.Paused) {
+            Log.i(TAG, "Model download in flight (${stateAtEntry::class.simpleName}) — showing setup screen instead of loading")
+            _uiState.value = currentSetupRequiredState(aiRequired = true)
+            return
+        }
+
         // Load the engine, retrying briefly on failure. A model that just finished
         // downloading can transiently fail to load (file still flushing / mmap race on
         // slower devices), and a short backoff clears that common case before the failure
@@ -602,20 +626,22 @@ class ChatViewModel(
                 // as a damaged card; don't overwrite it with the retry state below.
                 if (sdk.modelManager.state.value is ModelState.Corrupt) return
             }
-            // A structurally valid file still on disk means the model IS downloaded, so
-            // aiReady stays true and "Go to chat" re-attempts the load. A Download button
-            // here would wipe and re-fetch a good file on every tap; the CTA is only right
-            // once the file is genuinely gone.
+            // currentSetupRequiredState derives aiReady from ModelState — a structurally
+            // valid file that transiently failed is LoadFailed → aiReady=true, so
+            // "Go to chat" re-attempts the load rather than a Download button wiping a
+            // good file. Never asserted from raw file presence: mid-download the file
+            // "exists" while the bytes are still arriving.
             //
             // A localized sentence, not `lastLoadError`: that field carries the engine's
-            // native text, which is logged above and belongs in logcat only.
-            val loadError = localizedString(R.string.chat_model_load_failed_transient)
-            _uiState.value = if (sdk.modelManager.isModelPresent()) {
-                Log.e(TAG, "Engine failed to load a present model after $attempt attempt(s) — offering retry, not re-download")
-                currentSetupRequiredState(aiRequired = true)
-                    .copy(aiReady = true, loadError = loadError)
-            } else {
-                currentSetupRequiredState(aiRequired = true).copy(loadError = loadError)
+            // native text, which is logged above and belongs in logcat only. Suppressed
+            // when a download moved in under this attempt — the progress card describes
+            // that state; an error would contradict it.
+            Log.e(TAG, "Engine failed to load after $attempt attempt(s) — state=${sdk.modelManager.state.value::class.simpleName}")
+            val inFlight = sdk.modelManager.state.value
+                .let { it is ModelState.Downloading || it is ModelState.Paused }
+            _uiState.value = currentSetupRequiredState(aiRequired = true).let {
+                if (inFlight) it
+                else it.copy(loadError = localizedString(R.string.chat_model_load_failed_transient))
             }
             return
         }
@@ -975,10 +1001,9 @@ class ChatViewModel(
      * [com.medtroniclabs.microcoaching.MicroCoachingSDK.networkAvailable].
      *
      * @param citedPage 1-indexed PDF page the citation points to — sourced from the
-     *   BM25-matched card's `source_pages`. The viewer opens in single-page mode
-     *   showing ONLY this page (the citation is a specific excerpt, so the rest of
-     *   the document is deliberately not browsable here — the "Open in browser"
-     *   fallback still reaches the full doc). Null falls back to page 1; ignored
+     *   BM25-matched card's `source_pages`. The viewer opens the WHOLE document and
+     *   scrolls to this page: a citation is a starting point, and the CHW routinely
+     *   needs the surrounding pages to act on it. Null falls back to page 1; ignored
      *   entirely for image / external formats.
      */
     fun openSourceDocument(sourceDocumentId: String, fallbackTitle: String, citedPage: Int? = null) {
@@ -993,7 +1018,7 @@ class ChatViewModel(
                 sourceDocumentId = sourceDocumentId,
                 title = fallbackTitle,
                 originalFilename = originalFilename,
-                selectedPage = citedPage,
+                startPage = citedPage,
             )
         }
     }

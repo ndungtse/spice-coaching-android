@@ -67,7 +67,7 @@ fun SearchedModuleDetailScreen(moduleId: String, onBack: () -> Unit, onHome: () 
         when (val s = state) {
             is SearchedModuleDetailUiState.Loading -> CenterProgress()
             is SearchedModuleDetailUiState.Error ->
-                DashboardErrorState(offline = !networkAvailable, message = s.message, onRetry = vm::retry)
+                DashboardErrorState(offline = !networkAvailable, message = s.message, onRetry = vm::retry, isAuth = s.isAuth)
             is SearchedModuleDetailUiState.Ready -> Content(s.detail)
         }
     }

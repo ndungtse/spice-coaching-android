@@ -135,6 +135,7 @@
     <string name="quiz_question_counter">Question %1$d / %2$d</string>
     <string name="quiz_select_answer">Select an answer</string>
     <string name="quiz_next_question">Next Question</string>
+    <string name="quiz_finish">Finish</string>
     <string name="quiz_case_context_label">Context</string>
     <string name="quiz_nav_previous">Previous question</string>
     <string name="quiz_nav_next">Next question</string>
@@ -206,8 +207,7 @@
     <string name="module_detail_learning_cards">Learning cards</string>
     <string name="module_detail_quiz_section">Quiz</string>
     <string name="module_detail_knowledge_check">Knowledge check</string>
-    <string name="module_detail_listen_bangla">Listen in Bangla</string>
-    <string name="module_detail_listen_english">Listen in English</string>
+    <string name="module_detail_listen">Listen</string>
     <string name="module_detail_listen_caption">Auto-speak will start when you open the lesson</string>
     <string name="lesson_player_auto_speak_on">Auto-speak is on. Tap to turn off.</string>
     <string name="lesson_player_auto_speak_off">Auto-speak is off. Tap to turn on.</string>
@@ -468,9 +468,10 @@
     <string name="notification_model_download_channel_desc">Shows progress while the on-device AI coaching model downloads in the background.</string>
     <string name="notification_model_download_title">Downloading AI coaching model</string>
     <!-- Body when total size is known: "450 MB / 900 MB · 50%" -->
-    <string name="notification_model_download_progress">%1$d MB / %2$d MB · %3$d%%</string>
+    <!-- Sizes are pre-formatted by the platform Formatter, matching the setup card. -->
+    <string name="notification_model_download_progress">%1$s / %2$s · %3$d%%</string>
     <!-- Body when total size is unknown yet (chunked / pre-headers): "Downloaded 12 MB" -->
-    <string name="notification_model_download_progress_indeterminate">Downloaded %1$d MB</string>
+    <string name="notification_model_download_progress_indeterminate">Downloaded %1$s</string>
 
     <!-- In-app variant of chat_downloading_model_progress that also shows MB. -->
     <string name="chat_downloading_model_progress_mb">Downloading model… (%1$d MB / %2$d MB · %3$d%%)</string>
@@ -507,6 +508,7 @@
     <string name="training_videos_meta_duration">%1$d min</string>
     <string name="training_videos_coming_soon">Video playback coming soon</string>
     <string name="training_videos_empty">No training videos yet</string>
+    <string name="training_videos_no_more">No more videos assigned</string>
     <string name="training_videos_download">Download</string>
     <string name="training_videos_remove_download">Remove download</string>
     <string name="training_videos_storage_full">Not enough storage to download this video.</string>
@@ -530,10 +532,16 @@
     <string name="po_metric_finished_modules">Finished Modules</string>
     <string name="po_metric_chatbot_engaged">Chatbot Engaged</string>
     <!-- Metric-card info bottom sheet (no em-dashes) -->
-    <string name="po_metric_desc_active_now">SKs with at least one activity (a completed module or a chatbot session) during the selected period.</string>
-    <string name="po_metric_desc_inactive">SKs with no activity at all (no module progress and no chatbot use) during the selected period.</string>
-    <string name="po_metric_desc_finished_modules">SKs who completed at least one assigned module during the selected period.</string>
-    <string name="po_metric_desc_chatbot_engaged">SKs who used the chatbot at least once during the selected period.</string>
+    <string name="po_metric_desc_active_now">SKs who open a Learning or Refresher module within the selected date range, regardless of completion.</string>
+    <string name="po_metric_desc_inactive">SKs who do not open any Learning or Refresher module within the selected date range.</string>
+    <string name="po_metric_desc_finished_modules">SKs who have finished all assigned modules during the selected period.</string>
+    <string name="po_metric_desc_chatbot_engaged">SKs who sent at least one message to the AI chatbot during the selected period.</string>
+    <!-- Custom sheet title for Finished Modules; others reuse the card label. -->
+    <string name="po_metric_sheet_title_finished">SKs Finished All Modules</string>
+    <!-- Phrases highlighted (spice blue) inside the descriptions above. Must be a verbatim
+         substring of the matching description, per locale. -->
+    <string name="po_metric_hl_finished">finished all assigned modules</string>
+    <string name="po_metric_hl_chatbot">at least one message</string>
     <string name="po_metric_info_dismiss">Got it</string>
     <string name="po_section_my_sks">My SKs</string>
     <string name="po_section_module_completion">Module Completion</string>
@@ -580,6 +588,9 @@
     <string name="po_sk_module_pending">Pending</string>
     <string name="po_fraction">%1$d/%2$d</string>
     <string name="po_error_pull_to_refresh">Pull down to refresh.</string>
+    <!-- Shown for a 401 (expired/invalid session) instead of the pull-to-refresh hint. -->
+    <string name="po_error_session_expired">Your session has expired.</string>
+    <string name="po_error_session_expired_hint">Please log out and log back in.</string>
     <string name="po_stale_notice">@string/common_couldnt_refresh</string>
     <string name="po_offline_message">@string/common_error_offline</string>
     <string name="po_error_generic">@string/common_error_generic</string>

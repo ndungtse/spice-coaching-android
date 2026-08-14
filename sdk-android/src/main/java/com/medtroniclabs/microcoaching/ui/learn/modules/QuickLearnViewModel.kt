@@ -9,6 +9,7 @@ import com.medtroniclabs.microcoaching.MicroCoachingSDK
 import com.medtroniclabs.microcoaching.data.db.entity.MorningCardCacheEntity
 import com.medtroniclabs.microcoaching.ui.common.translatedText
 import com.medtroniclabs.microcoaching.data.db.entity.ModuleEntity
+import com.medtroniclabs.microcoaching.progress.refresherDrillQuestionIds
 import com.medtroniclabs.microcoaching.progress.toReinforceQuestionIds
 import com.medtroniclabs.microcoaching.ui.learn.LearnModule
 import com.medtroniclabs.microcoaching.ui.learn.LearnViewModel
@@ -30,13 +31,13 @@ import kotlinx.coroutines.launch
 /**
  * State holder for the Quick learn banner + morning refresher bottom sheet.
  *
- * Observes [MicroCoachingSDK.morningModules] and exposes the first wrong
- * quiz question of the top-priority module. When no module is surfaced or
- * no inline questions exist, [quickQuestion] is null and the banner hides.
+ * Observes [MicroCoachingSDK.morningModules] and exposes a preview question from the
+ * top-priority module. When no module is surfaced or none has inline questions,
+ * [quickQuestion] is null and the banner hides.
  *
  * Telemetry: routes single-answer events through [LearnViewModel.recordQuickLearnAnswer].
- * For the full refresher quiz (all wrong questions), call [primeRefresherQuiz] first,
- * then use [filteredQuestionsForRefresher] with [learnViewModel] via SharedQuizInProgressContent.
+ * For the full refresher quiz, call [primeRefresherQuiz] first, then render
+ * [filteredQuestionsForRefresher] with [learnViewModel] via `SharedQuizInProgressContent`.
  */
 class QuickLearnViewModel(
     internal val learnViewModel: LearnViewModel,
@@ -48,24 +49,24 @@ class QuickLearnViewModel(
     val answerState: StateFlow<AnswerOutcome?> = _answerState.asStateFlow()
 
     /**
-     * Filtered list of questions the CHW has previously answered incorrectly for
-     * the top morning module. Populated by [primeRefresherQuiz]; empty until called.
-     * Falls back to all questions when the CHW has no wrong answers yet.
+     * The question set the refresher sheet renders for the primed module — its drill
+     * set (see [reinforceSlice]), or the whole quiz when nothing is outstanding.
+     * Populated by [primeRefresherQuiz]; empty until called.
      */
     val filteredQuestionsForRefresher = MutableStateFlow<List<QuizQuestion>>(emptyList())
 
     /**
      * The module entity most recently primed by [primeRefresherQuiz]. Held so the
-     * "Try again" CTA ([restartRefresherQuiz]) can re-arm the quiz even after the
+     * "Try Again" action ([restartRefresherQuiz]) can re-arm the quiz even after the
      * module has dropped out of [morningModulesSource] (answering the last open
      * question correctly triggers refilterMorningModules mid-sheet).
      */
     private var lastPrimedEntity: ModuleEntity? = null
 
     /**
-     * Count of questions the CHW has answered incorrectly for the top morning module.
-     * Populated by [primeRefresherQuiz]. 0 while unpopulated.
-     * Drives the question-count label on MorningCard / LearnCard.
+     * Size of the drill set for the featured morning module — the same number its tile
+     * shows. Populated by [primeRefresherQuiz] / [computeWrongQuestionCount]; 0 while
+     * unpopulated. Drives the question-count label on MorningCard / LearnCard.
      */
     private val _wrongQuestionCount = MutableStateFlow(0)
     val wrongQuestionCount: StateFlow<Int> = _wrongQuestionCount.asStateFlow()
@@ -179,10 +180,21 @@ class QuickLearnViewModel(
             ?.withShuffledOptions()
     }
 
-    /** Look up the morning-card cache for the top module's source / gap id. */
-    private fun morningCardFor(moduleId: String?): MorningCardCacheEntity? =
-        if (moduleId == null) null
-        else morningCardsSource.value.firstOrNull { it.moduleId == moduleId }
+    /**
+     * The morning-card row behind [entity], carrying its source / gap id / targeted
+     * question.
+     *
+     * Falls back to a family match because `module_cache` is keyed by *version*: the
+     * sheet resolves a family's newest version while the card may still name an older
+     * one, and an exact-id-only lookup then silently dropped `source`,
+     * `behaviouralGapId` and `quizId` — leaving the sheet drilling a different set from
+     * the one the tile counted.
+     */
+    private fun morningCardFor(entity: ModuleEntity): MorningCardCacheEntity? {
+        val cards = morningCardsSource.value
+        return cards.firstOrNull { it.moduleId == entity.moduleId }
+            ?: cards.firstOrNull { it.moduleFamilyId == entity.moduleFamilyId }
+    }
 
     private fun sdkLang(): String {
         val sdk = MicroCoachingSDK.getInstance()
@@ -190,16 +202,19 @@ class QuickLearnViewModel(
     }
 
     /**
-     * Today's refresher question set for [entity]: the **full to-reinforce set** — every
-     * quiz question still unanswered-correctly (wrong + never-answered/server-incomplete),
-     * wrong-first for a stable, weak-spots-lead order. This is the single source of truth
-     * shared with the tile count ([com.medtroniclabs.microcoaching.domain.refresher.CoachingModuleStore]
-     * `reinforceQuestionCount`) and the membership filter (`keepIfHasReinforceQuestions`),
-     * so the sheet count matches the tile and answering them all clears the refresher.
+     * Today's refresher question set for [entity]: every quiz question still
+     * unanswered-correctly (wrong + never-answered/server-incomplete), narrowed by the
+     * morning card's targeted question and ordered wrong-first.
      *
-     * Empty when the module is fully mastered (it then drops from the morning list
-     * upstream) — replaces the old k-subset daily nudge, which never let the CHW finish
-     * a module's outstanding questions.
+     * This is the single source of truth for what a refresher presents. The tile count
+     * ([com.medtroniclabs.microcoaching.domain.refresher.LearnModuleMapper]
+     * `reinforceQuestionCount`) applies the same [refresherDrillQuestionIds] rule to
+     * the same set, so tile and sheet agree; the membership filter
+     * (`keepIfHasReinforceQuestions`) only asks whether the set is empty, which the
+     * narrowing preserves.
+     *
+     * Empty when the module is fully mastered — it then drops from the morning list
+     * upstream.
      */
     private suspend fun reinforceSlice(entity: ModuleEntity): List<QuizQuestion> {
         val allQ = parseInlineQuiz(entity.quizJson, sdkLang())
@@ -207,8 +222,12 @@ class QuickLearnViewModel(
         val sdk = MicroCoachingSDK.getInstance()
         val chwId = sdk.currentCHWId ?: return allQ // no CHW context → present the whole quiz
         val allIds = allQ.map { it.id }.toSet()
-        val toReinforce = toReinforceQuestionIds(sdk.database, chwId, entity.moduleFamilyId, allIds)
-        if (toReinforce.isEmpty()) return emptyList()
+        val outstanding = toReinforceQuestionIds(sdk.database, chwId, entity.moduleFamilyId, allIds)
+        if (outstanding.isEmpty()) return emptyList()
+        // A backend or on-device "quiz"-source card drills the one question it names.
+        // Applied here rather than at the point of use so every consumer — the sheet,
+        // the home-card label, the banner preview — inherits the same decision.
+        val toReinforce = refresherDrillQuestionIds(outstanding, morningCardFor(entity)?.quizId)
         val wrong = sdk.database.coachingEventDao()
             .getLatestWrongQuestionIds(chwId, entity.moduleFamilyId).toSet()
         // Wrong-first, then the remaining outstanding questions. The weak-spots-lead
@@ -270,9 +289,8 @@ class QuickLearnViewModel(
     suspend fun computeWrongQuestionCount() {
         val sdk = MicroCoachingSDK.getInstance()
         val entity = sdk.selectedMorningModule.value ?: run { _wrongQuestionCount.value = 0; return }
-        // The banner count must equal what the refresher actually presents — the full
-        // to-reinforce set (see [reinforceSlice]) — so the label matches both the tile
-        // and the sheet.
+        // The banner count must equal what the refresher actually presents (see
+        // [reinforceSlice]), so the label matches both the tile and the sheet.
         val count = reinforceSlice(entity).size
         _wrongQuestionCount.value = count
         android.util.Log.d(TAG, "computeWrongQuestionCount: module=${entity.moduleFamilyId} toReinforce=$count")
@@ -280,8 +298,7 @@ class QuickLearnViewModel(
 
     /**
      * Primes [learnViewModel] with the refresher question set for the top morning
-     * module — the **full to-reinforce set** (every still-outstanding question,
-     * wrong-first; see [reinforceSlice]), not a subset. Answering them all clears the
+     * module (see [reinforceSlice] for how that set is chosen). Answering it clears the
      * module so it stops re-surfacing. Also updates [wrongQuestionCount] (= the set
      * size) for the home-screen card label, keeping it in sync with the tile + sheet.
      */
@@ -297,38 +314,27 @@ class QuickLearnViewModel(
         } ?: return
         lastPrimedEntity = entity
 
-        // A backend "quiz"-source morning card can target ONE specific question
-        // (morning_card_cache.quiz_id). When set AND still present in the module's
-        // current quiz, drill only that question. A stale/missing id falls through
-        // to the normal to-reinforce behaviour, exactly like every other refresher.
-        val targetQuizId = morningCardFor(entity.moduleId)?.quizId
-        val targeted = targetQuizId?.let { id ->
-            parseInlineQuiz(entity.quizJson, sdkLang()).filter { it.id == id }
-        }?.takeIf { it.isNotEmpty() }
-        if (targetQuizId != null && targeted == null) {
-            android.util.Log.w(TAG,
-                "primeRefresherQuiz: target quiz=$targetQuizId not in module=${entity.moduleFamilyId}, " +
-                    "falling back to full to-reinforce set")
-        }
-
-        // Full to-reinforce set (already weak-first, shuffled within tier by
-        // reinforceSlice). If the module is fully mastered (nothing outstanding)
-        // — e.g. a skipped card the CHW already aced, still accessible from the list —
-        // fall back to the WHOLE quiz (question order randomised) so the tap opens a
-        // re-takeable sheet that matches the tile's question count, instead of a blank
+        // The drill set, already narrowed to the card's targeted question and ordered
+        // weak-first by reinforceSlice. If the module is fully mastered (nothing
+        // outstanding) — e.g. a skipped card the CHW already aced, still reachable from
+        // the list — fall back to the WHOLE quiz (order randomised) so the tap opens a
+        // re-takeable sheet matching the tile's fallback count, instead of a blank
         // screen. Either way, shuffle each question's options for this attempt.
-        val ordered = targeted
-            ?: reinforceSlice(entity)
-                .ifEmpty { parseInlineQuiz(entity.quizJson, sdkLang()).shuffledForAttempt() }
+        val ordered = reinforceSlice(entity)
+            .ifEmpty { parseInlineQuiz(entity.quizJson, sdkLang()).shuffledForAttempt() }
         val selected = ordered.map { it.withShuffledOptions() }
         if (selected.isEmpty()) return // genuinely no quiz
+        val card = morningCardFor(entity)
+        // One line carrying everything the tile count depends on, so a count/drill
+        // mismatch can be diagnosed from logcat instead of re-deriving the pipeline.
         android.util.Log.i(TAG,
-            "primeRefresherQuiz: module=${entity.moduleFamilyId} selected=${selected.size}")
+            "primeRefresherQuiz: family=${entity.moduleFamilyId} module=${entity.moduleId} " +
+                "v=${entity.version} card=${card?.moduleId ?: "none"} " +
+                "targetQuiz=${card?.quizId ?: "none"} selected=${selected.size}")
 
         _wrongQuestionCount.value = selected.size
         filteredQuestionsForRefresher.value = selected
 
-        val card = morningCardFor(entity.moduleId)
         val module = entity.toMinimalLearnModule(
             behaviouralGapId = card?.behaviouralGapId,
             source = card?.source,
@@ -337,12 +343,15 @@ class QuickLearnViewModel(
     }
 
     /**
-     * Re-arms the quiz with the SAME question set the CHW just attempted — backing
-     * the "Try again" CTA on the refresher completion screen. Unlike
-     * [primeRefresherQuiz] it does NOT re-filter against the to-reinforce set
-     * (which shrinks as answers land), so it's a faithful redo of the questions
-     * just shown. Reads [lastPrimedEntity] rather than [morningModulesSource]
-     * because the module may have refiltered out of that flow mid-sheet.
+     * Re-arms the quiz with the SAME question set the CHW just attempted — backing the
+     * "Try Again" action in the refresher sheet's terminal footer. Unlike
+     * [primeRefresherQuiz] it does NOT re-filter against the to-reinforce set (which
+     * shrinks as answers land), so it's a faithful redo of the questions just shown.
+     * Reads [lastPrimedEntity] rather than [morningModulesSource] because the module
+     * may have refiltered out of that flow mid-sheet.
+     *
+     * The sheet must re-key its quiz composable alongside this call — re-arming the
+     * list alone leaves the previous attempt's answers on screen, locked.
      */
     fun restartRefresherQuiz() {
         val entity = lastPrimedEntity ?: return
@@ -354,7 +363,7 @@ class QuickLearnViewModel(
         // Keep the displayed list (RefresherContent) and the scoring list (activeQuestions,
         // set by selectModuleForQuiz) pointing at the same shuffled instance.
         filteredQuestionsForRefresher.value = questions
-        val card = morningCardFor(entity.moduleId)
+        val card = morningCardFor(entity)
         val module = entity.toMinimalLearnModule(
             behaviouralGapId = card?.behaviouralGapId,
             source = card?.source,
@@ -382,7 +391,7 @@ class QuickLearnViewModel(
         android.util.Log.i(TAG,
             "QuickLearn selected: module='${entity.titleBn}' " +
             "toReinforce=${slice.size} questionId=${question.id} text='${question.questionText.take(60)}'")
-        val card = morningCardFor(entity.moduleId)
+        val card = morningCardFor(entity)
         return QuickQuestion(
             module = entity.toMinimalLearnModule(
                 behaviouralGapId = card?.behaviouralGapId,

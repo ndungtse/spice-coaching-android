@@ -6,6 +6,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -23,20 +24,19 @@ import com.medtroniclabs.microcoaching.ui.theme.QuizOptionSurface
 /**
  * Full refresher experience inside [RefresherBottomSheet].
  *
- * Two-phase state machine driven by [entryMode]:
+ * Two-phase state machine driven by [entryMode]. The quiz phase presents the module's
+ * whole drill set (see `QuickLearnViewModel.reinforceSlice`), not a single question:
  *
- * **QUESTION_FIRST** (from [QuizRefresherCard] or home screen):
- *   Phase 1 = 1 quiz question (first wrong question, or first question on first attempt)
- *   Phase 2 = lesson cards → Done
+ * **QUESTION_FIRST:** Phase 1 = quiz → Phase 2 = lesson cards → Done.
  *
- * **CARDS_FIRST** (from [MorningCard]):
- *   Phase 1 = lesson cards → Phase 2 = 1 quiz question → Done
+ * **CARDS_FIRST** (every live entry point — home `MorningCard`, `QuizRefresherCard`
+ * banner, Practice Zone tile): Phase 1 = lesson cards → Phase 2 = quiz → Done.
  *
  * [targetModuleFamilyId] — when set (RefresherList tile flow), the content for
  * that specific module is shown instead of the first morning module.
  *
  * When [fromHomeScreen] is true, Done dismisses the morning card banner via
- * [MicroCoachingSDK.dismissMorningRefresher].
+ * [MicroCoachingSDK.dismissMorningRefresher] and no terminal actions are offered.
  */
 @Composable
 fun RefresherContent(
@@ -117,13 +117,36 @@ fun RefresherContent(
     var phase by remember { mutableStateOf(RefresherPhase.PHASE_1) }
     var cardIndex by rememberSaveable { mutableIntStateOf(0) }
 
+    // Bumped on retry to re-key the quiz composable. SharedQuizInProgressContent keeps
+    // its question index and per-question answers in remember/rememberSaveable and
+    // locks an answered question in review mode, so re-arming the question list alone
+    // would redisplay the finished attempt.
+    var attemptKey by remember { mutableIntStateOf(0) }
+
     val phase1IsQuiz = entryMode == RefresherBottomSheet.EntryMode.QUESTION_FIRST
 
     val autoSpeak by viewModel.autoSpeakEnabled.collectAsState()
 
-    // Terminal action set surfaced on the LAST lesson card of the modules-screen
-    // flow (instead of a separate completion screen). Null on the home-screen
-    // card flow, which keeps its plain dismiss-on-done behaviour.
+    // Re-drill the questions just attempted. Only offered where there is a quiz to
+    // redo; restartRefresherQuiz replays the SAME set (reshuffled) rather than
+    // re-filtering, which would shrink it as answers land. No finishQuiz() here — the
+    // per-answer telemetry has already been written, and the eventual
+    // "Next refresher" / "Done" still finishes the module.
+    val retryQuiz: (() -> Unit)? = if (moduleHasQuiz) {
+        {
+            viewModel.restartRefresherQuiz()
+            attemptKey++
+            // QUESTION_FIRST puts the quiz in phase 1; CARDS_FIRST in phase 2. Either
+            // way, go back to the phase that renders it.
+            phase = if (phase1IsQuiz) RefresherPhase.PHASE_1 else RefresherPhase.PHASE_2
+        }
+    } else {
+        null
+    }
+
+    // Terminal action set surfaced at the end of the modules-screen flow (instead of a
+    // separate completion screen). Null on the home-screen card flow, which keeps its
+    // plain dismiss-on-done behaviour.
     val refresherActions = if (fromHomeScreen) {
         null
     } else {
@@ -146,6 +169,7 @@ fun RefresherContent(
             // "I'll do it later" (next queued) and "Done" (no next) both just
             // close the sheet — the refresher stays available in the list.
             onDismiss = onDismiss,
+            onRetryQuiz = retryQuiz,
         )
     }
 
@@ -175,6 +199,7 @@ fun RefresherContent(
                 }
                 // Quiz phase: wait until primed.
                 if (!hasQuiz) return
+                key(attemptKey) {
                 SharedQuizInProgressContent(
                     questions = filteredQuestions,
                     viewModel = viewModel.learnViewModel,
@@ -196,6 +221,7 @@ fun RefresherContent(
                     onClose = onDismiss,
                     optionContainerColor = QuizOptionSurface,
                 )
+                }
             } else {
                 // CARDS_FIRST: lesson cards in phase 1.
                 if (!hasCards) {
@@ -243,6 +269,7 @@ fun RefresherContent(
                 if (!moduleHasQuiz) { endFlow(); return }
                 // Quiz phase (after cards) — wait until primed.
                 if (!hasQuiz) return
+                key(attemptKey) {
                 SharedQuizInProgressContent(
                     questions = filteredQuestions,
                     viewModel = viewModel.learnViewModel,
@@ -272,29 +299,36 @@ fun RefresherContent(
                                     hasNext = actions.hasNext,
                                     onNextRefresher = { finishThisQuiz(); actions.onNextRefresher() },
                                     onDismiss = { finishThisQuiz(); actions.onDismiss() },
+                                    // Retry is the one action that must NOT finish the
+                                    // module — it starts another attempt on it.
+                                    onRetryQuiz = actions.onRetryQuiz,
                                 ),
                                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
                             )
                         }
                     },
                 )
+                }
             }
         }
     }
 }
 
 /**
- * Terminal actions surfaced on the LAST lesson card of a modules-screen
- * refresher (in place of a standalone completion screen):
+ * Terminal actions surfaced at the end of a modules-screen refresher (in place of a
+ * standalone completion screen):
  *  - [hasNext] — whether another refresher is queued after this one. Drives the
  *    button layout: true → "Next refresher" + "I'll do it later"; false → "Done".
  *  - [onNextRefresher] — advance to the next module in the queue,
- *  - [onDismiss] — close the sheet ("I'll do it later" / "Done").
+ *  - [onDismiss] — close the sheet ("I'll do it later" / "Done"),
+ *  - [onRetryQuiz] — re-drill the questions just attempted; null on flows with no
+ *    quiz to retry, which hides the button.
  */
 internal data class RefresherActions(
     val hasNext: Boolean,
     val onNextRefresher: () -> Unit,
     val onDismiss: () -> Unit,
+    val onRetryQuiz: (() -> Unit)? = null,
 )
 
 private enum class RefresherPhase { PHASE_1, PHASE_2, DONE }

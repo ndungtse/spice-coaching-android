@@ -43,7 +43,7 @@ fun ModulesCompletedScreen(chwId: String, onBack: () -> Unit, onHome: () -> Unit
         when (val s = state) {
             is PODashboardUiState.Loading -> CenterProgress()
             is PODashboardUiState.Error ->
-                DashboardErrorState(offline = !networkAvailable, message = s.message, onRetry = vm::retry)
+                DashboardErrorState(offline = !networkAvailable, message = s.message, onRetry = vm::retry, isAuth = s.isAuth)
             is PODashboardUiState.Ready -> {
                 val modules = s.dashboard.moduleCompletion
                 Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {

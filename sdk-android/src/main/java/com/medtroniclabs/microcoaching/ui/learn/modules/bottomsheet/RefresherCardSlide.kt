@@ -43,11 +43,10 @@ import com.medtroniclabs.microcoaching.ui.richtext.RichCardBody
 import com.medtroniclabs.microcoaching.ui.theme.SpiceBlue
 
 // ── Cards phase ───────────────────────────────────────────────────────────────
-// The lesson-card rendering + terminal actions for the refresher bottom sheet,
-// extracted verbatim from RefresherContent (which keeps the flow state machine).
-// Same package, so [RefresherContent] calls these without an import; both are
-// `internal` because the caller lives in a sibling file. The shared
-// [RefresherActions] data class stays in RefresherContent (the flow constructs it).
+// The lesson-card rendering + terminal actions for the refresher bottom sheet;
+// RefresherContent keeps the flow state machine. Same package, so it calls these
+// without an import; both are `internal` because the caller lives in a sibling file.
+// The shared RefresherActions data class stays with the flow that constructs it.
 
 @Composable
 internal fun RefresherCardSlide(
@@ -153,7 +152,7 @@ internal fun RefresherCardSlide(
         if (isLast && refresherActions != null) {
             // Terminal card (QUESTION_FIRST modules-screen flow): the last lesson
             // card hosts the completion actions. CARDS_FIRST surfaces the same
-            // actions on a dedicated completion screen after the quiz instead.
+            // actions on the last quiz question's footer instead.
             RefresherTerminalActions(
                 actions = refresherActions,
                 contentPadding = buttonContentPadding,
@@ -183,9 +182,14 @@ internal fun RefresherCardSlide(
 }
 
 /**
- * Forward-only completion buttons shared by the QUESTION_FIRST last lesson card
- * and the CARDS_FIRST last-question footer. When another refresher is queued →
- * "Next refresher" + "I'll do it later"; otherwise a single "Done".
+ * Completion buttons shared by the QUESTION_FIRST last lesson card and the
+ * CARDS_FIRST last-question footer. When another refresher is queued →
+ * "Next refresher" + "I'll do it later"; otherwise a single "Done". A retry follows
+ * whenever [RefresherActions.onRetryQuiz] is set.
+ *
+ * Retry here is deliberately ungated: practice is the point of the Practice Zone, so
+ * the reattempt-validity window ([com.medtroniclabs.microcoaching.ui.learn.QuizRetryGate])
+ * that closes "Try Again" on assigned Learning Library modules is not consulted.
  */
 @Composable
 internal fun RefresherTerminalActions(
@@ -231,6 +235,19 @@ internal fun RefresherTerminalActions(
             ) {
                 Text(
                     text = stringResource(R.string.refresher_card_done),
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+        }
+        actions.onRetryQuiz?.let { onRetry ->
+            OutlinedButton(
+                onClick = onRetry,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(28.dp),
+                contentPadding = contentPadding,
+            ) {
+                Text(
+                    text = stringResource(R.string.quiz_try_again),
                     fontWeight = FontWeight.SemiBold,
                 )
             }

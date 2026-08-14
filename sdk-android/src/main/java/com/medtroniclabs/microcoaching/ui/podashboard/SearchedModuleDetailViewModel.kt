@@ -12,7 +12,7 @@ import kotlinx.coroutines.launch
 /** UI state for the "Top Searched Existing" module drill-down. */
 sealed class SearchedModuleDetailUiState {
     object Loading : SearchedModuleDetailUiState()
-    data class Error(val message: String) : SearchedModuleDetailUiState()
+    data class Error(val message: String, val isAuth: Boolean = false) : SearchedModuleDetailUiState()
     data class Ready(val detail: SearchedModuleDetail) : SearchedModuleDetailUiState()
 }
 
@@ -43,7 +43,7 @@ class SearchedModuleDetailViewModel(
                         if (detail != null) SearchedModuleDetailUiState.Ready(detail)
                         else SearchedModuleDetailUiState.Error("Module not found")
                     },
-                    onFailure = { SearchedModuleDetailUiState.Error(it.message ?: "Failed to load module") },
+                    onFailure = { SearchedModuleDetailUiState.Error(it.message ?: "Failed to load module", it.isDashboardAuthError()) },
                 )
         }
     }

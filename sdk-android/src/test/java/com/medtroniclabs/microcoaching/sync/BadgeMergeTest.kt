@@ -68,6 +68,20 @@ class BadgeMergeTest {
     }
 
     @Test
+    fun `a badge in neither list yields no row, so the swap prunes it`() {
+        // Deleted from the tenant outright: absent from the catalogue AND from the
+        // CHW's earned record, so nothing keeps it alive.
+        val rows = mergeBadgePayloads(
+            available = listOf(payload("b1", name = "First Step", sequence = 1)),
+            earned = emptyList(),
+            chwId = "chw-1",
+            nowMillis = nowMillis,
+        )
+
+        assertEquals(listOf("b1"), rows.map { it.badgeId })
+    }
+
+    @Test
     fun `rank follows sequence, with missing sequences last`() {
         val rows = mergeBadgePayloads(
             available = listOf(

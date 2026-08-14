@@ -220,11 +220,12 @@ private fun MoreScrollHint(modifier: Modifier = Modifier, onClick: () -> Unit) {
 /** One refresher tile, with the drill-size meta resolved from the module. */
 @Composable
 private fun RefresherTileItem(module: LearnModule, onSelect: (LearnModule) -> Unit) {
-    // Show the refresher drill size = "to-reinforce" count (wrong + never-answered),
-    // which matches what primeRefresherQuiz presents. NOT wrongQuestionCount
-    // (wrong-only) — that's 0 for a never-attempted gap card and would render "0
-    // questions" while the quiz has N. Fall back to the total when not computed yet
-    // or when it resolves to 0.
+    // The drill size the sheet will present — outstanding questions, narrowed by any
+    // targeted question (see `refresherDrillQuestionIds`). NOT wrongQuestionCount
+    // (wrong-only), which is 0 for a never-attempted gap card and would render "0
+    // questions" while the quiz has N. Falls back to the total when not computed yet
+    // or when it resolves to 0, mirroring primeRefresherQuiz's own fully-mastered
+    // fallback so the two still agree.
     val count = module.reinforceQuestionCount?.takeIf { it > 0 }
         ?: module.questionCount
     RefresherTile(

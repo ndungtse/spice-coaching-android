@@ -89,3 +89,19 @@ fun toReinforceQuestionIds(
     val baseline = serverIncomplete ?: allQuestionIds
     return ((baseline + localWrong) - localCorrect) intersect allQuestionIds
 }
+
+/**
+ * Narrow a module's [toReinforce] set to the questions its refresher actually drills.
+ *
+ * A quiz-source morning card names one question in `morning_card_cache.quiz_id`.
+ * While that question is still outstanding it *is* the drill, so the tile count, the
+ * banner label and the opened sheet all have to agree on one question — they diverge
+ * the moment any of them applies this rule alone. Once the named question is mastered
+ * (or the id is stale, e.g. a newer module version dropped it) the drill falls back to
+ * the remaining outstanding set.
+ *
+ * Emptiness is preserved in both directions, so refresher membership — which only
+ * asks whether anything is left to reinforce — is unaffected by the narrowing.
+ */
+fun refresherDrillQuestionIds(toReinforce: Set<String>, targetQuizId: String?): Set<String> =
+    if (targetQuizId != null && targetQuizId in toReinforce) setOf(targetQuizId) else toReinforce

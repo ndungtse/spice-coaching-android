@@ -69,7 +69,7 @@ fun ActiveSksScreen(
         when (val s = state) {
             is PODashboardUiState.Loading -> CenterProgress()
             is PODashboardUiState.Error ->
-                DashboardErrorState(offline = !networkAvailable, message = s.message, onRetry = vm::retry)
+                DashboardErrorState(offline = !networkAvailable, message = s.message, onRetry = vm::retry, isAuth = s.isAuth)
             is PODashboardUiState.Ready -> {
                 val group = s.dashboard.sks.filter { it.status == status }
                 Column(

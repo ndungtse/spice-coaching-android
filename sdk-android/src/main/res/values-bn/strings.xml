@@ -132,6 +132,7 @@
     <string name="quiz_question_counter">প্রশ্ন %1$d / %2$d</string>
     <string name="quiz_select_answer">উত্তর বেছে নিন</string>
     <string name="quiz_next_question">পরবর্তী প্রশ্ন</string>
+    <string name="quiz_finish">সম্পন্ন করুন</string>
     <string name="quiz_case_context_label">প্রসঙ্গ</string>
     <string name="quiz_nav_previous">আগের প্রশ্ন</string>
     <string name="quiz_nav_next">পরবর্তী প্রশ্ন</string>
@@ -203,8 +204,7 @@
     <string name="module_detail_learning_cards">শেখার কার্ড</string>
     <string name="module_detail_quiz_section">কুইজ</string>
     <string name="module_detail_knowledge_check">জ্ঞান পরীক্ষা</string>
-    <string name="module_detail_listen_bangla">বাংলায় শুনুন</string>
-    <string name="module_detail_listen_english">ইংরেজিতে শুনুন</string>
+    <string name="module_detail_listen">শুনুন</string>
     <string name="module_detail_listen_caption">পাঠ খুললে স্বয়ংক্রিয়ভাবে পড়া শুরু হবে</string>
     <string name="lesson_player_auto_speak_on">স্বয়ংক্রিয় পড়া চালু আছে। বন্ধ করতে চাপুন।</string>
     <string name="lesson_player_auto_speak_off">স্বয়ংক্রিয় পড়া বন্ধ। চালু করতে চাপুন।</string>
@@ -447,8 +447,8 @@
     <string name="notification_model_download_channel_name">এআই মডেল ডাউনলোড</string>
     <string name="notification_model_download_channel_desc">ব্যাকগ্রাউন্ডে এআই কোচিং মডেল ডাউনলোডের অগ্রগতি দেখায়।</string>
     <string name="notification_model_download_title">এআই কোচিং মডেল ডাউনলোড হচ্ছে</string>
-    <string name="notification_model_download_progress">%1$d MB / %2$d MB · %3$d%%</string>
-    <string name="notification_model_download_progress_indeterminate">%1$d MB ডাউনলোড হয়েছে</string>
+    <string name="notification_model_download_progress">%1$s / %2$s · %3$d%%</string>
+    <string name="notification_model_download_progress_indeterminate">%1$s ডাউনলোড হয়েছে</string>
 
     <string name="chat_downloading_model_progress_mb">মডেল ডাউনলোড হচ্ছে… (%1$d MB / %2$d MB · %3$d%%)</string>
 
@@ -485,6 +485,7 @@
     <string name="training_videos_meta_duration">%1$d মিনিট</string>
     <string name="training_videos_coming_soon">ভিডিও প্লেব্যাক শীঘ্রই আসছে</string>
     <string name="training_videos_empty">এখনও কোনো প্রশিক্ষণ ভিডিও নেই</string>
+    <string name="training_videos_no_more">আর কোনো ভিডিও বরাদ্দ করা হয়নি</string>
     <string name="training_videos_download">ডাউনলোড</string>
     <string name="training_videos_remove_download">ডাউনলোড সরান</string>
     <string name="training_videos_storage_full">এই ভিডিওটি ডাউনলোড করার জন্য পর্যাপ্ত জায়গা নেই।</string>
@@ -512,11 +513,16 @@
     <string name="po_metric_finished_modules">সম্পন্ন মডিউল</string>
     <string name="po_metric_chatbot_engaged">চ্যাটবট ব্যবহার</string>
     <!-- Metric-card info bottom sheet -->
-    <string name="po_metric_desc_active_now">নির্বাচিত সময়ে অন্তত একটি কার্যকলাপ (একটি সম্পন্ন মডিউল বা চ্যাটবট সেশন) করেছেন এমন SK।</string>
-    <string name="po_metric_desc_inactive">নির্বাচিত সময়ে কোনো কার্যকলাপ করেননি (কোনো মডিউল অগ্রগতি বা চ্যাটবট ব্যবহার নেই) এমন SK।</string>
-    <string name="po_metric_desc_finished_modules">নির্বাচিত সময়ে অন্তত একটি নির্ধারিত মডিউল সম্পন্ন করেছেন এমন SK।</string>
-    <string name="po_metric_desc_chatbot_engaged">নির্বাচিত সময়ে অন্তত একবার চ্যাটবট ব্যবহার করেছেন এমন SK।</string>
+    <string name="po_metric_desc_active_now">নির্বাচিত তারিখ পরিসরে একটি লার্নিং বা রিফ্রেশার মডিউল খুলেছেন এমন SK, সম্পন্ন করুন বা না করুন।</string>
+    <string name="po_metric_desc_inactive">নির্বাচিত তারিখ পরিসরে কোনো লার্নিং বা রিফ্রেশার মডিউল খোলেননি এমন SK।</string>
+    <string name="po_metric_desc_finished_modules">নির্বাচিত সময়ে সমস্ত নির্ধারিত মডিউল সম্পন্ন করেছেন এমন SK।</string>
+    <string name="po_metric_desc_chatbot_engaged">নির্বাচিত সময়ে AI চ্যাটবটে অন্তত একটি বার্তা পাঠিয়েছেন এমন SK।</string>
+    <string name="po_metric_sheet_title_finished">সব মডিউল সম্পন্ন করা SK</string>
+    <string name="po_metric_hl_finished">সমস্ত নির্ধারিত মডিউল সম্পন্ন</string>
+    <string name="po_metric_hl_chatbot">অন্তত একটি বার্তা</string>
     <string name="po_metric_info_dismiss">বুঝেছি</string>
+    <string name="po_error_session_expired">আপনার সেশনের মেয়াদ শেষ হয়েছে।</string>
+    <string name="po_error_session_expired_hint">অনুগ্রহ করে লগ আউট করে আবার লগ ইন করুন।</string>
     <string name="po_section_my_sks">আমার SK</string>
     <string name="po_section_module_completion">মডিউল সম্পূর্ণতা</string>
     <string name="po_section_top_searched_existing_modules">সর্বাধিক অনুসন্ধানকৃত বিদ্যমান মডিউল</string>

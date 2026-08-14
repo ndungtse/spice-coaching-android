@@ -240,6 +240,12 @@ data class BadgesResult(
     val count: Int = 0,
     /** How many of [count] the CHW has earned, for the log line. */
     val earnedCount: Int = 0,
+    /**
+     * Rows the swap removed because the badge is gone from the tenant (absent from
+     * both response lists). Reported so a prune — expected or not — is visible in the
+     * sync log rather than only as a badge missing from the grid.
+     */
+    val prunedCount: Int = 0,
     /** True when the pull was skipped because no CHW was signed in. */
     val skipped: Boolean = false,
     override val error: String? = null,
