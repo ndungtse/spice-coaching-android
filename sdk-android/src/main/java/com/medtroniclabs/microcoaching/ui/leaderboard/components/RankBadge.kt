@@ -17,7 +17,7 @@ import androidx.compose.ui.unit.dp
 
 // Deliberately not themeable. Medal metals carry universal meaning, so a host tinting
 // bronze to its brand colour would be a bug rather than a feature. Allowlisted in
-// tools/check-no-hardcoded-colors.sh.
+// scripts/check-no-hardcoded-colors.sh.
 private val Gold = Color(0xFFFFC107)
 private val Silver = Color(0xFFB0BEC5)
 private val Bronze = Color(0xFFCD7F32)

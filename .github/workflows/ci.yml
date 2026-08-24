@@ -31,3 +31,6 @@ jobs:
 
       - name: Run SDK unit tests
         run: ./gradlew :sdk-android:test --no-daemon
+
+      - name: Check for hardcoded colours
+        run: ./scripts/check-no-hardcoded-colors.sh
