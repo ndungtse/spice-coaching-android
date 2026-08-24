@@ -138,7 +138,6 @@ fun OnboardingSlideScreen(
                 Text(
                     text = stringResource(R.string.onboarding_skip),
                     color = CoachingTheme.colors.textDisabled,
-                    fontSize = 14.sp,
                 )
             }
         }

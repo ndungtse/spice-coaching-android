@@ -93,7 +93,6 @@ fun DurationChip(durationMs: Long, modifier: Modifier = Modifier) {
         Text(
             text = formatVideoDuration(durationMs),
             color = Color.White,
-            fontSize = 11.sp,
             fontWeight = FontWeight.Medium,
             style = MaterialTheme.typography.labelSmall,
         )

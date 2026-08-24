@@ -94,7 +94,6 @@ fun TrainingVideoRow(
                 Text(
                     text = video.title,
                     style = MaterialTheme.typography.titleSmall,
-                    fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 2,
