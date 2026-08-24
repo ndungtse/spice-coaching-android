@@ -34,7 +34,7 @@ fun CoachingBadge(
     Box(
         modifier = modifier
             .size(18.dp)
-            .background(color = Color(0xFFD32F2F), shape = CircleShape),
+            .background(color = MaterialTheme.colorScheme.error, shape = CircleShape),
         contentAlignment = Alignment.Center,
     ) {
         Text(

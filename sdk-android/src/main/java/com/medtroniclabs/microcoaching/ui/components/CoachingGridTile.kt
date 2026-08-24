@@ -38,7 +38,6 @@ import com.medtroniclabs.microcoaching.ui.SdkLocalizedTheme
 import kotlinx.coroutines.flow.MutableStateFlow
 
 /** Bell indicator colour (matches the host's alert red). */
-private val AlertRed = Color(0xFFD0342C)
 
 /**
  * Self-contained "Coaching" tile for the SPICE home menu grid. The host drops this
@@ -144,7 +143,7 @@ private fun AssignmentIndicators(
             Icon(
                 imageVector = Icons.Outlined.NotificationsActive,
                 contentDescription = stringResource(R.string.coaching_tile_new_modules),
-                tint = AlertRed,
+                tint = MaterialTheme.colorScheme.error,
                 modifier = Modifier.size(18.dp),
             )
         }

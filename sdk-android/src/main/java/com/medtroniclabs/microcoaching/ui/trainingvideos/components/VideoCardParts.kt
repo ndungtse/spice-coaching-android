@@ -37,9 +37,6 @@ import androidx.compose.ui.unit.sp
 import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.ui.trainingvideos.VideoDownloadState
 
-/** YouTube-style "watched" progress bar colour (reads on any thumbnail). */
-private val WatchedProgressColor = Color(0xFFEF4444)
-private val WatchedTrackColor = Color(0x33000000)
 
 /**
  * Thin watched-progress bar overlaid at the bottom of a video thumbnail
@@ -51,8 +48,8 @@ fun WatchedProgressBar(fraction: Float, modifier: Modifier = Modifier) {
     if (fraction <= 0f) return
     LinearProgressIndicator(
         progress = { fraction.coerceIn(0f, 1f) },
-        color = WatchedProgressColor,
-        trackColor = WatchedTrackColor,
+        color = MaterialTheme.colorScheme.error,
+        trackColor = MaterialTheme.colorScheme.scrim.copy(alpha = 0.2f),
         modifier = modifier.fillMaxWidth().height(3.dp),
     )
 }

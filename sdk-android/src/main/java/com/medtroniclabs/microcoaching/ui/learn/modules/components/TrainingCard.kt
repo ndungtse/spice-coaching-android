@@ -25,6 +25,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.medtroniclabs.microcoaching.R
+import com.medtroniclabs.microcoaching.ui.theme.CoachingTheme
 
 /**
  * Horizontally-scrolled card used in the Training row (module_type ==
@@ -145,12 +146,12 @@ private fun TrainingNewBadge(modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(4.dp))
-            .background(Color(0xFFB91C1C))
+            .background(CoachingTheme.colors.attention)
             .padding(horizontal = 6.dp, vertical = 2.dp),
     ) {
         Text(
             text = stringResource(R.string.badge_new),
-            color = Color.White,
+            color = CoachingTheme.colors.onAttention,
             style = MaterialTheme.typography.labelSmall.copy(
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 0.5.sp,

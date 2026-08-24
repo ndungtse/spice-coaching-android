@@ -148,7 +148,7 @@ fun AnswerFeedbackOverlay(
         //     ) {
         //         Text(
         //             text = stringResource(R.string.quiz_points, pointValue),
-        //             color = Color(0xFF1B6B4A),
+        //             color = CoachingTheme.colors.success,
         //             fontWeight = FontWeight.Bold,
         //             fontSize = 18.sp,
         //             modifier = Modifier.padding(end = 16.dp),

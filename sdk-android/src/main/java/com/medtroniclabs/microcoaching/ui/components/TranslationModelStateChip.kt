@@ -23,6 +23,7 @@ import com.medtroniclabs.microcoaching.MicroCoachingSDK
 import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.ai.translation.TranslationModelState
 import androidx.compose.ui.platform.LocalInspectionMode
+import com.medtroniclabs.microcoaching.ui.theme.CoachingTheme
 
 /**
  * Small inline chip that surfaces the on-device translation pack lifecycle to
@@ -56,15 +57,15 @@ fun TranslationModelStateChip(modifier: Modifier = Modifier) {
         TranslationModelState.Downloading -> ChipRow(
             modifier = modifier,
             text = stringResource(R.string.translation_pack_downloading),
-            background = Color(0xFFFFF3CD),
-            content = Color(0xFF856404),
+            background = CoachingTheme.colors.warningContainer,
+            content = CoachingTheme.colors.onWarningContainer,
             spinner = true,
         )
         is TranslationModelState.Failed -> ChipRow(
             modifier = modifier,
             text = stringResource(R.string.translation_pack_unavailable),
-            background = Color(0xFFFFE5E5),
-            content = Color(0xFF8A1F1F),
+            background = MaterialTheme.colorScheme.errorContainer,
+            content = MaterialTheme.colorScheme.onErrorContainer,
             spinner = false,
         )
     }

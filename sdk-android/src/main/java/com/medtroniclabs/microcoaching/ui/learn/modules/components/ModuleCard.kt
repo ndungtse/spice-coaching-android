@@ -138,7 +138,7 @@ fun DomainChip(domain: String) {
 fun StatusChip(status: String) {
     val (label, bg, fg) = when (status) {
         "completed"   -> Triple(stringResource(R.string.status_completed), CoachingTheme.colors.successContainer, CoachingTheme.colors.onSuccessContainer)
-        "in_progress" -> Triple(stringResource(R.string.status_in_progress), Color(0xFFFFF3CD), Color(0xFF856404))
+        "in_progress" -> Triple(stringResource(R.string.status_in_progress), CoachingTheme.colors.warningContainer, CoachingTheme.colors.onWarningContainer)
         else -> return
     }
     Text(

@@ -96,7 +96,7 @@ fun XpRewardBurst(
                     shape = RoundedCornerShape(28.dp),
                 )
                 .background(
-                    color = Color(0xFFFFF8E1).copy(alpha = 0.1f), // warm cream with 10% opacity
+                    color = CoachingTheme.colors.rewardContainer.copy(alpha = 0.1f), // warm cream with 10% opacity
                     shape = RoundedCornerShape(28.dp),
                 )
                 .padding(horizontal = 18.dp, vertical = 10.dp),
@@ -106,7 +106,7 @@ fun XpRewardBurst(
             Icon(
                 imageVector = Icons.Filled.Star,
                 contentDescription = null,
-                tint = Color(0xFFFFC83D), // gold
+                tint = CoachingTheme.colors.reward,
                 modifier = Modifier.size(28.dp),
             )
             Spacer(Modifier.size(8.dp))

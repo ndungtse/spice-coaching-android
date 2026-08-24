@@ -44,18 +44,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.ui.learn.LearnUiState
+import com.medtroniclabs.microcoaching.ui.theme.CoachingTheme
 
 // Palette (kept local to this screen to match the minimal result design).
-private val ResultOrange = Color(0xFFC23C02)
-private val XpBadgeBg = Color(0xFFFFF8E1)
-private val XpBadgeBorder = Color(0xFFEBC85B)
-private val HeadingText = Color(0xFF1A1A1A)
-private val MutedText = Color(0xFF6B6B6B)
-private val DividerColor = Color(0xFFECECEC)
-private val WrongTint = Color(0xFFD9534F)
-private val WrongCircleBg = Color(0xFFFBEAEA)
-private val CorrectTint = Color(0xFF2E7D52)
-private val CorrectCircleBg = Color(0xFFE6F4EC)
 
 /**
  * Quiz result screen — minimal redesign.
@@ -127,7 +118,7 @@ fun QuizResultScreen(
                     text = "${uiState.scorePercent}%",
                     fontSize = 72.sp,
                     fontWeight = FontWeight.Bold,
-                    color = ResultOrange,
+                    color = CoachingTheme.colors.warning,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -140,7 +131,7 @@ fun QuizResultScreen(
                 Text(
                     text = uiState.badgeLabel,
                     style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
-                    color = HeadingText,
+                    color = CoachingTheme.colors.textStrong,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -156,7 +147,7 @@ fun QuizResultScreen(
                         uiState.totalCount,
                     ),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MutedText,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -175,7 +166,7 @@ fun QuizResultScreen(
                     Text(
                         text = stringResource(R.string.quiz_your_answers),
                         style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                        color = MutedText,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
@@ -190,7 +181,7 @@ fun QuizResultScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(1.dp)
-                                .background(DividerColor),
+                                .background(MaterialTheme.colorScheme.outlineVariant),
                         )
                     }
                 }
@@ -213,7 +204,7 @@ fun QuizResultScreen(
                     shape = RoundedCornerShape(50.dp),
                     contentPadding = PaddingValues(vertical = 16.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = ResultOrange,
+                        containerColor = CoachingTheme.colors.warning,
                         contentColor = Color.White,
                     ),
                 ) {
@@ -255,28 +246,28 @@ private fun XpBadge(xp: Int) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .border(BorderStroke(1.dp, XpBadgeBorder), RoundedCornerShape(16.dp))
-            .background(XpBadgeBg, RoundedCornerShape(16.dp))
+            .border(BorderStroke(1.dp, CoachingTheme.colors.rewardOutline), RoundedCornerShape(16.dp))
+            .background(CoachingTheme.colors.rewardContainer, RoundedCornerShape(16.dp))
             .padding(horizontal = 16.dp, vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
             imageVector = Icons.Filled.Star,
             contentDescription = null,
-            tint = ResultOrange,
+            tint = CoachingTheme.colors.warning,
             modifier = Modifier.size(24.dp),
         )
         Spacer(Modifier.size(10.dp))
         Text(
             text = stringResource(R.string.quick_learn_xp_reward, xp),
             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-            color = ResultOrange,
+            color = CoachingTheme.colors.warning,
         )
         Spacer(Modifier.size(10.dp))
         Text(
             text = stringResource(R.string.quiz_xp_module_caption),
             style = MaterialTheme.typography.bodyMedium,
-            color = MutedText,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
@@ -296,7 +287,7 @@ private fun AnswerRow(
             modifier = Modifier
                 .size(28.dp)
                 .background(
-                    color = if (isCorrect) CorrectCircleBg else WrongCircleBg,
+                    color = if (isCorrect) CoachingTheme.colors.successContainer else MaterialTheme.colorScheme.errorContainer,
                     shape = CircleShape,
                 ),
             contentAlignment = Alignment.Center,
@@ -304,7 +295,7 @@ private fun AnswerRow(
             Icon(
                 imageVector = if (isCorrect) Icons.Filled.Check else Icons.Filled.Close,
                 contentDescription = null,
-                tint = if (isCorrect) CorrectTint else WrongTint,
+                tint = if (isCorrect) CoachingTheme.colors.success else MaterialTheme.colorScheme.error,
                 modifier = Modifier.size(16.dp),
             )
         }
@@ -312,7 +303,7 @@ private fun AnswerRow(
         Text(
             text = questionText,
             style = MaterialTheme.typography.bodyMedium,
-            color = HeadingText,
+            color = CoachingTheme.colors.textStrong,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),

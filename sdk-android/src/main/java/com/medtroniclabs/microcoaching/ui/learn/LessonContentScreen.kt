@@ -164,7 +164,7 @@ private fun KeyPoint(title: String, body: String) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color(0xFFEEF7F2), RoundedCornerShape(8.dp))
+            .background(CoachingTheme.colors.successContainer, RoundedCornerShape(8.dp))
             .padding(16.dp),
     ) {
         Text(

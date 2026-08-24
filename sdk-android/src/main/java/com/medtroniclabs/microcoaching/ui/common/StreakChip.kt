@@ -11,8 +11,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.medtroniclabs.microcoaching.ui.theme.CoachingTheme
 
-private val StreakOrange = Color(0xFFF57C00)
 
 /** Small "🔥 Nd" streak indicator. */
 @Composable
@@ -22,7 +22,7 @@ fun StreakChip(days: Int, modifier: Modifier = Modifier) {
         Spacer(Modifier.width(2.dp))
         Text(
             text = "${days}d",
-            color = StreakOrange,
+            color = CoachingTheme.colors.warning,
             fontWeight = FontWeight.SemiBold,
             style = MaterialTheme.typography.labelSmall,
         )
