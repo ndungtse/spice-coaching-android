@@ -55,7 +55,7 @@ fun ChatFeedbackNoteSheet(
     ModalBottomSheet(
         onDismissRequest = { onCommit(text) },
         sheetState = sheetState,
-        containerColor = Color.White,
+        containerColor = MaterialTheme.colorScheme.surface,
     ) {
         Column(
             modifier = Modifier

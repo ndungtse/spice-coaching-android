@@ -63,7 +63,7 @@ fun AnswerCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     index: Int = -1,
-    unselectedContainerColor: Color = Color.White,
+    unselectedContainerColor: Color = MaterialTheme.colorScheme.surface,
 ) {
     val containerColor by animateColorAsState(
         targetValue = when (state) {
@@ -144,7 +144,7 @@ private fun AnswerLetterBadge(index: Int, state: AnswerCardState) {
     }
     val letterColor = when (state) {
         AnswerCardState.Unselected -> CoachingTheme.colors.textBody
-        else -> Color.White
+        else -> MaterialTheme.colorScheme.surface
     }
 
     Box(

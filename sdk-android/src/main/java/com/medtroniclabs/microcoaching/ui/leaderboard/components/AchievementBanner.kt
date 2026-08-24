@@ -16,6 +16,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.ui.theme.CoachingTheme
+import com.medtroniclabs.microcoaching.ui.theme.onColorFor
 
 
 /** Celebratory banner shown when the SK is ranked #1 in their group. */
@@ -26,7 +27,7 @@ fun AchievementBanner(groupName: String, modifier: Modifier = Modifier) {
     ) {
         Text(
             text = stringResource(R.string.leaderboard_achievement_leading, groupName),
-            color = Color.White,
+            color = onColorFor(CoachingTheme.colors.warning, light = MaterialTheme.colorScheme.onPrimary, dark = CoachingTheme.colors.textStrong),
             fontWeight = FontWeight.SemiBold,
             style = MaterialTheme.typography.bodyMedium,
         )

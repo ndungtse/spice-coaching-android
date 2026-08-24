@@ -90,7 +90,7 @@ fun ModuleDetailScreen(
         // Never compose NOTHING — a bare `return` painted the route white when
         // both the live and cached module were unavailable.
         Box(
-            modifier = Modifier.fillMaxSize().background(Color.White),
+            modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface),
             contentAlignment = Alignment.Center,
         ) {
             CircularProgressIndicator()
@@ -110,7 +110,7 @@ fun ModuleDetailScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.White),
+            .background(MaterialTheme.colorScheme.surface),
     ) {
         SdkScreenHeader(title = module.title, onBack = onBack, onHome = onHome)
 
@@ -412,7 +412,7 @@ private fun ReadAgainCta(onReadAgain: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color.White)
+            .background(MaterialTheme.colorScheme.surface)
             .border(width = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
             .navigationBarsPadding()
             .padding(horizontal = 20.dp, vertical = 12.dp),
@@ -449,7 +449,7 @@ private fun CtaRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color.White)
+            .background(MaterialTheme.colorScheme.surface)
             .border(width = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
             .navigationBarsPadding()
             .padding(horizontal = 20.dp, vertical = 12.dp),

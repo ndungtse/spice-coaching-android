@@ -143,8 +143,8 @@ fun TrainingRequestFormScreen(
                 },
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedContainerColor = Color.White,
-                    focusedContainerColor = Color.White,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                    focusedContainerColor = MaterialTheme.colorScheme.surface,
                 ),
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -258,7 +258,7 @@ private fun ModuleSelectorField(
                 disabledTextColor = MaterialTheme.colorScheme.onBackground,
                 disabledBorderColor = MaterialTheme.colorScheme.outline,
                 disabledPlaceholderColor = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f),
-                disabledContainerColor = Color.White,
+                disabledContainerColor = MaterialTheme.colorScheme.surface,
             ),
             modifier = Modifier.fillMaxWidth(),
         )
@@ -302,8 +302,8 @@ private fun CustomModuleTitleField(
         },
         colors = OutlinedTextFieldDefaults.colors(
             focusedBorderColor = MaterialTheme.colorScheme.primary,
-            unfocusedContainerColor = Color.White,
-            focusedContainerColor = Color.White,
+            unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+            focusedContainerColor = MaterialTheme.colorScheme.surface,
         ),
         modifier = Modifier.fillMaxWidth(),
     )
@@ -324,7 +324,7 @@ private fun ModulePickerBottomSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = Color.White,
+        containerColor = MaterialTheme.colorScheme.surface,
     ) {
         Column(modifier = Modifier.fillMaxWidth().fillMaxHeight(0.85f)) {
             Text(

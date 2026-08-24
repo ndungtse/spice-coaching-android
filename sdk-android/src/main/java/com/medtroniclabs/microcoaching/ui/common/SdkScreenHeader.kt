@@ -70,7 +70,7 @@ fun SdkScreenHeader(
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                 contentDescription = stringResource(R.string.common_back),
-                tint = Color.White,
+                tint = MaterialTheme.colorScheme.onPrimary,
             )
         }
         if (title.isNotBlank()) {
@@ -90,7 +90,7 @@ fun SdkScreenHeader(
                     text = title,
                     style = (if (largeTitle) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleMedium)
                         .copy(fontWeight = FontWeight.SemiBold),
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onPrimary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     textAlign = if (titleAtStart) TextAlign.Start else TextAlign.Center,
@@ -99,7 +99,7 @@ fun SdkScreenHeader(
                     Text(
                         text = subtitle,
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.8f),
+                        color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         textAlign = if (titleAtStart) TextAlign.Start else TextAlign.Center,
@@ -118,7 +118,7 @@ fun SdkScreenHeader(
                 Icon(
                     imageVector = Icons.Filled.Home,
                     contentDescription = stringResource(R.string.common_home),
-                    tint = Color.White,
+                    tint = MaterialTheme.colorScheme.onPrimary,
                 )
             }
         }

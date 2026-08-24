@@ -383,7 +383,7 @@ private fun PdfPageItem(
                 modifier = Modifier
                     .fillMaxWidth()
                     .aspectRatio(1f / 1.414f)
-                    .background(Color.White),
+                    .background(MaterialTheme.colorScheme.surface),
             )
         }
     }

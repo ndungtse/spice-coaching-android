@@ -113,7 +113,7 @@ fun PracticeZoneCard(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(
-                    modifier = Modifier.size(38.dp).background(Color.White, CircleShape),
+                    modifier = Modifier.size(38.dp).background(MaterialTheme.colorScheme.surface, CircleShape),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
@@ -134,7 +134,7 @@ private fun TypeTag(kind: RefresherKind?, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(50))
-            .background(Color.White)
+            .background(MaterialTheme.colorScheme.surface)
             .padding(horizontal = 10.dp, vertical = 4.dp),
     ) {
         Text(

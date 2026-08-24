@@ -188,7 +188,7 @@ fun LessonPlayerScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
-                    .background(Color.White),
+                    .background(MaterialTheme.colorScheme.surface),
             ) {
                 val bodyText = currentBody
 

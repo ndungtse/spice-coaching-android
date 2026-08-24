@@ -76,7 +76,7 @@ fun SegmentedToggle(
                 ) {
                     Text(
                         text = label,
-                        color = if (selected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
                         fontWeight = FontWeight.SemiBold,
                         style = MaterialTheme.typography.labelSmall,
                         maxLines = 1,

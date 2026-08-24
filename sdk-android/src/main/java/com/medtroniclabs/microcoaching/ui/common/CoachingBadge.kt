@@ -39,7 +39,7 @@ fun CoachingBadge(
     ) {
         Text(
             text = label,
-            color = Color.White,
+            color = MaterialTheme.colorScheme.onError,
             fontSize = 10.sp,
             lineHeight = 10.sp,
         )

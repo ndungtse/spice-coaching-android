@@ -69,7 +69,7 @@ fun CoachingGridTile(
             Card(
                 onClick = onClick,
                 shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
             ) {
                 // Box so the assignment indicators overlay the top-end corner without

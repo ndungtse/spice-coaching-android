@@ -80,7 +80,7 @@ fun SharedQuizInProgressContent(
     onAllAnswered: () -> Unit,
     modifier: Modifier = Modifier,
     onClose: (() -> Unit)? = null,
-    optionContainerColor: Color = Color.White,
+    optionContainerColor: Color = MaterialTheme.colorScheme.surface,
     lastQuestionFooter: (@Composable () -> Unit)? = null,
 ) {
     var currentIndex by rememberSaveable { mutableIntStateOf(0) }

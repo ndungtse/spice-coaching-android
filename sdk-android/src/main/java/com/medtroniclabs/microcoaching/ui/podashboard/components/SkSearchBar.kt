@@ -45,7 +45,7 @@ fun SkSearchBar(
                 .weight(1f)
                 .height(ControlHeight)
                 .clip(RoundedCornerShape(percent = 50))
-                .background(Color.White)
+                .background(MaterialTheme.colorScheme.surface)
                 .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(percent = 50))
                 .padding(horizontal = 14.dp),
             verticalAlignment = Alignment.CenterVertically,

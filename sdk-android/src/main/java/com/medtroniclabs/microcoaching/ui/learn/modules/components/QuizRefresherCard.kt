@@ -106,7 +106,7 @@ private fun RefresherPill(text: String) {
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(50))
-            .background(Color.White.copy(alpha = 0.18f))
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.18f))
             .padding(PaddingValues(horizontal = 14.dp, vertical = 8.dp)),
     ) {
         Text(text = text, color = Color.White,

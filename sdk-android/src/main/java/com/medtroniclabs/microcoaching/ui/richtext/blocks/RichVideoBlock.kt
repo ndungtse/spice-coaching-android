@@ -23,6 +23,7 @@ import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.content.richtext.RichBlock
 import com.medtroniclabs.microcoaching.ui.video.VideoPlayerActivity
 import com.medtroniclabs.microcoaching.ui.theme.CoachingTheme
+import androidx.compose.material3.MaterialTheme
 
 /**
  * Renders a TipTap video node as a tappable thumbnail card with a centered play
@@ -53,7 +54,7 @@ internal fun RichVideoBlock(video: RichBlock.Video, modifier: Modifier = Modifie
             modifier = Modifier
                 .size(56.dp)
                 .clip(CircleShape)
-                .background(Color.White.copy(alpha = 0.9f)),
+                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)),
             contentAlignment = Alignment.Center,
         ) {
             Icon(

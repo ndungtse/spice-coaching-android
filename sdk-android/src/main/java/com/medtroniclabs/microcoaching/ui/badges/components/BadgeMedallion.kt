@@ -91,7 +91,7 @@ private fun CornerMarker(
     Box(
         modifier = modifier
             .size(26.dp)
-            .border(2.dp, Color.White, CircleShape)
+            .border(2.dp, MaterialTheme.colorScheme.surface, CircleShape)
             .background(background, CircleShape),
         contentAlignment = Alignment.Center,
     ) { icon() }

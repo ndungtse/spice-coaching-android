@@ -58,7 +58,7 @@ fun RefresherHeroCard(
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
     ) {
         Box(
@@ -127,7 +127,7 @@ private fun StartModuleButton(onClick: () -> Unit, modifier: Modifier = Modifier
         Box(
             modifier = Modifier
                 .size(28.dp)
-                .background(Color.White, CircleShape),
+                .background(MaterialTheme.colorScheme.surface, CircleShape),
             contentAlignment = Alignment.Center,
         ) {
             Icon(

@@ -43,7 +43,7 @@ fun CoachMarkScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.White),
+            .background(MaterialTheme.colorScheme.surface),
     ) {
         // Icon — green circle with graduation cap, centred in the upper half
         Canvas(

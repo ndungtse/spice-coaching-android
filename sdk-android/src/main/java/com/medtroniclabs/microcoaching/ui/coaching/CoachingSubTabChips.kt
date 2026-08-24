@@ -67,14 +67,14 @@ fun CoachingSubTabChips(
                     Icon(
                         imageVector = chip.icon,
                         contentDescription = null,
-                        tint = if (selected) Color.White else MaterialTheme.colorScheme.onSurface,
+                        tint = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.size(16.dp),
                     )
                     Text(
                         text = chip.label,
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                        color = if (selected) Color.White else MaterialTheme.colorScheme.onSurface,
+                        color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
                    
                     )
                 }

@@ -251,7 +251,7 @@ private fun NodeCell(milestone: JourneyMilestone, modifier: Modifier = Modifier)
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .size(24.dp)
-                    .border(2.dp, Color.White, CircleShape)
+                    .border(2.dp, MaterialTheme.colorScheme.surface, CircleShape)
                     .background(CoachingTheme.colors.lockedSurface, CircleShape),
                 contentAlignment = Alignment.Center,
             ) {

@@ -57,7 +57,7 @@ private fun RowScope.PodiumColumn(
                 .padding(top = 16.dp) // room for the rank badge to overlap the card top
                 .heightIn(min = cardMinHeight),
             shape = RoundedCornerShape(16.dp),
-            color = Color.White,
+            color = MaterialTheme.colorScheme.surface,
             shadowElevation = 3.dp,
         ) {
             Column(

@@ -59,7 +59,7 @@ fun YourJourneyBanner(
             modifier = Modifier
                 .size(48.dp)
                 .clip(RoundedCornerShape(12.dp))
-                .background(Color.White.copy(alpha = 0.15f), RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.15f), RoundedCornerShape(12.dp))
                 .padding(4.dp),
         )
         Column(

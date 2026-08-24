@@ -25,14 +25,14 @@ fun CoachingTopTabs(
         selectedTabIndex = selectedIndex,
         modifier = modifier,
         containerColor = MaterialTheme.colorScheme.primary,
-        contentColor = Color.White, // drives the default (animated) underline + ripple
+        contentColor = MaterialTheme.colorScheme.onPrimary, // drives the default (animated) underline + ripple
     ) {
         labels.forEachIndexed { index, label ->
             Tab(
                 selected = selectedIndex == index,
                 onClick = { onSelect(index) },
-                selectedContentColor = Color.White,
-                unselectedContentColor = Color.White.copy(alpha = 0.6f),
+                selectedContentColor = MaterialTheme.colorScheme.onPrimary,
+                unselectedContentColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.6f),
                 text = { 
                     Text(
                         label,
