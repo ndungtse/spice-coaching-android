@@ -1,52 +1,56 @@
 package com.medtroniclabs.microcoaching.ui.theme
 
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.lightColorScheme
+import androidx.compose.material3.Typography
 import androidx.compose.runtime.Composable
-
-private val LightColorScheme = lightColorScheme(
-    primary = SpiceBlue,
-    onPrimary = UserBubbleText,
-    primaryContainer = SpiceBlueContainer,
-    onPrimaryContainer = SpiceBlueDark,
-    secondary = SpiceBlueDark,
-    onSecondary = UserBubbleText,
-    background = SurfaceBackground,
-    onBackground = SpiceNavy,
-    surface = InputBackground,
-    onSurface = SpiceNavy,
-    error = ErrorRed,
-)
+import androidx.compose.runtime.CompositionLocalProvider
 
 /**
- * MicroCoaching SDK theme wrapper.
+ * MicroCoaching SDK theme wrapper. Applies the SDK's colour tokens and type scale.
  *
- * Always renders with the SDK's light color scheme. We deliberately ignore
- * `isSystemInDarkTheme()` because:
+ * ## Restyling from a host app
  *
- *   * The two BottomSheetDialogFragment wrappers (`CoachingCardBottomSheet`
- *     and `CoachingChatBottomSheet`) force `Theme_Material3_Light_BottomSheetDialog`
- *     for the dialog window. Letting Compose pick a dark scheme inside that
- *     light window produces light-on-light text (e.g. the "No guidance
- *     available" empty state was invisible on Samsung devices with system
- *     dark mode on).
- *   * Several SDK screens use hardcoded light-only colors (the coaching
- *     card banner, module detail, quiz feedback overlays) for design
- *     fidelity to the spec, so a half-dark / half-light render looks
- *     broken on devices that flip the system theme.
+ * Register colours once at init — **not** by wrapping SDK content in your own
+ * `MaterialTheme`:
  *
- * Hosts that genuinely want dark-mode rendering can wrap content in their
- * own MaterialTheme outside this wrapper.
+ * ```kotlin
+ * MicroCoachingSDK.Builder(context)
+ *     .theme(CoachingColors.Spice.copy(primary = Color(0xFF00695C)))
+ *     .typography(coachingTypography(fontFamily = MyBrandFont))
+ * ```
  *
- * SPICE can wrap any SDK composable in this theme to get consistent styling.
+ * Wrapping from outside does not work, for two reasons. `MaterialTheme` *replaces* the
+ * colour scheme rather than inheriting it, so this wrapper would discard an outer
+ * theme. And for most SDK surfaces there is no outside: `CoachingFlowActivity` and the
+ * four `BottomSheetDialogFragment`s own their own Compose roots, and
+ * `SdkLocalizedTheme` applies this wrapper internally at every entry point.
+ *
+ * ## Where tokens are read
+ *
+ * Tokens with a Material 3 role are read as `MaterialTheme.colorScheme.*`. The
+ * seventeen with no M3 equivalent are read as `CoachingTheme.colors.*`. No token is
+ * readable from both — see [CoachingColors].
+ *
+ * ## Light only
+ *
+ * This always renders light, and ignores `isSystemInDarkTheme()`, because the four
+ * bottom-sheet fragments force `Theme_Material3_Light_BottomSheetDialog` on the dialog
+ * window and three manifest activities force `Theme.AppCompat.Light.NoActionBar`. A
+ * dark Compose scheme inside a light window produced invisible light-on-light text —
+ * the "No guidance available" empty state on Samsung devices with system dark mode on.
+ * Supporting dark mode means changing those window themes, not this function.
  */
 @Composable
 fun MicroCoachingTheme(
+    colors: CoachingColors = resolveConfiguredColors(),
+    typography: Typography = resolveConfiguredTypography(),
     content: @Composable () -> Unit,
 ) {
-    MaterialTheme(
-        colorScheme = LightColorScheme,
-        typography = CoachingTypography,
-        content = content,
-    )
+    CompositionLocalProvider(LocalCoachingColors provides colors.extended()) {
+        MaterialTheme(
+            colorScheme = colors.toM3Scheme(),
+            typography = typography,
+            content = content,
+        )
+    }
 }
