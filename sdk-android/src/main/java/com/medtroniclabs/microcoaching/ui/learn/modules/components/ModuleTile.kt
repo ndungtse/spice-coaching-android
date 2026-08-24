@@ -44,7 +44,6 @@ enum class ModuleTileVariant {
     KNOWLEDGE,
 }
 
-private val META_TEXT_COLOR = Color(0xFF6B7280)
 
 /**
  * Full-width horizontal list-row tile for a module: leading thumbnail, title +
@@ -140,7 +139,7 @@ fun ModuleTile(
                     Text(
                         text = subtitle,
                         style = MaterialTheme.typography.bodySmall,
-                        color = META_TEXT_COLOR,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )

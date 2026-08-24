@@ -78,7 +78,7 @@ fun AnswerCard(
 
     val borderColor by animateColorAsState(
         targetValue = when (state) {
-            AnswerCardState.Unselected -> Color(0xFFDDDDDD)
+            AnswerCardState.Unselected -> MaterialTheme.colorScheme.outline
             AnswerCardState.Selected -> MaterialTheme.colorScheme.primary
             AnswerCardState.CorrectRevealed -> CoachingTheme.colors.success
             AnswerCardState.WrongRevealed -> MaterialTheme.colorScheme.error
@@ -88,7 +88,7 @@ fun AnswerCard(
     )
 
     val textColor = when (state) {
-        AnswerCardState.Unselected -> Color(0xFF1A1A1A)
+        AnswerCardState.Unselected -> CoachingTheme.colors.textStrong
         AnswerCardState.Selected -> MaterialTheme.colorScheme.onPrimaryContainer
         AnswerCardState.CorrectRevealed -> CoachingTheme.colors.onSuccessContainer
         AnswerCardState.WrongRevealed -> MaterialTheme.colorScheme.onErrorContainer
@@ -137,13 +137,13 @@ private fun AnswerLetterBadge(index: Int, state: AnswerCardState) {
         AnswerCardState.Unselected -> Color.Transparent
     }
     val badgeBorderColor = when (state) {
-        AnswerCardState.Unselected -> Color(0xFFAAAAAA)
+        AnswerCardState.Unselected -> CoachingTheme.colors.textDisabled
         AnswerCardState.Selected -> MaterialTheme.colorScheme.primary
         AnswerCardState.CorrectRevealed -> CoachingTheme.colors.success
         AnswerCardState.WrongRevealed -> MaterialTheme.colorScheme.error
     }
     val letterColor = when (state) {
-        AnswerCardState.Unselected -> Color(0xFF555555)
+        AnswerCardState.Unselected -> CoachingTheme.colors.textBody
         else -> Color.White
     }
 

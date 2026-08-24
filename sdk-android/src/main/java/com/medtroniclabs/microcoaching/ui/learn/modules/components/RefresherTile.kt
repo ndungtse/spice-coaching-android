@@ -91,7 +91,7 @@ fun RefresherTile(
                 Text(
                     text = meta,
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFF6B7280),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }

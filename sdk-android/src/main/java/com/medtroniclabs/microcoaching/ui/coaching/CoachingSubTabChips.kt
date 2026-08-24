@@ -26,7 +26,6 @@ import androidx.compose.ui.unit.dp
 data class SubTabChip(val icon: ImageVector, val label: String)
 
 /** Soft neutral fill for unselected chips (no hard outline). */
-private val UnselectedChip = Color(0xFFEFF1F6)
 
 /**
  * Sub-tab chip row for the Coaching tab (Training | Refresher | Knowledge): centred,
@@ -58,7 +57,7 @@ fun CoachingSubTabChips(
                     this.selected = selected
                 },
                 shape = RoundedCornerShape(50),
-                color = if (selected) MaterialTheme.colorScheme.primary else UnselectedChip,
+                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerLow,
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),

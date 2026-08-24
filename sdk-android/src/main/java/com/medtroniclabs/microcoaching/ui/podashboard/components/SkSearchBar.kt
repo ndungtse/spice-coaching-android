@@ -28,7 +28,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.medtroniclabs.microcoaching.R
 
-private val SearchBorder = Color(0xFFD1D5DB)
 private val ControlHeight = 44.dp
 
 /** Compact search field driving client-side filtering, with an optional (decorative) filter affordance. */
@@ -47,7 +46,7 @@ fun SkSearchBar(
                 .height(ControlHeight)
                 .clip(RoundedCornerShape(percent = 50))
                 .background(Color.White)
-                .border(1.dp, SearchBorder, RoundedCornerShape(percent = 50))
+                .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(percent = 50))
                 .padding(horizontal = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {

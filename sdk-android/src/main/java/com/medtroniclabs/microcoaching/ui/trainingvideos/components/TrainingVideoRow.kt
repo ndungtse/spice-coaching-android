@@ -105,7 +105,7 @@ fun TrainingVideoRow(
                         text = description,
                         style = MaterialTheme.typography.bodySmall,
                         fontSize = 12.sp,
-                        color = Color(0xFF6B7280),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -116,7 +116,7 @@ fun TrainingVideoRow(
                         text = meta,
                         style = MaterialTheme.typography.bodySmall,
                         fontSize = 12.sp,
-                        color = Color(0xFF6B7280),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }

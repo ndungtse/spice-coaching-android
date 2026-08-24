@@ -26,7 +26,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
-private val SegmentTrack = Color(0xFFEEEEF3)
 private val SegmentHeight = 40.dp
 
 /**
@@ -45,7 +44,7 @@ fun SegmentedToggle(
         modifier = modifier
             .height(SegmentHeight)
             .clip(RoundedCornerShape(percent = 50))
-            .background(SegmentTrack)
+            .background(MaterialTheme.colorScheme.surfaceContainerLow)
             .padding(4.dp),
     ) {
         val segmentWidth = maxWidth / count

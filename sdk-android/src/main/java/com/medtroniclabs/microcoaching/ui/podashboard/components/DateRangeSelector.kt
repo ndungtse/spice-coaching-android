@@ -39,7 +39,6 @@ import java.time.LocalDate
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 
-private val FieldBorder = Color(0xFFE0E3EA)
 private val dateFormat = DateTimeFormatter.ofPattern("d MMM yyyy")
 
 private fun formatDate(millis: Long): String =
@@ -161,7 +160,7 @@ private fun DateField(
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(10.dp))
-            .border(1.dp, FieldBorder, RoundedCornerShape(10.dp))
+            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(10.dp))
             .clickable(enabled = enabled, onClick = onClick)
             .alpha(if (enabled) 1f else 0.5f)
             .padding(horizontal = 12.dp, vertical = 8.dp),

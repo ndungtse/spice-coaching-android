@@ -91,7 +91,7 @@ fun ModuleCard(
                 Text(
                     text = module.body,
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFF555555),
+                    color = CoachingTheme.colors.textBody,
                     maxLines = 3,
                 )
             }

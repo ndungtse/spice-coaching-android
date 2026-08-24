@@ -71,7 +71,7 @@ fun LessonContentScreen(
         Text(
             text = stringResource(R.string.learn_reference_guide),
             style = MaterialTheme.typography.bodySmall,
-            color = Color(0xFF666666),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
         Spacer(Modifier.height(24.dp))
@@ -143,7 +143,7 @@ private fun ContentCard(content: String) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .border(1.dp, Color(0xFFCCCCCC), RoundedCornerShape(8.dp))
+            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp))
             .padding(16.dp),
     ) {
         content.lines().forEach { line ->
@@ -151,7 +151,7 @@ private fun ContentCard(content: String) {
                 Text(
                     text = line,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Color(0xFF1A1A1A),
+                    color = CoachingTheme.colors.textStrong,
                 )
                 Spacer(Modifier.height(4.dp))
             }
@@ -176,7 +176,7 @@ private fun KeyPoint(title: String, body: String) {
         Text(
             text = body,
             style = MaterialTheme.typography.bodySmall,
-            color = Color(0xFF444444),
+            color = CoachingTheme.colors.textBody,
         )
     }
 }

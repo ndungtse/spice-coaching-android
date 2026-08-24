@@ -115,7 +115,7 @@ fun TrainingCard(
                 Text(
                     text = meta,
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFF6B7280),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 4.dp),
                 )
                 Box(modifier = Modifier.weight(1f))

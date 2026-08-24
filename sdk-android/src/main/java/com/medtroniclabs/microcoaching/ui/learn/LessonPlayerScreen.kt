@@ -49,6 +49,7 @@ import com.medtroniclabs.microcoaching.MicroCoachingSDK
 import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.ui.common.SdkScreenHeader
 import com.medtroniclabs.microcoaching.ui.common.translatedText
+import com.medtroniclabs.microcoaching.ui.theme.CoachingTheme
 
 /**
  * Card-by-card lesson player. Renders each [LessonCard] in sequence with a
@@ -202,14 +203,14 @@ fun LessonPlayerScreen(
                         Text(
                             text = translatedText(bn = card.titleBn, en = card.titleEn),
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                            color = Color(0xFF101828),
+                            color = CoachingTheme.colors.textStrong,
                         )
                         Spacer(Modifier.height(12.dp))
                         RichCardBody(
                             raw = bodyText,
                             modifier = Modifier.fillMaxWidth(),
                             style = MarkdownDefaults.style(
-                                textColor = BodyTextColor,
+                                textColor = CoachingTheme.colors.textBody,
                                 h1 = MaterialTheme.typography.titleLarge.copy(
                                     fontWeight = FontWeight.Bold,
                                 ),
@@ -296,7 +297,6 @@ fun LessonPlayerScreen(
     }
 }
 
-private val BodyTextColor = Color(0xFF344054)
 
 /** Convenience overload that reads the SDK's current language automatically. */
 @Composable

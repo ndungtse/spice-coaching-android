@@ -113,7 +113,7 @@ fun MorningCard(
                 TextButton(onClick = onSkip) {
                     Text(
                         text = stringResource(R.string.card_skip),
-                        color = Color(0xFF6B7280),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontWeight = FontWeight.Medium,
                     )
                 }

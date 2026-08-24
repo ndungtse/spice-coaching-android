@@ -75,7 +75,7 @@ fun CoachMarkScreen(
             Box(
                 modifier = Modifier
                     .background(
-                        color = Color(0xFFF5F5F5),
+                        color = MaterialTheme.colorScheme.surfaceContainerLow,
                         shape = RoundedCornerShape(16.dp),
                     )
                     .padding(horizontal = 24.dp, vertical = 20.dp)
@@ -94,7 +94,7 @@ fun CoachMarkScreen(
                         text = stringResource(R.string.coachmark_body),
                         style = MaterialTheme.typography.bodyMedium,
                         textAlign = TextAlign.Center,
-                        color = Color(0xFF444444),
+                        color = CoachingTheme.colors.textBody,
                     )
                 }
             }

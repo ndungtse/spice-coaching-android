@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.medtroniclabs.microcoaching.ui.theme.CoachingTheme
+import com.medtroniclabs.microcoaching.ui.theme.trackFor
 
 /**
  * Canvas-based circular arc that animates from 0 to [scorePercent] on first composition.
@@ -43,8 +44,8 @@ fun CircularScoreArc(
     modifier: Modifier = Modifier,
     size: Dp = 160.dp,
     strokeWidth: Dp = 16.dp,
-    trackColor: Color = Color(0xFFDDDDDD),
     arcColor: Color = CoachingTheme.colors.success,
+    trackColor: Color = trackFor(arcColor),
 ) {
     var animTarget by remember { mutableFloatStateOf(0f) }
     val animatedSweep by animateFloatAsState(

@@ -40,6 +40,8 @@ import com.medtroniclabs.microcoaching.ui.learn.LessonCard
 import com.medtroniclabs.microcoaching.ui.learn.LessonCardAutoSpeak
 import com.medtroniclabs.microcoaching.ui.markdown.MarkdownDefaults
 import com.medtroniclabs.microcoaching.ui.richtext.RichCardBody
+import com.medtroniclabs.microcoaching.ui.theme.CoachingTheme
+import com.medtroniclabs.microcoaching.ui.theme.trackFor
 
 // ── Cards phase ───────────────────────────────────────────────────────────────
 // Lesson-card rendering + terminal actions for the refresher sheet; RefresherContent
@@ -99,7 +101,7 @@ internal fun RefresherCardSlide(
             Text(
                 text = translatedText(bn = card.titleBn, en = card.titleEn),
                 style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                color = Color(0xFF101828),
+                color = CoachingTheme.colors.textStrong,
                 modifier = Modifier.weight(1f),
             )
             IconButton(onClick = onToggleAutoSpeak) {
@@ -119,13 +121,13 @@ internal fun RefresherCardSlide(
             progress = { (safeIndex + 1f) / cards.size },
             modifier = Modifier.fillMaxWidth(),
             color = MaterialTheme.colorScheme.primary,
-            trackColor = Color(0xFFE4E7EC),
+            trackColor = trackFor(MaterialTheme.colorScheme.primary),
         )
         Spacer(Modifier.height(4.dp))
         Text(
             text = "${safeIndex + 1} / ${cards.size}",
             style = MaterialTheme.typography.labelSmall,
-            color = Color(0xFF667085),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.align(Alignment.End),
         )
         Spacer(Modifier.height(12.dp))
@@ -141,7 +143,7 @@ internal fun RefresherCardSlide(
                 RichCardBody(
                     raw = bodyText,
                     modifier = Modifier.fillMaxWidth(),
-                    style = MarkdownDefaults.style(textColor = Color(0xFF344054)),
+                    style = MarkdownDefaults.style(),
                 )
             }
         }

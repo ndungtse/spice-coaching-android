@@ -101,7 +101,7 @@ fun FeaturedVideoCard(
                     Text(
                         text = video.metaLabel(),
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFF6B7280),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 4.dp),
                     )
                 }
