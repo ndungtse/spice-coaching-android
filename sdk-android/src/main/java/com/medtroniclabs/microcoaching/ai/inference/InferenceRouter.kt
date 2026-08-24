@@ -12,21 +12,21 @@ import java.io.File
  * file extension and device capability.
  *
  * Routing rules:
- *   - `.task`  → [GemmaService] (MediaPipe Gemma, any catalog variant)
- *   - No model → [isModelAvailable] = false; chat shows "download required" state
+ *   - `.litertlm` → [LiteRtLmService] (LiteRT-LM, the only bundled engine)
+ *   - No model    → [isModelAvailable] = false; chat shows "download required" state
  *
  * This is the single point of truth for which LLM is active.
  *
  * Owned by [SharedInferenceRouter]: ChatViewModels acquire/release the single
  * process-wide instance rather than constructing their own — two routers
- * loading the same `.task` crashes MediaPipe natively, and an embedded chat
+ * loading the same model file crashes the engine natively, and an embedded chat
  * fragment plus the chat bottom sheet can be alive at the same time. The
  * engine stays loaded while any surface holds a reference and unloads when
  * the last one releases.
  */
 class InferenceRouter(private val config: MicroCoachingConfig) {
 
-    private val gemmaService = GemmaService(config.context)
+    private val liteRtLmService = LiteRtLmService(config.context)
 
     /** The currently active service, or null if no model is available. */
     var activeService: LLMService? = null
@@ -48,12 +48,10 @@ class InferenceRouter(private val config: MicroCoachingConfig) {
      * Detect the model file and initialize the appropriate engine.
      * Call this once at app start (or on-first-use, depending on download strategy).
      *
-     * **Idempotent.** Subsequent calls when an engine is already loaded return
-     * the existing [activeService] without re-invoking `loadModel`. Loading the
-     * same Gemma `.task` twice on the same instance crashes MediaPipe's native
-     * inference engine (`libllm_inference_engine_jni.so`), so the guard is
-     * defense-in-depth on top of the call-site dedup in
-     * [ChatViewModel.observeModelState].
+     * **Idempotent.** A call made while an engine is loaded returns the existing
+     * [activeService] rather than re-invoking `loadModel`: loading a model twice into one
+     * engine instance is not something the native runtime promises to survive. Belt and
+     * braces over the call-site dedup in [ChatViewModel.observeModelState].
      *
      * @return The loaded [LLMService], or null if no model file is found.
      */
@@ -65,15 +63,14 @@ class InferenceRouter(private val config: MicroCoachingConfig) {
             }
         }
 
-        // Runtime guard — only the MediaPipe engine is bundled. A non-MediaPipe
-        // variant (e.g. a `.litertlm`) can't load until the LiteRT-LM runtime is
-        // re-added; fail loud rather than silently no-op.
+        // A variant on an unbundled runtime has no engine to load it. Fail loud rather
+        // than no-op, so the setup screen can say why chat is unavailable.
         val variant = config.selectedModelVariant()
         if (!ModelCatalog.isRunnable(variant)) {
             Log.e(
                 TAG,
                 "Selected model '${variant.id}' runtime=${variant.runtime} is not bundled — " +
-                    "no engine to load it (LiteRT-LM runtime not bundled). Chat stays in download/unavailable state.",
+                    "no engine to load it. Chat stays in download/unavailable state.",
             )
             lastLoadError = "Selected model '${variant.id}' needs the ${variant.runtime} runtime, which isn't bundled."
             return null
@@ -84,6 +81,15 @@ class InferenceRouter(private val config: MicroCoachingConfig) {
             lastLoadError = null   // Not an error — nothing has been downloaded yet.
             return null
         }
+
+        // Name, path and exact length of the file about to be handed to the engine, against
+        // the expected size. On a load failure this separates "wrong file" from "short file"
+        // from "right file, engine problem".
+        Log.i(
+            TAG,
+            "Resolved model: ${modelFile.name} (${modelFile.length()} bytes, " +
+                "expected ${variant.sizeInBytes}) at ${modelFile.absolutePath}",
+        )
 
         val service = serviceForFile(modelFile) ?: run {
             Log.w(TAG, "Unrecognised model file extension: ${modelFile.extension}")
@@ -107,13 +113,19 @@ class InferenceRouter(private val config: MicroCoachingConfig) {
                 maxTokens = variant.maxTokens ?: config.maxInferenceTokens,
                 temperature = variant.temperature ?: config.inferenceTemperature,
                 topK = variant.topK ?: 40,
+                topP = variant.topP ?: 0.95f,
             )
             service.loadModel(llmConfig)
             activeService = service
             lastLoadError = null
             Log.i(TAG, "Inference engine ready: ${service::class.simpleName} — ${modelFile.name}")
         }.onFailure { cause ->
-            Log.e(TAG, "Failed to load model ${modelFile.name}: ${cause.message}")
+            Log.e(
+                TAG,
+                "Failed to load ${modelFile.name} (${modelFile.length()} bytes, " +
+                    "expected ${variant.sizeInBytes}): ${cause.message}",
+                cause,
+            )
             lastLoadError = cause.message ?: cause::class.simpleName
             activeService = null
         }
@@ -131,21 +143,24 @@ class InferenceRouter(private val config: MicroCoachingConfig) {
 
     private fun serviceForFile(file: File): LLMService? =
         if (canLoad(file)) {
-            gemmaService
+            liteRtLmService
         } else {
-            Log.e(TAG, "No engine for '${file.name}' — only MediaPipe `.task` is bundled (LiteRT-LM not bundled)")
+            Log.e(
+                TAG,
+                "No engine for '${file.name}' — the bundled engine loads " +
+                    "`${LiteRtLmService.MODEL_EXTENSION}` only",
+            )
             null
         }
 
     /**
      * True when a model file is present on disk **and** a bundled engine can load
      * it. This is a permanent property of the current configuration, not a
-     * transient state: it's false when the selected variant's runtime isn't
-     * bundled, or when the resolved file's extension has no engine (e.g. a leftover
-     * `.litertlm` that `modelPath` points at). Callers use it to distinguish an
-     * un-retryable configuration from a transient load failure, so they can show an
-     * honest error instead of looping on "Go to chat". Does no loading — just
-     * resolution + a runtime/extension check.
+     * transient state: it is false when the selected variant's runtime isn't bundled, or
+     * when the resolved file's extension has no engine — a stale `.task` that `modelPath`
+     * points at, say. Callers use it to tell an un-retryable configuration from a transient
+     * load failure, so they can show an honest error instead of looping on "Go to chat".
+     * Does no loading: resolution plus a runtime/extension check.
      */
     fun canRunResolvedModel(): Boolean {
         if (!ModelCatalog.isRunnable(config.selectedModelVariant())) return false
@@ -155,7 +170,7 @@ class InferenceRouter(private val config: MicroCoachingConfig) {
 
     /** Release the inference engine. */
     fun release() {
-        gemmaService.unloadModel()
+        liteRtLmService.unloadModel()
         activeService = null
     }
 
@@ -163,26 +178,32 @@ class InferenceRouter(private val config: MicroCoachingConfig) {
         private const val TAG = "InferenceRouter"
 
         /**
-         * Is there a bundled engine that can load [file]? Only MediaPipe `.task`
-         * is bundled. Side-effect-free so [resolveModelFile] can probe a candidate
-         * it may be about to skip without logging an error for it.
+         * Is there a bundled engine that can load [file]? Side-effect-free, so
+         * [resolveModelFile] can probe a candidate it may be about to skip without logging
+         * an error for it.
          */
         internal fun canLoad(file: File): Boolean =
-            file.name.endsWith(GemmaService.MODEL_EXTENSION)
+            file.name.endsWith(LiteRtLmService.MODEL_EXTENSION)
 
         /**
          * Pick the model file to load. Pure — takes the filesystem facts rather
          * than reading config, so the priority rule is testable without a Context.
          *
          * Priority:
-         *   1. [configuredModelPath] when it exists **and** [canLoad] accepts it.
+         *   1. [configuredModelPath] when it exists, [canLoad] accepts it, **and** its
+         *      filename is exactly [expectedFileName].
          *   2. [expectedFileName] inside [externalDir] — matched by exact name, not
-         *      "first `.task` on disk", so coexisting variants stay deterministic.
+         *      "first model file on disk", so coexisting variants stay deterministic.
          *
-         * The loadability check on (1) is what makes this self-healing. A host that
-         * scans the model dir and adopts whatever it finds can pass a file no
-         * bundled engine can load; preferring it unconditionally would strand chat
-         * on the setup screen even with a loadable file sitting right beside it.
+         * The two checks on (1) guard different failures:
+         *  - **Loadability**, for a host that scans its model dir and passes something the
+         *    bundled engine cannot load. Preferring it would strand chat on the setup
+         *    screen with a loadable file sitting beside it.
+         *  - **Filename**, for a host that passes some *other* loadable model. `listFiles()` is
+         *    unordered, so a scan can return a leftover from an earlier default model while
+         *    [ModelManager] reports the selected variant as ready — the engine and the UI
+         *    then describe different files. Matching the catalog is too weak a test here,
+         *    since a stale variant is in the catalog too; only the selected name will do.
          */
         internal fun resolveModelFile(
             configuredModelPath: String,
@@ -200,6 +221,13 @@ class InferenceRouter(private val config: MicroCoachingConfig) {
                             TAG,
                             "Configured modelPath '${explicit.name}' has no bundled engine — " +
                                 "ignoring it and falling back to the selected variant's file",
+                        )
+                    explicit.name != expectedFileName ->
+                        Log.w(
+                            TAG,
+                            "Configured modelPath '${explicit.name}' is not the selected variant " +
+                                "('$expectedFileName') — ignoring it so the engine and ModelManager " +
+                                "cannot disagree about which file is the model",
                         )
                     else -> return explicit
                 }

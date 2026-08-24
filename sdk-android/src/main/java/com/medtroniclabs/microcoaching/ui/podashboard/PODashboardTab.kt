@@ -60,13 +60,13 @@ import com.medtroniclabs.microcoaching.util.shortDateTimeLabel
 @Composable
 fun PODashboardTab(
     chwId: String,
-    onOpenActiveSks: () -> Unit,
-    onOpenChatbotUsage: () -> Unit,
-    onOpenModulesCompleted: () -> Unit,
-    onOpenSkDetail: (String) -> Unit,
-    onOpenSearchedModule: (String) -> Unit,
+    onOpenActiveSks: (SkStatus, DateRange) -> Unit,
+    onOpenChatbotUsage: (DateRange) -> Unit,
+    onOpenModulesCompleted: (DateRange) -> Unit,
+    onOpenSkDetail: (String, DateRange) -> Unit,
+    onOpenSearchedModule: (String, DateRange) -> Unit,
     onOpenSuggestion: (String) -> Unit,
-    onOpenDocument: (String) -> Unit,
+    onOpenDocument: (String, DateRange) -> Unit,
     onShowAllSection: (PoDashboardSection, DateRange) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -89,18 +89,11 @@ fun PODashboardTab(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Text(stringResource(R.string.po_showing_data_for), style = MaterialTheme.typography.bodyMedium)
-                DateRangeSelector(
-                    fromMillis = range.fromMillis,
-                    toMillis = range.toMillis,
-                    onRangeChange = { from, to -> vm.selectRange(DateRange(from, to)) },
-                    modifier = Modifier.fillMaxWidth(),
-                    // Freeze the picker offline — offline shows the last-synced snapshot (AC5/D2).
-                    enabled = networkAvailable,
-                )
                 // Freshness of the on-screen dashboard numbers — mirrors the
                 // coaching header's "Last synced …" subtitle, but sourced from the
                 // dashboard's own live loads (see PODashboardViewModel.lastLoadedAt).
+                // Right-aligned: it annotates the data rather than labelling the
+                // picker below, and the From/To fields already say what the range is.
                 Text(
                     text = if (lastLoadedAt <= 0L) {
                         stringResource(R.string.modules_last_synced_never)
@@ -109,6 +102,16 @@ fun PODashboardTab(
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MutedText,
+                    textAlign = TextAlign.End,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                DateRangeSelector(
+                    fromMillis = range.fromMillis,
+                    toMillis = range.toMillis,
+                    onRangeChange = { from, to -> vm.selectRange(DateRange(from, to)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    // Freeze the picker offline — offline shows the last-synced snapshot (AC5/D2).
+                    enabled = networkAvailable,
                 )
             }
             
@@ -116,7 +119,9 @@ fun PODashboardTab(
                 is PODashboardUiState.Loading -> CenterProgress()
 
                 is PODashboardUiState.Error -> ErrorNotice(
-                    if (!networkAvailable) stringResource(R.string.common_error_offline) else s.message,
+                    message = if (!networkAvailable) stringResource(R.string.common_error_offline) else s.message,
+                    // Auth guidance only applies online — offline shows the offline message.
+                    isAuth = networkAvailable && s.isAuth,
                 )
 
                 is PODashboardUiState.Ready -> {
@@ -151,13 +156,13 @@ private const val SECTION_PREVIEW_LIMIT = 5
 private fun DashboardBody(
     dashboard: PoDashboard,
     expandedModules: androidx.compose.runtime.snapshots.SnapshotStateMap<Int, Boolean>,
-    onOpenActiveSks: () -> Unit,
-    onOpenChatbotUsage: () -> Unit,
-    onOpenModulesCompleted: () -> Unit,
-    onOpenSkDetail: (String) -> Unit,
-    onOpenSearchedModule: (String) -> Unit,
+    onOpenActiveSks: (SkStatus, DateRange) -> Unit,
+    onOpenChatbotUsage: (DateRange) -> Unit,
+    onOpenModulesCompleted: (DateRange) -> Unit,
+    onOpenSkDetail: (String, DateRange) -> Unit,
+    onOpenSearchedModule: (String, DateRange) -> Unit,
     onOpenSuggestion: (String) -> Unit,
-    onOpenDocument: (String) -> Unit,
+    onOpenDocument: (String, DateRange) -> Unit,
     onShowAllSection: (PoDashboardSection, DateRange) -> Unit,
 ) {
     val d = dashboard
@@ -165,7 +170,7 @@ private fun DashboardBody(
     // Spine sections (KPIs, My SKs, module completion) — replaced by an inline notice
     // when team-activity failed but the rest of the dashboard loaded.
     if (d.spineError != null) {
-        ErrorNotice(d.spineError)
+        ErrorNotice(d.spineError, isAuth = d.spineErrorIsAuth)
     } else {
         // 4 KPI cards — horizontal scroller so the longer labels stay on one line.
         Row(
@@ -180,9 +185,10 @@ private fun DashboardBody(
                     metric = metric,
                     onClick = {
                         when (metric.key) {
-                            MetricKey.ACTIVE_NOW, MetricKey.INACTIVE -> onOpenActiveSks()
-                            MetricKey.FINISHED_MODULES -> onOpenModulesCompleted()
-                            MetricKey.CHATBOT_ENGAGED -> onOpenChatbotUsage()
+                            MetricKey.ACTIVE_NOW -> onOpenActiveSks(SkStatus.ACTIVE, d.range)
+                            MetricKey.INACTIVE -> onOpenActiveSks(SkStatus.INACTIVE, d.range)
+                            MetricKey.FINISHED_MODULES -> onOpenModulesCompleted(d.range)
+                            MetricKey.CHATBOT_ENGAGED -> onOpenChatbotUsage(d.range)
                         }
                     },
                 )
@@ -191,34 +197,42 @@ private fun DashboardBody(
 
         Spacer(Modifier.height(16.dp))
         SectionTitle(stringResource(R.string.po_section_my_sks))
-        Column(
-            modifier = Modifier.padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            d.sks.take(SECTION_PREVIEW_LIMIT).forEach { sk ->
-                SkListRow(sk = sk, onClick = { onOpenSkDetail(sk.id) })
+        if (d.sks.isEmpty()) {
+            SectionEmptyRow()
+        } else {
+            Column(
+                modifier = Modifier.padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                d.sks.take(SECTION_PREVIEW_LIMIT).forEach { sk ->
+                    SkListRow(sk = sk, onClick = { onOpenSkDetail(sk.id, d.range) })
+                }
             }
-        }
-        if (d.sks.size > SECTION_PREVIEW_LIMIT) {
-            ShowAllRow(d.sks.size) { onShowAllSection(PoDashboardSection.MY_SKS, d.range) }
+            if (d.sks.size > SECTION_PREVIEW_LIMIT) {
+                ShowAllRow(d.sks.size) { onShowAllSection(PoDashboardSection.MY_SKS, d.range) }
+            }
         }
 
         Spacer(Modifier.height(16.dp))
         SectionTitle(stringResource(R.string.po_section_module_completion))
-        Column(
-            modifier = Modifier.padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            d.moduleCompletion.take(SECTION_PREVIEW_LIMIT).forEachIndexed { index, mc ->
-                ModuleCompletionRow(
-                    item = mc,
-                    expanded = expandedModules[index] == true,
-                    onToggle = { expandedModules[index] = !(expandedModules[index] ?: false) },
-                )
+        if (d.moduleCompletion.isEmpty()) {
+            SectionEmptyRow()
+        } else {
+            Column(
+                modifier = Modifier.padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                d.moduleCompletion.take(SECTION_PREVIEW_LIMIT).forEachIndexed { index, mc ->
+                    ModuleCompletionRow(
+                        item = mc,
+                        expanded = expandedModules[index] == true,
+                        onToggle = { expandedModules[index] = !(expandedModules[index] ?: false) },
+                    )
+                }
             }
-        }
-        if (d.moduleCompletion.size > SECTION_PREVIEW_LIMIT) {
-            ShowAllRow(d.moduleCompletion.size) { onShowAllSection(PoDashboardSection.MODULE_COMPLETION, d.range) }
+            if (d.moduleCompletion.size > SECTION_PREVIEW_LIMIT) {
+                ShowAllRow(d.moduleCompletion.size) { onShowAllSection(PoDashboardSection.MODULE_COMPLETION, d.range) }
+            }
         }
     }
 
@@ -232,7 +246,7 @@ private fun DashboardBody(
         TopQueriesCard(
             d.topSearchedExisting.take(SECTION_PREVIEW_LIMIT),
             modifier = Modifier.padding(horizontal = 16.dp),
-            onItemClick = { it.id?.let(onOpenSearchedModule) },
+            onItemClick = { m -> m.id?.let { onOpenSearchedModule(it, d.range) } },
         )
         if (d.topSearchedExistingTotal > SECTION_PREVIEW_LIMIT) {
             ShowAllRow(d.topSearchedExistingTotal) { onShowAllSection(PoDashboardSection.SEARCHED_EXISTING, d.range) }
@@ -262,16 +276,14 @@ private fun DashboardBody(
     SectionTitle(stringResource(R.string.po_section_document_usage))
     if (d.documentUsage.isNotEmpty()) {
         d.documentUsageSummary?.let { summary ->
+            // Three fixed stats → an even 3-up grid that fills the width.
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                DocumentUsageStat(stringResource(R.string.po_document_total_opens), summary.totalViews)
-                DocumentUsageStat(stringResource(R.string.po_document_unique_documents), summary.uniqueDocuments)
-                DocumentUsageStat(stringResource(R.string.po_document_unique_readers), summary.uniqueUsers)
+                DocumentUsageStat(stringResource(R.string.po_document_total_opens), summary.totalViews, Modifier.weight(1f))
+                DocumentUsageStat(stringResource(R.string.po_document_unique_documents), summary.uniqueDocuments, Modifier.weight(1f))
+                DocumentUsageStat(stringResource(R.string.po_document_unique_readers), summary.uniqueUsers, Modifier.weight(1f))
             }
             Spacer(Modifier.height(8.dp))
         }
@@ -280,7 +292,7 @@ private fun DashboardBody(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             d.documentUsage.take(SECTION_PREVIEW_LIMIT).forEach { doc ->
-                DocumentUsageListRow(row = doc, onClick = { onOpenDocument(doc.documentId) })
+                DocumentUsageListRow(row = doc, onClick = { onOpenDocument(doc.documentId, d.range) })
             }
         }
         if (d.documentUsageTotal > SECTION_PREVIEW_LIMIT) {
@@ -305,9 +317,9 @@ private fun DashboardBody(
     }
 }
 
-/** Empty-state row for a "Top Searched" section that has no activity in the range. */
+/** Generic "No items found" row for a section with no data in the range. */
 @Composable
-private fun TopSearchedEmptyRow() {
+private fun SectionEmptyRow() {
     Text(
         text = stringResource(R.string.po_section_empty),
         color = MutedText,
@@ -316,6 +328,10 @@ private fun TopSearchedEmptyRow() {
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 24.dp),
     )
 }
+
+/** Empty-state row for a "Top Searched" section that has no activity in the range. */
+@Composable
+private fun TopSearchedEmptyRow() = SectionEmptyRow()
 
 /** Empty-state row for the document-usage section when nothing was opened in the range. */
 @Composable
@@ -331,9 +347,9 @@ private fun DocumentUsageEmptyRow() {
 
 /** One headline number in the document-usage summary strip (total / documents / readers). */
 @Composable
-private fun DocumentUsageStat(label: String, value: Int) {
+private fun DocumentUsageStat(label: String, value: Int, modifier: Modifier = Modifier) {
     Column(
-        modifier = Modifier.poCard().padding(horizontal = 16.dp, vertical = 12.dp),
+        modifier = modifier.poCard().padding(horizontal = 16.dp, vertical = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
@@ -342,16 +358,26 @@ private fun DocumentUsageStat(label: String, value: Int) {
             fontWeight = FontWeight.Bold,
             style = MaterialTheme.typography.titleLarge,
         )
-        Text(text = label, color = MutedText, style = MaterialTheme.typography.labelMedium)
+        Text(
+            text = label,
+            color = MutedText,
+            style = MaterialTheme.typography.labelMedium,
+            textAlign = TextAlign.Center,
+        )
     }
 }
 
-/** Inline error card with a pull-to-refresh hint (used for full and spine-only failures). */
+/**
+ * Inline error card (used for full and spine-only failures). A 401 ([isAuth]) is a stale
+ * session — a pull-to-refresh can't fix it, so show "log out and back in" guidance instead.
+ */
 @Composable
-private fun ErrorNotice(message: String) {
+private fun ErrorNotice(message: String, isAuth: Boolean = false) {
     NoticeBanner(
-        text = message,
+        text = if (isAuth) stringResource(R.string.po_error_session_expired) else message,
         tone = NoticeTone.Warning,
-        hint = stringResource(R.string.po_error_pull_to_refresh),
+        hint = stringResource(
+            if (isAuth) R.string.po_error_session_expired_hint else R.string.po_error_pull_to_refresh,
+        ),
     )
 }

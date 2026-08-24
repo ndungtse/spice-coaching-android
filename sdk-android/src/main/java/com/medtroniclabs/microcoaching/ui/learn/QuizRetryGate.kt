@@ -75,7 +75,6 @@ internal object QuizRetryGate {
      * value (or synced an invalid one). Admins configure the real value on the
      * web app; it arrives via config sync under
      * [KEY_QUIZ_REATTEMPT_VALIDITY_DAYS] and is resolved by [resolveValidityDays].
-     * Set in the spec by product (DM, 2026-06).
      */
     const val QUIZ_RETRY_WINDOW_DAYS: Long = 7L
 

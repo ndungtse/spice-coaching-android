@@ -3,12 +3,10 @@ package com.medtroniclabs.microcoaching.domain.lifecycle
 import com.medtroniclabs.microcoaching.data.db.dao.CoachingEventDao
 import com.medtroniclabs.microcoaching.data.db.dao.RetryCountRow
 import com.medtroniclabs.microcoaching.data.db.entity.CoachingEventEntity
-import com.medtroniclabs.microcoaching.domain.telemetry.EventRecorder
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -16,38 +14,34 @@ import org.junit.Test
 class VisitCompletedHandlerTest {
 
     @Test
-    fun `backfills patient_visit_id, emits session_end, and flushes`() = runBlocking {
+    fun `backfills patient_visit_id and flushes, writing no event of its own`() = runBlocking {
         val dao = FakeCoachingEventDao()
-        val recorder = EventRecorder(dao = dao, sessionId = "sdk-hook", chwId = "chw-1")
         val handler = VisitCompletedHandler(coachingEventDao = dao)
 
         var flushed = false
         handler.handle(
             chwId = "chw-1",
             encounterId = "visit-42",
-            recorder = recorder,
             flush = { flushed = true },
         )
 
         assertEquals("sdk-hook", dao.lastBackfillSessionId)
         assertEquals("chw-1", dao.lastBackfillChwId)
         assertEquals("visit-42", dao.lastBackfillEncounterId)
-        val sessionEnd = dao.inserted.find { it.eventType == "session_end" }
-        assertNotNull("expected a session_end event to be inserted", sessionEnd)
+        // Visit close stamps existing rows; it is not itself an event.
+        assertTrue(dao.inserted.isEmpty())
         assertTrue("expected flush() to be invoked", flushed)
     }
 
     @Test
     fun `skips work entirely when encounterId is blank`() = runBlocking {
         val dao = FakeCoachingEventDao()
-        val recorder = EventRecorder(dao = dao, sessionId = "sdk-hook", chwId = "chw-1")
         val handler = VisitCompletedHandler(coachingEventDao = dao)
 
         var flushed = false
         handler.handle(
             chwId = "chw-1",
             encounterId = "",
-            recorder = recorder,
             flush = { flushed = true },
         )
 
@@ -59,7 +53,7 @@ class VisitCompletedHandlerTest {
 
     /**
      * Captures the args to [backfillPatientVisitId] and any inserts. Only the
-     * methods the handler/recorder touch are implemented meaningfully.
+     * methods the handler touches are implemented meaningfully.
      */
     private class FakeCoachingEventDao : CoachingEventDao {
         var lastBackfillSessionId: String? = null
@@ -82,7 +76,7 @@ class VisitCompletedHandlerTest {
             return 0
         }
 
-        // ── Unused by the handler/recorder paths under test ───────────────────
+        // ── Unused by the handler path under test ─────────────────────────────
         override suspend fun getPending(): List<CoachingEventEntity> = emptyList()
         override suspend fun getPending(limit: Int): List<CoachingEventEntity> = emptyList()
         override suspend fun getLatestCorrectQuestionIds(chwId: String, moduleFamilyId: String): List<String> =
@@ -99,6 +93,7 @@ class VisitCompletedHandlerTest {
         override fun getEventCountFlow(): Flow<Int> = flowOf(0)
         override fun observeModuleRequested(chwId: String): Flow<List<CoachingEventEntity>> = flowOf(emptyList())
         override suspend fun getModuleRequested(chwId: String): List<CoachingEventEntity> = emptyList()
+        override suspend fun countDistinctCardsViewed(chwId: String, moduleFamilyId: String): Int = 0
         override suspend fun markSynced(eventIds: List<String>, syncedAt: Long) = Unit
         override suspend fun markFailed(eventIds: List<String>) = Unit
         override suspend fun incrementRetryCount(eventIds: List<String>) = Unit

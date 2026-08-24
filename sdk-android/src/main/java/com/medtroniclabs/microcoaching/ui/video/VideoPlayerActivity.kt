@@ -23,6 +23,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -31,10 +34,12 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import com.medtroniclabs.microcoaching.MicroCoachingSDK
 import com.medtroniclabs.microcoaching.R
+import com.medtroniclabs.microcoaching.ui.trainingvideos.components.RemoveDownloadDialog
 import com.medtroniclabs.microcoaching.data.asset.AssetKind
 import com.medtroniclabs.microcoaching.data.asset.InsufficientStorageException
 import com.medtroniclabs.microcoaching.domain.telemetry.EventRecorder
 import com.medtroniclabs.microcoaching.network.MediaUrlResolver
+import com.medtroniclabs.microcoaching.network.SourceDocumentUrlStore
 import com.medtroniclabs.microcoaching.ui.SdkLocalizedTheme
 import com.medtroniclabs.microcoaching.ui.common.SdkScreenHeader
 import kotlinx.coroutines.Dispatchers
@@ -48,8 +53,9 @@ import kotlinx.coroutines.withContext
  * Fullscreen Media3/ExoPlayer playback.
  *
  * Two launch modes:
- *  - **Rich-card** ([start]): a `src`/`object_name` media node, streamed. No
- *    resume, progress, or download — the original behaviour, unchanged.
+ *  - **Rich-card** ([start]): a `src`/`object_name` media node embedded in a lesson
+ *    card. No resume or watch progress — there is no assigned-video row to report
+ *    against — but it can be kept offline, keyed on the URL path.
  *  - **Training video** ([startTraining]): an assigned training video keyed by
  *    its `source_document_id`. Resumes from [EXTRA_RESUME_POSITION_MS], reports
  *    watch progress via [VideoProgressReporter], prefers a locally-downloaded
@@ -83,6 +89,18 @@ class VideoPlayerActivity : ComponentActivity() {
 
     /** The assigned video's `source_document_id` (== AssetCache key), training mode only. */
     private var videoId: String? = null
+
+    /**
+     * AssetCache key for a rich-card video, derived from the resolved URL's path.
+     * `stableKeyForUrl` drops the query, so a re-signed URL still hits the same entry.
+     * Null when the node has no http(s) URL to key on — the action then stays hidden.
+     */
+    private var richCardKey: String? = null
+
+    /** Where a rich-card video's bytes come from, for download + re-sign on expiry. */
+    private var richCardSrc: String? = null
+    private var richCardObjectName: String? = null
+
     private var resumePositionMs: Long = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -122,12 +140,38 @@ class VideoPlayerActivity : ComponentActivity() {
         if (videoIdExtra != null) initTrainingMode(videoIdExtra) else initRichCardMode(src, objectName)
     }
 
-    /** Rich-card node: stream directly from the resolved presigned URL. */
+    /**
+     * Rich-card node: prefer a kept-offline copy, else stream from the resolved URL.
+     *
+     * The key comes from the *resolved* URL rather than the raw `src`/`object_name`, so a
+     * presigned node and a direct-URL node land on the same keying rule.
+     */
     private fun initRichCardMode(src: String?, objectName: String?) {
+        richCardSrc = src
+        richCardObjectName = objectName
         _download.value = DownloadUiState.Hidden
         lifecycleScope.launch {
+            val sdk = MicroCoachingSDK.getInstance()
             val url = MediaUrlResolver.resolve(src, objectName)
-            _state.value = if (url.isNullOrBlank()) PlaybackState.Error else PlaybackState.Ready(url)
+            if (url.isNullOrBlank()) {
+                _state.value = PlaybackState.Error
+                return@launch
+            }
+            val key = sdk.assetCache.stableKeyForUrl(url)
+            richCardKey = key
+            val local = key?.let {
+                withContext(Dispatchers.IO) { runCatching { sdk.assetCache.localCachedFile(it) }.getOrNull() }
+            }
+            val pinned = key != null && local != null && withContext(Dispatchers.IO) {
+                runCatching { sdk.assetCache.isPinned(key) }.getOrDefault(false)
+            }
+            _download.value = when {
+                key == null -> DownloadUiState.Hidden
+                pinned -> DownloadUiState.Downloaded
+                else -> DownloadUiState.NotDownloaded
+            }
+            // A merely LRU-cached (unpinned) file is still a valid local source.
+            _state.value = PlaybackState.Ready(local?.let { Uri.fromFile(it).toString() } ?: url)
         }
     }
 
@@ -165,13 +209,29 @@ class VideoPlayerActivity : ComponentActivity() {
         }
     }
 
-    /** Download-to-keep / remove-download for the current training video. */
+    /**
+     * Download-to-keep / remove-download for whichever video this player is showing.
+     *
+     * The two modes differ only in the cache key and how a URL is (re-)obtained: a training
+     * video by `source_document_id`, a rich-card node by its URL path.
+     */
     private fun onToggleDownload() {
-        val id = videoId ?: return
         val sdk = MicroCoachingSDK.getInstance()
+        val id = videoId
+        val key = id ?: richCardKey ?: return
+        val fetchUrl: suspend () -> String? = if (id != null) {
+            { MediaUrlResolver.resolveSourceDocument(id) }
+        } else {
+            { MediaUrlResolver.resolve(richCardSrc, richCardObjectName) }
+        }
+        val renewUrl: suspend () -> String? = if (id != null) {
+            { SourceDocumentUrlStore.renew(id) }
+        } else {
+            { MediaUrlResolver.resolve(richCardSrc, richCardObjectName, forceFresh = true) }
+        }
         when (download.value) {
             DownloadUiState.Downloaded -> lifecycleScope.launch {
-                withContext(Dispatchers.IO) { runCatching { sdk.assetCache.remove(id) } }
+                withContext(Dispatchers.IO) { runCatching { sdk.assetCache.remove(key) } }
                 _download.value = DownloadUiState.NotDownloaded
             }
             DownloadUiState.NotDownloaded -> lifecycleScope.launch {
@@ -179,13 +239,15 @@ class VideoPlayerActivity : ComponentActivity() {
                 val file = try {
                     withContext(Dispatchers.IO) {
                         sdk.assetCache.download(
-                            key = id,
+                            key = key,
                             kind = AssetKind.VIDEO,
                             onProgress = { downloaded, total ->
                                 val pct = if (total > 0L) ((downloaded * 100L) / total).toInt().coerceIn(0, 100) else null
                                 _download.value = DownloadUiState.Downloading(pct)
                             },
-                        ) { MediaUrlResolver.resolveSourceDocument(id) }
+                            renewUrl = renewUrl,
+                            fetchUrl = fetchUrl,
+                        )
                     }
                 } catch (e: InsufficientStorageException) {
                     _download.value = DownloadUiState.NotDownloaded
@@ -249,6 +311,12 @@ private fun VideoPlayerScreen(
     onFlush: (Long, Long) -> Unit,
     onEnded: (Long) -> Unit,
 ) {
+    // Removing the download deletes the very file this player is streaming from, and
+    // offline there is nothing to fall back to — so confirm first. The tick sits where a
+    // toolbar "done" action normally does, which is exactly how CHWs lost their offline
+    // copy by tapping it.
+    var confirmRemove by rememberSaveable { mutableStateOf(false) }
+
     Scaffold(
         topBar = {
             SdkScreenHeader(
@@ -257,7 +325,19 @@ private fun VideoPlayerScreen(
                 trailing = if (downloadState is VideoPlayerActivity.DownloadUiState.Hidden) {
                     null
                 } else {
-                    { DownloadAction(downloadState, onToggleDownload, Modifier.align(Alignment.CenterEnd)) }
+                    {
+                        DownloadAction(
+                            state = downloadState,
+                            onToggle = {
+                                if (downloadState is VideoPlayerActivity.DownloadUiState.Downloaded) {
+                                    confirmRemove = true
+                                } else {
+                                    onToggleDownload()
+                                }
+                            },
+                            modifier = Modifier.align(Alignment.CenterEnd),
+                        )
+                    }
                 },
             )
         },
@@ -283,6 +363,13 @@ private fun VideoPlayerScreen(
                 VideoPlayerActivity.PlaybackState.Loading -> CircularProgressIndicator()
             }
         }
+    }
+
+    if (confirmRemove) {
+        RemoveDownloadDialog(
+            onConfirm = onToggleDownload,
+            onDismiss = { confirmRemove = false },
+        )
     }
 }
 

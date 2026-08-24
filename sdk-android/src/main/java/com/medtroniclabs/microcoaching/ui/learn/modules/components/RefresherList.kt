@@ -33,6 +33,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.medtroniclabs.microcoaching.R
+import com.medtroniclabs.microcoaching.domain.refresher.RefresherKind
 import com.medtroniclabs.microcoaching.ui.learn.LearnModule
 import kotlinx.coroutines.launch
 
@@ -78,12 +79,12 @@ fun RefresherList(
     showHeader: Boolean = true,
     emptyMessage: String? = null,
 ) {
+    // Rendered in the order given: CoachingModuleStore.orderRefresherQueue already ranks
+    // these action-gap-first, then newest-assigned. Re-sorting here by source silently
+    // overrode that.
     val refreshers = modules
-        .sortedWith(compareBy { if (it.source == "gap") 0 else 1 })
 
-    Log.d(TAG, "input=${modules.size} " +
-        "(gap=${refreshers.count { it.source == "gap" }} " +
-        "fallback=${refreshers.count { it.source == "fallback" }})")
+    Log.d(TAG, "input=${modules.size} kinds=${modules.groupingBy { it.refresherKind }.eachCount()}")
 
     // ── Fixed-height section mode (home ModulesScreen) ──────────────────────────
     // Always visible; constant height; tiles scroll inside when they overflow; an
@@ -217,41 +218,24 @@ private fun MoreScrollHint(modifier: Modifier = Modifier, onClick: () -> Unit) {
     }
 }
 
-/** One refresher tile, with the drill-size meta resolved from the module. */
+/** One refresher tile. Both the label and the meta come from the kind, so the tile promises
+ *  exactly what opening it delivers. */
 @Composable
 private fun RefresherTileItem(module: LearnModule, onSelect: (LearnModule) -> Unit) {
-    // Show the refresher drill size = "to-reinforce" count (wrong + never-answered),
-    // which matches what primeRefresherQuiz presents. NOT wrongQuestionCount
-    // (wrong-only) — that's 0 for a never-attempted gap card and would render "0
-    // questions" while the quiz has N. Fall back to the total when not computed yet
-    // or when it resolves to 0.
-    val count = module.reinforceQuestionCount?.takeIf { it > 0 }
-        ?: module.questionCount
+    val kind = module.refresherKind
+    // Drill size for the kinds that drill; card count for the one that doesn't. A
+    // Learning tile reading "0 questions" is the mismatch this whole path exists to avoid.
+    val meta = if (kind == RefresherKind.LEARNING) {
+        pluralStringResource(R.plurals.morning_card_meta_cards, module.cardCount, module.cardCount)
+    } else {
+        val count = module.reinforceQuestionCount?.takeIf { it > 0 } ?: module.questionCount
+        pluralStringResource(R.plurals.refresher_meta_quiz, count, count)
+    }
     RefresherTile(
-        category = stringResource(refresherTypeLabelFor(module)),
+        kind = kind,
         title = module.title,
-        meta = pluralStringResource(R.plurals.refresher_meta_quiz, count, count),
-        isCritical = module.clinicalDomain.equals("emergency", ignoreCase = true),
-        isGap = module.source == "gap",
-        severity = module.severity,
+        meta = meta,
         thumbnailUrl = module.thumbnailUrl,
         onClick = { onSelect(module) },
     )
-}
-
-/**
- * Content-type label for a refresher, derived from what the module actually
- * carries: lesson cards + quiz → Microcoaching; cards only → Learning card;
- * quiz only → Quiz. (Today every refresher ships both, so this resolves to
- * Microcoaching, but the cards-only / quiz-only shapes are handled too.)
- */
-private fun refresherTypeLabelFor(module: LearnModule): Int {
-    // Counts only — list tiles must not parse the (now-slim) blobs. See LearnModule.
-    val hasCards = module.cardCount > 0
-    val hasQuiz = module.questionCount > 0
-    return when {
-        hasCards && hasQuiz -> R.string.refresher_type_microcoaching
-        hasCards -> R.string.refresher_type_learning_card
-        else -> R.string.refresher_type_quiz
-    }
 }

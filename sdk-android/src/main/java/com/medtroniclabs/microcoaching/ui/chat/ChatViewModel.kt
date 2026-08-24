@@ -12,8 +12,14 @@ import com.medtroniclabs.microcoaching.ui.chat.ChatMessage
 import com.medtroniclabs.microcoaching.ui.chat.ChatRole
 import com.medtroniclabs.microcoaching.ui.chat.MessageSource
 import com.medtroniclabs.microcoaching.data.repository.ChatRepositoryImpl
+import com.medtroniclabs.microcoaching.ai.model.LocalModelChoice
 import com.medtroniclabs.microcoaching.ai.model.ModelState
+import com.medtroniclabs.microcoaching.ai.model.isTransferInFlight
 import com.medtroniclabs.microcoaching.ai.inference.SharedInferenceRouter
+import com.medtroniclabs.microcoaching.domain.decision.AnswerMode
+import com.medtroniclabs.microcoaching.domain.decision.AnswerModeInputs
+import com.medtroniclabs.microcoaching.domain.decision.resolveAnswerMode
+import com.medtroniclabs.microcoaching.ui.screens.components.toAiDownloadItemState
 import com.medtroniclabs.microcoaching.ai.retrieval.ChatRefusal
 import com.medtroniclabs.microcoaching.ai.retrieval.GroundingChunk
 import com.medtroniclabs.microcoaching.ai.retrieval.GroundingSelector
@@ -21,6 +27,8 @@ import com.medtroniclabs.microcoaching.ai.retrieval.ModuleKnowledgeIndex
 import com.medtroniclabs.microcoaching.ai.retrieval.OffTopicGuard
 import com.medtroniclabs.microcoaching.ai.retrieval.ScopeClassifier
 import com.medtroniclabs.microcoaching.ai.voice.CoachingTtsHelper
+import com.medtroniclabs.microcoaching.ai.voice.TtsState
+import com.medtroniclabs.microcoaching.ai.voice.ttsLocaleFor
 import com.medtroniclabs.microcoaching.ai.voice.stt.SttModelState
 import com.medtroniclabs.microcoaching.network.RagQueryRequest
 import com.medtroniclabs.microcoaching.network.RagQueryResponse
@@ -43,6 +51,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -73,15 +83,14 @@ class ChatViewModel(
     internal val chatRepo = ChatRepositoryImpl(db.chatMessageDao())
 
     // Shared, ref-counted: an embedded CoachingChatFragment and the chat bottom
-    // sheet can be alive simultaneously — per-VM routers meant two engines on
-    // the same .task (double model memory, native MediaPipe crash). Paired
-    // with SharedInferenceRouter.release() in onCleared.
+    // sheet can be alive simultaneously, and per-VM routers meant two engines on the
+    // same model file — double the memory, and a native crash. Paired with
+    // SharedInferenceRouter.release() in onCleared.
     internal val inferenceRouter = SharedInferenceRouter.acquire(config)
-    // TTS locale must track the SDK language, NOT be hardcoded to Bangla — the
-    // chat message text is now language-matched (an English app shows/speaks the
-    // EN translation of the bn-only backend answer; Bangla speaks bn). A Bangla
-    // voice reading English text is what produced the "mixed BN+EN" audio.
-    // Mirrors LearnViewModel.ttsLocaleForSdkLanguage().
+    // TTS locale tracks the SDK language rather than being hardcoded to Bangla: chat
+    // message text is language-matched (an English app shows and speaks the EN
+    // translation of a bn-only backend answer), and a Bangla voice reading English text
+    // is unintelligible.
     internal val tts = CoachingTtsHelper(application.applicationContext, ttsLocaleForSdkLanguage())
     // Lazy because it depends on `session` which is declared below.
     internal val eventRecorder: EventRecorder by lazy {
@@ -115,18 +124,24 @@ class ChatViewModel(
         sdk.modelManager.cachedModelSizeBytes(),
     )
 
-    fun setPreferOnline(value: Boolean) = chatModePrefs.setPreferOnline(value)
+    /**
+     * Chunks whose Bengali side has already been translated for the model, keyed by chunkId.
+     * Cards recur heavily across a session — the same module answers many questions — and each
+     * miss costs an on-device translate of up to a full card body.
+     */
+    private val readableGroundingCache = LinkedHashMap<String, GroundingChunk>()
+
+    fun setPreferOnline(value: Boolean) {
+        Log.i(TRACE_TAG, "mode preference → ${if (value) "online" else "on-device"}")
+        chatModePrefs.setPreferOnline(value)
+    }
 
     /**
-     * The TTS voice locale for the chat, derived from the SDK language so the
-     * spoken voice matches the (now language-matched) message text. English →
-     * en-US, Bangla → bn-BD. Read once at VM construction, consistent with the
-     * lesson player; a mid-session language switch recreates the chat surface.
+     * The TTS voice locale for the chat, derived from the SDK language so the spoken
+     * voice matches the (language-matched) message text. Read once at VM construction;
+     * a mid-session language switch recreates the chat surface.
      */
-    internal fun ttsLocaleForSdkLanguage(): Locale = when (sdk.language) {
-        Language.ENGLISH -> Locale.US
-        Language.BANGLA -> Locale("bn", "BD")
-    }
+    internal fun ttsLocaleForSdkLanguage(): Locale = ttsLocaleFor(sdk.language)
 
     /**
      * Resolves a string resource through the SDK-configured locale rather than
@@ -191,182 +206,138 @@ class ChatViewModel(
         sdk.ensureChatKnowledgeIndex()
         viewModelScope.launch { initializeModel() }
         observeModelState()
-        observeVoiceForAutoEnter()
+        observeAnswerModeInputs()
     }
 
     /**
-     * Observes [ModelManager.state] so the UI reacts to download progress, failure, and success
-     * without the user having to manually refresh.
+     * Recomputes the published answer mode whenever anything it derives from changes.
      *
-     * - [ModelState.Downloading]     → update progress bar while download is in flight
-     * - [ModelState.DownloadFailed]  → clear the spinner so the user can retry
-     * - [ModelState.Ready]           → model landed; mark the AI card done and only
-     *                                  enter chat once the voice pack is ready too
-     *                                  (see [maybeAutoEnterChat]) — no more silent auto-jump.
+     * [ChatUiState.Ready.answerMode] is derived state, and every input to it moves
+     * independently of the model's own lifecycle: the user flips the mode preference,
+     * connectivity comes and goes, consent is granted or withdrawn. Without this the state is
+     * only refreshed when [ModelState] emits — so choosing a mode would write the preference
+     * and leave the bar and the sheet's selection showing the old one, which looks like the tap
+     * did nothing at all. (Routing itself reads the preference live at send time, so only the
+     * display was ever stale.)
+     *
+     * [ModelState] is deliberately not in this combine — [observeModelState] owns it, because
+     * it also has to load the engine, which this must not do.
+     */
+    private fun observeAnswerModeInputs() {
+        viewModelScope.launch {
+            combine(
+                chatModePrefs.preferOnline,
+                sdk.networkAvailable,
+                sdk.localModelPrefs.choice,
+            ) { preferOnline, connected, choice -> Triple(preferOnline, connected, choice) }
+                // The first emission repeats what chat open already published; dropping it
+                // avoids overwriting a freshly built state with an identical one.
+                .drop(1)
+                .collect { (preferOnline, connected, choice) ->
+                    Log.i(
+                        TRACE_TAG,
+                        "answer-mode inputs changed — pref=${if (preferOnline) "online" else "on-device"} " +
+                            "net=$connected consent=$choice eligible=${!sdk.isLowEndDevice} " +
+                            "→ ${resolveCurrentAnswerMode()}",
+                    )
+                    refreshModelUi()
+                }
+        }
+    }
+
+    /**
+     * Mirrors [ModelManager.state] into the chat state so the mode bar reflects the model's
+     * lifecycle without the user refreshing anything.
+     *
+     * Only ever updates a [ChatUiState.Ready]: chat no longer waits on the model, so there is
+     * no separate screen to drive and no state where a download transition needs to move the
+     * user somewhere. The one side effect is loading the engine when a download completes
+     * mid-session, which is what lets an opt-in take effect without reopening chat.
      */
     internal fun observeModelState() {
         viewModelScope.launch {
             sdk.modelManager.state.collect { modelState ->
-                when (modelState) {
-                    is ModelState.Downloading -> {
-                        _uiState.update {
-                            when (it) {
-                                is ChatUiState.SetupRequired -> it.copy(
-                                    isDownloading = true,
-                                    isPaused = false,
-                                    downloadProgress = modelState.progressPercent,
-                                    downloadBytesDownloaded = modelState.bytesDownloaded,
-                                    downloadTotalBytes = modelState.totalBytes,
-                                )
-                                is ChatUiState.Ready -> it.copy(
-                                    isModelDownloading = true,
-                                    modelDownloadProgress = modelState.progressPercent,
-                                    modelDownloadBytesDownloaded = modelState.bytesDownloaded,
-                                    modelDownloadTotalBytes = modelState.totalBytes,
-                                )
-                                else -> it
-                            }
-                        }
-                    }
-                    is ModelState.Paused -> {
-                        _uiState.update {
-                            when (it) {
-                                is ChatUiState.SetupRequired -> it.copy(
-                                    isDownloading = false,
-                                    isPaused = true,
-                                    downloadProgress = modelState.progressPercent,
-                                )
-                                else -> it
-                            }
-                        }
-                    }
-                    is ModelState.DownloadFailed -> {
-                        _uiState.update {
-                            when (it) {
-                                is ChatUiState.SetupRequired -> it.copy(
-                                    isDownloading = false,
-                                    isPaused = false,
-                                    downloadProgress = -1,
-                                )
-                                is ChatUiState.Ready -> it.copy(isModelDownloading = false, modelDownloadProgress = -1)
-                                else -> it
-                            }
-                        }
-                    }
-                    is ModelState.Ready -> {
-                        when (val currentState = _uiState.value) {
-                            is ChatUiState.Ready -> {
-                                // Model just finished downloading while chat is already open.
-                                // Must call initializeIfModelPresent() to actually load the inference
-                                // engine — just setting modelPresent = true leaves activeService null,
-                                // causing "No response available" on the next message send.
-                                inferenceRouter.initializeIfModelPresent()
-                                _uiState.update {
-                                    (it as? ChatUiState.Ready)?.copy(
-                                        modelPresent = inferenceRouter.isModelAvailable,
-                                        isModelDownloading = false,
-                                        modelDownloadProgress = -1,
-                                    ) ?: it
-                                }
-                            }
-                            is ChatUiState.Loading -> {
-                                // initializeModel() is already in flight (it set
-                                // _uiState to Loading on entry and the launched
-                                // coroutine hasn't completed yet). Calling
-                                // initializeModel() again here would race the
-                                // first call and cause MediaPipe's LLM engine to
-                                // load the same .task file twice on different
-                                // threads — that's the native crash we hit in
-                                // libllm_inference_engine_jni.so. Skip; the
-                                // existing init will set Ready when it finishes.
-                                @Suppress("UNUSED_VARIABLE")
-                                val ignored = currentState
-                            }
-                            is ChatUiState.SetupRequired -> {
-                                // Model is downloaded — mark the AI card done and
-                                // enable the manual "Go to chat" button. Do NOT
-                                // auto-jump into chat here: entering waits until the
-                                // voice pack is ready too (maybeAutoEnterChat). The
-                                // user can still tap "Go to chat" now — voice keeps
-                                // downloading in the in-chat background banner.
-                                _uiState.update {
-                                    (it as? ChatUiState.SetupRequired)?.copy(
-                                        aiReady = true,
-                                        isDownloading = false,
-                                        isPaused = false,
-                                    ) ?: it
-                                }
-                                maybeAutoEnterChat()
-                            }
-                            else -> maybeAutoEnterChat()
-                        }
-                    }
-                    is ModelState.LoadFailed -> {
-                        // Keep the "downloaded" fact honest. onModelLoadFailed only
-                        // deletes a *truncated* file; a complete-but-unloadable file
-                        // stays on disk. If it's still present, show it as ready
-                        // (→ "Go to chat" retries the load) rather than a Download CTA
-                        // that would wipe + re-fetch a good file — the on-device loop.
-                        val present = sdk.modelManager.isModelPresent()
-                        _uiState.value = ChatUiState.SetupRequired(
-                            aiRequired = true,
-                            aiReady = present,
-                            aiSizeBytes = aiSizeBytes.value,
-                        )
-                    }
-                    is ModelState.Idle -> {
-                        // Hit by cancelDownload — partial file is gone, reset the UI
-                        // back to the initial "Download AI Model" CTA (keep aiRequired).
-                        _uiState.update {
-                            when (it) {
-                                is ChatUiState.SetupRequired ->
-                                    ChatUiState.SetupRequired(
-                                        aiRequired = it.aiRequired,
-                                        aiSizeBytes = it.aiSizeBytes,
-                                    )
-                                else -> it
-                            }
-                        }
-                    }
+                // Loading a model that just landed is deliberate and guarded: the router is
+                // idempotent, and answering keys on `engineLoaded`, so until this succeeds
+                // messages keep being served from retrieval rather than failing.
+                if (modelState is ModelState.Ready && sdk.localModelEnabled) {
+                    inferenceRouter.initializeIfModelPresent()
+                }
+                if (modelState is ModelState.Corrupt) {
+                    Log.e(
+                        TAG,
+                        "Model unusable: ${modelState.reason} " +
+                            "(${modelState.onDiskBytes} of ${modelState.expectedBytes} bytes, " +
+                            "canRetry=${modelState.canRetry})",
+                    )
+                }
+                _uiState.update { current ->
+                    (current as? ChatUiState.Ready)?.copy(
+                        answerMode = resolveCurrentAnswerMode(),
+                        modelDownload = modelState.toAiDownloadItemState(
+                            damagedReason = damagedReasonFor(modelState),
+                        ),
+                        modelSizeBytes = expectedModelSizeBytes(modelState),
+                        modelOnDiskBytes = sdk.modelManager.localModelSizeBytes(),
+                        modelEligible = !sdk.isLowEndDevice,
+                        modelEnabled = sdk.localModelPrefs.choice.value == LocalModelChoice.ENABLED,
+                        // A model in any state at all answers the offer's question, so the
+                        // card stops competing with the progress it would sit next to.
+                        showModelOffer = shouldOfferModel(),
+                    ) ?: current
                 }
             }
         }
     }
 
     /**
-     * Auto-enter chat only when everything the setup screen was waiting on is
-     * ready: the AI model (skipped on low-end) AND the Bengali voice pack (only
-     * relevant in BANGLA mode). If the model is ready but voice isn't, we stay on
-     * the setup screen with the "Go to chat" button enabled so the user can enter
-     * manually — voice then finishes in the in-chat background banner. TTS never
-     * gates entry (it's optional read-aloud and platform-delegated).
+     * Localized explanation for the states where the file exists but cannot be used. Empty for
+     * every other state, which needs no prose.
      */
-    internal fun maybeAutoEnterChat() {
-        val s = _uiState.value as? ChatUiState.SetupRequired ?: return
-        val aiOk = !s.aiRequired || s.aiReady
-        val voiceOk = sdk.language != Language.BANGLA ||
-            sdk.sttModelManager.state.value is SttModelState.Ready
-        if (aiOk && voiceOk) enterChat()
+    private fun damagedReasonFor(state: ModelState): String = when {
+        state is ModelState.Corrupt && state.canRetry ->
+            localizedString(R.string.chat_model_file_damaged)
+        // Past the re-download budget the card hides its action, so the wording must stop
+        // pointing at a button that is no longer there.
+        state is ModelState.Corrupt ->
+            localizedString(R.string.chat_model_file_damaged_no_retry)
+        state is ModelState.LoadFailed ->
+            localizedString(R.string.chat_model_load_failed_transient)
+        else -> ""
     }
 
     /**
-     * Observe the Bengali voice pack so that, once it lands while the user is
-     * still on the setup screen, we re-check the both-ready gate and auto-enter.
-     * The card's live progress is collected separately in [CoachingChatSurface];
-     * this observer exists solely to trigger the auto-enter transition.
+     * What a complete model should weigh. [ModelState.Corrupt] carries the figure the manager
+     * compared against, which is preferred over the background-resolved one so the card's two
+     * numbers describe the same comparison.
      */
-    internal fun observeVoiceForAutoEnter() {
-        if (sdk.language != Language.BANGLA) return
-        viewModelScope.launch {
-            sdk.sttModelManager.state.collect { sttState ->
-                if (sttState is SttModelState.Ready &&
-                    _uiState.value is ChatUiState.SetupRequired
-                ) {
-                    maybeAutoEnterChat()
-                }
-            }
-        }
-    }
+    private fun expectedModelSizeBytes(state: ModelState): Long? =
+        (state as? ModelState.Corrupt)?.expectedBytes ?: aiSizeBytes.value
+
+    /** Whether the dismissible model offer may be shown right now. */
+    internal fun shouldOfferModel(): Boolean =
+        sdk.localModelPrefs.shouldOfferModel(
+            deviceEligible = !sdk.isLowEndDevice,
+            networkAvailable = sdk.isNetworkAvailable(),
+        )
+
+    /**
+     * Resolves how the next message would be answered, from the state as it stands now.
+     *
+     * Read at each point the answer could change — sending a message, the model landing, a
+     * mode toggle — rather than cached, because connectivity and the engine both change
+     * without notice and a stale mode would promise a pipeline that is no longer there.
+     */
+    internal fun resolveCurrentAnswerMode(): AnswerMode = resolveAnswerMode(
+        AnswerModeInputs(
+            preferOnline = preferOnline.value,
+            networkAvailable = sdk.isNetworkAvailable(),
+            deviceEligible = !sdk.isLowEndDevice,
+            choice = sdk.localModelPrefs.choice.value,
+            modelReady = sdk.modelManager.state.value is ModelState.Ready,
+            engineLoaded = inferenceRouter.isModelAvailable,
+        ),
+    )
 
     /**
      * Kick off the small on-device language packs the moment chat opens, so they
@@ -412,76 +383,49 @@ class ChatViewModel(
     }
 
     /**
-     * Decide, on chat open, whether to show the on-device setup screen or go
-     * straight into chat — and kick off the small language packs either way.
+     * Open chat, and start the small on-device language packs alongside it.
      *
-     * - Low-end devices never download the AI model. They show the setup screen
-     *   only while a voice pack is still pending; otherwise they open straight
-     *   into retrieval-only chat (as before).
-     * - Capable devices without the Gemma model on disk show the setup screen
-     *   (AI card behind a manual Download button + auto-downloading voice pack).
-     * - Capable devices with the model present load the engine and open chat.
-     *
-     * The actual "enter chat" work (engine + history load) lives in
-     * [loadReadyChat] so the setup screen's "Go to chat" button and the
-     * both-ready auto-enter can reuse it via [enterChat].
+     * Unconditional: retrieval over the local index answers on any device with no network and
+     * no model, so there is nothing here worth waiting for. The on-device model and the voice
+     * pack both continue in the background and report themselves from inside chat — the model
+     * through the mode bar, the voice pack through its own banner above the input.
      */
     internal suspend fun initializeModel() {
         _uiState.value = ChatUiState.Loading
-
-        // Start the small on-device packs immediately (idempotent) so they
-        // download while the user is on the setup screen — not only after the AI
-        // model lands. Replaces the old SDK-init "wait for AI Ready, then STT" chain.
+        // Idempotent, and started before chat opens so a pack that is already close to done
+        // can land during the first few seconds of the session.
         autoStartOnDevicePacks()
         refreshAiSizeLabel()
-
-        val voicePending = sdk.language == Language.BANGLA &&
-            sdk.sttModelManager.state.value !is SttModelState.Ready
-
-        if (sdk.isLowEndDevice) {
-            if (voicePending) {
-                Log.i(TAG, "Low-end device — voice pack pending, showing setup screen")
-                _uiState.value = ChatUiState.SetupRequired(aiRequired = false)
-                return
-            }
-            loadReadyChat()
-            return
-        }
-
-        if (!sdk.modelManager.isModelPresent()) {
-            Log.i(TAG, "AI model not present — showing setup screen")
-            _uiState.value = currentSetupRequiredState(aiRequired = true)
-            return
-        }
-
         loadReadyChat()
     }
 
     /**
-     * Resolve the selected model's real download size in the background and patch
-     * it into a live [ChatUiState.SetupRequired] when it lands. Fire-and-forget:
-     * the size is informational and must never gate the setup screen. Nothing to
-     * patch once the user has entered chat.
+     * Resolve the selected model's real download size in the background and patch it into a
+     * live state when it lands. Fire-and-forget — the size is a label, so a failed lookup
+     * leaves the catalog's approximate constant in place and nothing else changes.
      */
     private fun refreshAiSizeLabel() {
-        if (sdk.isLowEndDevice) return   // No AI card on low-end devices.
+        // Nothing to label on hardware that will never be offered the model.
+        if (sdk.isLowEndDevice) return
         viewModelScope.launch {
             val resolved = runCatching { sdk.modelManager.resolveModelSizeBytes() }.getOrNull()
                 ?: return@launch
             if (aiSizeBytes.value == resolved) return@launch
             aiSizeBytes.value = resolved
-            (_uiState.value as? ChatUiState.SetupRequired)?.let {
-                _uiState.value = it.copy(aiSizeBytes = resolved)
+            _uiState.update { current ->
+                (current as? ChatUiState.Ready)?.copy(modelSizeBytes = resolved) ?: current
             }
         }
     }
 
     /**
-     * Actually enter chat: load history and (on capable devices) the inference
-     * engine, then emit [ChatUiState.Ready]. Low-end devices open in
-     * retrieval-only mode (`modelPresent=false`). On a capable device whose
-     * engine fails to load, fall back to the setup screen so the user can retry
-     * the download rather than typing into a non-functional model.
+     * Open chat: load history, and load the inference engine when the model is both consented
+     * to and present.
+     *
+     * A failed engine load is not a failed chat. Retrieval answers either way, so the failure
+     * is recorded, reported to the manager (which decides whether the file is worth keeping),
+     * and the session opens in [AnswerMode.ON_DEVICE_DIRECT] — the CHW can still ask
+     * questions. Only a history load that throws leaves chat genuinely unusable.
      */
     internal suspend fun loadReadyChat() {
         try {
@@ -489,115 +433,94 @@ class ChatViewModel(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            // Anything escaping here would strand _uiState on Loading, and
-            // [enterChat] refuses to re-enter from Loading — every later tap
-            // becomes a silent no-op behind a permanent spinner. Land on a state
-            // the user can retry from instead.
+            // Anything escaping here would strand _uiState on Loading, where every later tap
+            // is a silent no-op behind a permanent spinner. The exception text is a developer
+            // artefact, so it stays in logcat.
             Log.e(TAG, "loadReadyChat failed unexpectedly: ${e.message}", e)
-            _uiState.value = currentSetupRequiredState(aiRequired = !sdk.isLowEndDevice)
-                .copy(loadError = e.message ?: e::class.simpleName)
+            _uiState.value = ChatUiState.Error(
+                localizedString(R.string.chat_model_load_failed_transient),
+            )
         }
     }
 
     private suspend fun loadReadyChatInternal() {
         _uiState.value = ChatUiState.Loading
 
-        // Low-end devices skip the inference engine entirely. The chat opens
-        // straight to Ready and every message routes through BM25 → bodyBn
-        // (see sendMessage below). modelPresent=false signals downstream UI
-        // surfaces that we're in retrieval-only mode.
-        if (sdk.isLowEndDevice) {
-            Log.i(TAG, "Low-end device — initialising chat in retrieval-only mode")
-            val history = chatRepo.getRecentHistory(
-                chwId = sdk.currentCHWId.orEmpty(),
-                limit = HISTORY_LIMIT,
-            )
-            _uiState.value = ChatUiState.Ready(
-                messages = history,
-                modelPresent = false,
-                suggestedQuestions = loadSuggestions(),
-            )
-            backfillFaqTranslationsThenRefresh()
-            return
+        // Attempted only when the user has opted in and the file has passed validation. A
+        // download in flight is deliberately excluded: the worker is writing into the very
+        // file a load would map, and mid-transfer it is incomplete by definition.
+        if (sdk.localModelEnabled && sdk.modelManager.state.value is ModelState.Ready) {
+            loadInferenceEngine()
         }
 
-        // Load the engine, retrying briefly on failure. A model that JUST finished
-        // downloading can transiently fail to load (file still flushing / mmap race
-        // on slower physical devices). Retrying a couple of times with a short
-        // backoff clears the common case — critical, because the failure path below
-        // used to revert to a Download CTA whose re-tap wiped the (complete) file
-        // and re-downloaded it, an endless loop the user hit on device.
-        var service = inferenceRouter.initializeIfModelPresent()
-        var attempt = 1
-        while (service == null && attempt < MODEL_LOAD_MAX_ATTEMPTS && sdk.modelManager.isModelPresent()) {
-            Log.w(TAG, "Engine load returned null (attempt $attempt/${MODEL_LOAD_MAX_ATTEMPTS}) — retrying in ${MODEL_LOAD_RETRY_DELAY_MS}ms")
-            delay(MODEL_LOAD_RETRY_DELAY_MS)
-            service = inferenceRouter.initializeIfModelPresent()
-            attempt++
-        }
-
-        // No working local inference engine → fall back to the setup surface,
-        // regardless of whether the host configured a backend URL. Opening the
-        // chat surface here would render an input and suggestion chips over a
-        // model that can't answer, so chat is only "ready" once the engine loads.
-        if (service == null) {
-            // A present file that no bundled engine can EVER load (non-runnable
-            // selected variant, or modelPath pointing at a non-`.task` file such
-            // as a leftover `.litertlm`) is not a transient failure — retrying just
-            // bounces the user back to a re-enabled "Go to chat" forever. Surface an
-            // honest error instead of the silent retry loop. (Transient native/mmap
-            // failures fall through to the retry-friendly path below.)
-            if (sdk.modelManager.isModelPresent() && !inferenceRouter.canRunResolvedModel()) {
-                Log.e(TAG, "Present model cannot be loaded by any bundled engine — not retryable; surfacing error.")
-                _uiState.value = ChatUiState.Error(localizedString(R.string.chat_model_unsupported))
-                return
-            }
-            if (sdk.modelManager.isModelPresent()) {
-                // File on disk but engine couldn't load — let the manager decide
-                // whether to wipe it (truncated) or keep it for retry (size OK).
-                sdk.modelManager.onModelLoadFailed()
-            }
-            // Reflect reality: if a complete file is still on disk after that, the
-            // model IS downloaded → keep aiReady=true so the AI card shows "Done"
-            // and the user retries via "Go to chat" (which re-attempts the load).
-            // We must NOT show a Download button here — re-tapping it wipes and
-            // re-fetches a perfectly good file, the loop reported on device. Only
-            // when the file is genuinely gone (absent, or just deleted as truncated)
-            // do we fall back to the Download CTA.
-            // Carry the engine's reason back to the setup screen; without it the
-            // bounce is indistinguishable from the button doing nothing.
-            val loadError = inferenceRouter.lastLoadError
-            _uiState.value = if (sdk.modelManager.isModelPresent()) {
-                Log.e(TAG, "Engine failed to load a present model after $attempt attempt(s) — offering retry, not re-download")
-                currentSetupRequiredState(aiRequired = true)
-                    .copy(aiReady = true, loadError = loadError)
-            } else {
-                currentSetupRequiredState(aiRequired = true).copy(loadError = loadError)
-            }
-            return
-        }
-
-        // History is keyed on CHW, not session — sessionId is fresh per VM
-        // (it drives EventRecorder.sessionId for telemetry bucketing) and would
-        // always return an empty list. See [ChatRepositoryImpl.getRecentHistory].
+        // History is keyed on CHW, not session — sessionId is fresh per VM (it drives
+        // EventRecorder.sessionId for telemetry bucketing) and would always return an empty
+        // list. See [ChatRepositoryImpl.getRecentHistory].
         val history = chatRepo.getRecentHistory(
             chwId = sdk.currentCHWId.orEmpty(),
             limit = HISTORY_LIMIT,
         )
-        val seededQuestions = loadSuggestions()
+        val mode = resolveCurrentAnswerMode()
+        Log.i(TAG, "Chat open — answerMode=$mode lowEnd=${sdk.isLowEndDevice}")
         _uiState.value = ChatUiState.Ready(
             messages = history,
-            modelPresent = true,
-            suggestedQuestions = seededQuestions,
+            answerMode = mode,
+            modelDownload = sdk.modelManager.state.value.toAiDownloadItemState(
+                damagedReason = damagedReasonFor(sdk.modelManager.state.value),
+            ),
+            modelSizeBytes = aiSizeBytes.value,
+            modelOnDiskBytes = sdk.modelManager.localModelSizeBytes(),
+            modelEligible = !sdk.isLowEndDevice,
+            modelEnabled = sdk.localModelPrefs.choice.value == LocalModelChoice.ENABLED,
+            showModelOffer = shouldOfferModel(),
+            suggestedQuestions = loadSuggestions(),
         )
         backfillFaqTranslationsThenRefresh()
     }
 
     /**
-     * Manual "Go to chat" from the setup screen (also the target of the both-ready
-     * auto-enter). Guards against re-entry: setting [ChatUiState.Loading]
-     * synchronously closes the window where a concurrent [maybeAutoEnterChat]
-     * could launch a second engine load on the same .task file.
+     * Load the engine, retrying briefly. A model that has just finished downloading can
+     * transiently fail to load while the file is still flushing, and a short backoff clears
+     * that case before it is treated as a real failure.
+     *
+     * Failure is reported to the manager, which runs the structural check and decides between
+     * keeping the file for a retry and deleting wrong bytes. Nothing here changes the UI: the
+     * mode resolves to retrieval-only on its own once the engine is absent.
+     */
+    private suspend fun loadInferenceEngine() {
+        var service = inferenceRouter.initializeIfModelPresent()
+        var attempt = 1
+        while (service == null && attempt < MODEL_LOAD_MAX_ATTEMPTS && sdk.modelManager.isModelPresent()) {
+            Log.w(
+                TAG,
+                "Engine load returned null (attempt $attempt/$MODEL_LOAD_MAX_ATTEMPTS) — " +
+                    "retrying in ${MODEL_LOAD_RETRY_DELAY_MS}ms",
+            )
+            delay(MODEL_LOAD_RETRY_DELAY_MS)
+            service = inferenceRouter.initializeIfModelPresent()
+            attempt++
+        }
+        if (service != null) return
+
+        Log.e(
+            TAG,
+            "Engine failed to load after $attempt attempt(s), native cause: " +
+                "${inferenceRouter.lastLoadError} — answering from retrieval only",
+        )
+        // A present file that no bundled engine can ever load is a configuration problem, not
+        // a transient one; handing it to the manager would spend a corrupt-retry on bytes that
+        // are fine. Retrieval-only is the outcome either way.
+        if (sdk.modelManager.isModelPresent() && inferenceRouter.canRunResolvedModel()) {
+            sdk.modelManager.onModelLoadFailed()
+        }
+    }
+
+    /**
+     * Retry opening chat after [ChatUiState.Error].
+     *
+     * Guards against re-entry: setting [ChatUiState.Loading] synchronously closes the window
+     * where a second call could launch a concurrent engine load of the same model file,
+     * which crashes the native engine.
      */
     fun enterChat() {
         val current = _uiState.value
@@ -667,108 +590,67 @@ class ChatViewModel(
             }
 
             // ── Routing ──────────────────────────────────────────────────────
-            // Online (any device): backend RAG — higher quality, no local LLM needed.
-            // Offline: low-end uses BM25-only; normal device uses on-device Gemma + BM25.
-            //
-            // The chat now defaults to on-device: online is taken ONLY when the user
-            // has opted into it via the header mode chip AND connectivity is present.
-            // `preferOnline=false` (the default) forces the on-device pipeline even on
-            // a connected device.
-            val prefersOnline = preferOnline.value
+            // Resolved per turn rather than read from the UI: connectivity and the engine can
+            // both change between opening chat and pressing send.
+            val mode = resolveCurrentAnswerMode()
             val connected = sdk.isNetworkAvailable()
-            val online = prefersOnline && connected
-            val route = when {
-                online -> "ONLINE → backend RAG (POST /coaching/rag-query) — no on-device BM25/translation"
-                sdk.isLowEndDevice -> "OFFLINE low-end → BM25-only (no LLM)"
-                else -> "ON-DEVICE → Gemma + BM25"
-            }
-            // The one line that tells you which pipeline actually answered. NOTE the
-            // header chip reflects the *chosen* mode (prefer=... below); the route is
-            // gated by real connectivity — `net` is the live signal.
+            // The one line that tells you which pipeline actually answered. The mode bar shows
+            // the user's *choice*; `mode` here is what that choice resolved to.
             Log.i(
                 TRACE_TAG,
-                "──── turn ──── route=[$route] mode=${if (prefersOnline) "online(pref)" else "on-device(pref)"} " +
-                    "net=$connected lowEnd=${sdk.isLowEndDevice} " +
+                "──── turn ──── mode=$mode pref=${if (preferOnline.value) "online" else "on-device"} " +
+                    "net=$connected eligible=${!sdk.isLowEndDevice} " +
+                    "consent=${sdk.localModelPrefs.choice.value} " +
                     "lang=${sdk.language} strictness=${config.chatScopeStrictness} " +
                     "modelLoaded=${inferenceRouter.isModelAvailable} " +
                     "moduleFamilyId=${moduleFamilyId ?: "∅"} q=\"${tracePreview(trimmed)}\"",
             )
-            if (online) {
+            if (mode == AnswerMode.ONLINE) {
                 val handled = handleBackendRagMessage(trimmed)
                 if (handled) return@launch
-                // Online, but the backend RAG call failed for an infrastructure
-                // reason (network drop, non-2xx, timeout). Don't dead-end with
-                // "no response available" — fall through to the on-device pipeline
-                // and answer from the offline BM25 index. (A 2xx blank answer is
-                // handled inside handleBackendRagMessage as final — never reaches here.)
-                Log.i(TRACE_TAG, "backend-rag failed → on-device fallback (offline pipeline)")
+                // Online, but the backend RAG call failed for an infrastructure reason
+                // (network drop, non-2xx, timeout). Don't dead-end with "no response
+                // available" — fall through to the on-device pipeline and answer from the
+                // local index. (A 2xx blank answer is final inside handleBackendRagMessage
+                // and never reaches here.)
+                Log.i(TRACE_TAG, "backend-rag failed → on-device fallback")
             }
-            if (sdk.isLowEndDevice) {
-                handleLowEndMessage(trimmed)
-                return@launch
+            // Re-resolved for the fallback: the online attempt above may have failed
+            // precisely because connectivity dropped, and the on-device choice between
+            // rewording and serving the card as written is unaffected by that.
+            if (resolveOnDeviceMode() == AnswerMode.ON_DEVICE_ASSISTED) {
+                handleLocalGemmaMessage(trimmed, moduleFamilyId, currentState)
+            } else {
+                handleRetrievalOnlyMessage(trimmed)
             }
-            handleLocalGemmaMessage(trimmed, moduleFamilyId, currentState)
         }
     }
 
     /**
-     * Snapshot of `ConnectivityManager` state at telemetry-emission time. Mirrors
-     * the canonical values used by [sync.SyncApi.recordSyncAttempt] so the
-     * dashboard sees a consistent vocabulary across event families.
+     * Snapshot of `ConnectivityManager` state at telemetry-emission time. The
+     * `"online"` / `"offline"` pair is the vocabulary every event family writes
+     * to `network_state`, so the dashboard can compare across them.
      */
     internal fun currentNetworkState(): String =
         if (sdk.isNetworkAvailable()) "online" else "offline"
 
     /**
-     * Build a [ChatUiState.SetupRequired] seeded from the *current* [ModelState]
-     * snapshot — closes the race where a chat fragment opens mid-download and
-     * the StateFlow's first emission lands while `_uiState` is still [Loading],
-     * leaving the UI showing a "Download" button while a worker is actually in
-     * flight. Reading the state at the same moment we transition to SetupRequired
-     * guarantees the very first frame reflects reality.
+     * Which on-device pipeline would answer, ignoring connectivity and the online preference.
+     *
+     * Used for the fallback after a failed online attempt: [resolveCurrentAnswerMode] would
+     * still report [AnswerMode.ONLINE] there, since the preference and the network are both
+     * unchanged by the backend having failed.
      */
-    internal fun currentSetupRequiredState(aiRequired: Boolean): ChatUiState.SetupRequired {
-        // Size is orthogonal to the download state machine, so it's applied once
-        // here rather than threaded through every branch below.
-        return baseSetupRequiredState(aiRequired).copy(aiSizeBytes = aiSizeBytes.value)
-    }
-
-    private fun baseSetupRequiredState(aiRequired: Boolean): ChatUiState.SetupRequired {
-        return when (val s = sdk.modelManager.state.value) {
-            is ModelState.Downloading -> ChatUiState.SetupRequired(
-                isDownloading = true,
-                isPaused = false,
-                downloadProgress = s.progressPercent,
-                downloadBytesDownloaded = s.bytesDownloaded,
-                downloadTotalBytes = s.totalBytes,
-                aiRequired = aiRequired,
-            )
-            is ModelState.Paused -> ChatUiState.SetupRequired(
-                isDownloading = false,
-                isPaused = true,
-                downloadProgress = s.progressPercent,
-                aiRequired = aiRequired,
-            )
-            is ModelState.DownloadFailed -> ChatUiState.SetupRequired(
-                isDownloading = false,
-                isPaused = false,
-                downloadProgress = -1,
-                aiRequired = aiRequired,
-            )
-            is ModelState.Ready -> ChatUiState.SetupRequired(
-                aiRequired = aiRequired,
-                aiReady = true,
-            )
-            is ModelState.LoadFailed -> ChatUiState.SetupRequired(
-                // A complete-but-unloadable file is kept on disk; treat it as
-                // downloaded so the UI offers a load retry, not a re-download.
-                aiRequired = aiRequired,
-                aiReady = sdk.modelManager.isModelPresent(),
-            )
-            else -> ChatUiState.SetupRequired(aiRequired = aiRequired)
-        }
-    }
-
+    internal fun resolveOnDeviceMode(): AnswerMode = resolveAnswerMode(
+        AnswerModeInputs(
+            preferOnline = false,
+            networkAvailable = false,
+            deviceEligible = !sdk.isLowEndDevice,
+            choice = sdk.localModelPrefs.choice.value,
+            modelReady = sdk.modelManager.state.value is ModelState.Ready,
+            engineLoaded = inferenceRouter.isModelAvailable,
+        ),
+    )
     /**
      * Returns the suggestions to display above the chat input.
      *
@@ -789,6 +671,68 @@ class ChatViewModel(
      * served text matches the SDK language — an English user never sees raw Bengali.
      * Empty when the chunk carries no body on either side.
      */
+    /**
+     * Returns [chunks] with an English side, translating the Bengali one where it is missing.
+     *
+     * The model is always prompted in English — in Bangla mode the question is translated
+     * first — while the corpus is Bengali-authored, so without this the reference block hands a
+     * 270M model text it cannot read. It then ignores the references and answers from
+     * pre-training, and [OutputValidator.groundednessScore] compares English output against
+     * Bengali references, which is zero overlap by arithmetic rather than by quality. The floor
+     * discards every answer and the served text is always the card verbatim.
+     *
+     * Translating here fixes both consumers at once, which is why the result must be passed to
+     * the prompt builder *and* the groundedness check: translating only for the prompt leaves
+     * the gate still comparing across languages, and nothing changes.
+     *
+     * A failed or unavailable translation returns the chunk untouched rather than storing the
+     * passthrough, so a missing language pack behaves exactly as before instead of filling the
+     * English fields with Bengali.
+     */
+    internal suspend fun readableGrounding(chunks: List<GroundingChunk>): List<GroundingChunk> {
+        var freshlyTranslated = 0
+        var cached = 0
+        val result = chunks.map { chunk ->
+            if (!chunk.bodyEn.isNullOrBlank() || chunk.bodyBn.isNullOrBlank()) return@map chunk
+            readableGroundingCache[chunk.chunkId]?.let { cached++; return@map it }
+
+            val body = sdk.translator.translateBnToEnResult(chunk.bodyBn)
+            if (!body.translated) return@map chunk
+            // Titles carry the topic words a rephrase is most likely to reuse, so they are
+            // worth translating too; a failure there is not worth discarding the body for.
+            val title = chunk.titleBn
+                ?.let { sdk.translator.translateBnToEnResult(it) }
+                ?.takeIf { it.translated }
+                ?.text
+            val readable = chunk.copy(titleEn = title ?: chunk.titleEn, bodyEn = body.text)
+            cacheReadableGrounding(readable)
+            freshlyTranslated++
+            readable
+        }
+        // Reports how many chunks the model can actually READ, which is the number that
+        // matters when judging an answer. Counting only fresh translations understated it:
+        // cards recur across turns, so most chunks arrive from the cache already readable,
+        // and a low count looked like a translation failure rather than a cache hit.
+        val readable = result.count { !it.bodyEn.isNullOrBlank() }
+        Log.i(
+            TRACE_TAG,
+            "grounding readable by the model: $readable of ${chunks.size} " +
+                "(translated now=$freshlyTranslated, from cache=$cached)",
+        )
+        return result
+    }
+
+    /**
+     * Remembers a translated chunk so recurring cards are not re-translated every turn, with a
+     * bound so a long session cannot accumulate the whole corpus in memory.
+     */
+    private fun cacheReadableGrounding(chunk: GroundingChunk) {
+        if (readableGroundingCache.size >= READABLE_GROUNDING_CACHE_MAX) {
+            readableGroundingCache.keys.firstOrNull()?.let(readableGroundingCache::remove)
+        }
+        readableGroundingCache[chunk.chunkId] = chunk
+    }
+
     internal suspend fun resolveCardBody(
         chunk: GroundingChunk,
         isBangla: Boolean,
@@ -803,6 +747,18 @@ class ChatViewModel(
             sdk.translator.translateBnToEn(secondary).ifBlank { secondary }
         }
     }
+
+    /**
+     * The clinician-authored text this chunk answers with: the linked quiz explanation when
+     * it has one, else the card body clipped to a whole sentence.
+     *
+     * The single definition of "what this card says", so the retrieval-only path serves
+     * exactly the text the model-backed path grounds on. Two definitions drifted apart —
+     * one truncated mid-card and title-prefixed, the other whole — which meant the model
+     * was rewording something the fallback would never have shown.
+     */
+    internal suspend fun servedCardText(chunk: GroundingChunk, isBangla: Boolean): String =
+        resolveExplanation(chunk, isBangla) ?: clipToCompleteSentence(resolveCardBody(chunk, isBangla))
 
     /**
      * The linked quiz explanation in the SDK language, or null when the chunk has
@@ -913,33 +869,35 @@ class ChatViewModel(
     }
 
     /**
-     * Tap-handler for a source-document chip. Fetches the short-lived
-     * presigned URL from the backend and launches
-     * [com.medtroniclabs.microcoaching.ui.document.DocumentPreviewActivity]
-     * to render it. Silently no-ops when network is unavailable — the chip is
-     * already greyed-out in that state by
-     * [com.medtroniclabs.microcoaching.MicroCoachingSDK.networkAvailable].
+     * Tap-handler for a source-document chip. Launches
+     * [com.medtroniclabs.microcoaching.ui.document.DocumentPreviewActivity] with
+     * everything the cited ref knows, and that screen owns resolving the document
+     * to a file and reporting its own unavailable / offline states.
      *
      * @param citedPage 1-indexed PDF page the citation points to — sourced from the
-     *   BM25-matched card's `source_pages`. The viewer opens in single-page mode
-     *   showing ONLY this page (the citation is a specific excerpt, so the rest of
-     *   the document is deliberately not browsable here — the "Open in browser"
-     *   fallback still reaches the full doc). Null falls back to page 1; ignored
+     *   BM25-matched card's `source_pages`. The viewer opens the WHOLE document and
+     *   scrolls to this page: a citation is a starting point, and the CHW routinely
+     *   needs the surrounding pages to act on it. Null falls back to page 1; ignored
      *   entirely for image / external formats.
      */
     fun openSourceDocument(sourceDocumentId: String, fallbackTitle: String, citedPage: Int? = null) {
         if (sourceDocumentId.isBlank()) return
-        val originalFilename = (_uiState.value as? ChatUiState.Ready)?.messages
+        // The cited ref carries the URL and storage path the preview needs for a
+        // document that is in no synced catalogue — a document linked to no
+        // published module and assigned to nobody reaches neither, so without
+        // these the preview has nothing to download.
+        val ref = (_uiState.value as? ChatUiState.Ready)?.messages
             ?.flatMap { it.sourceDocuments }
             ?.firstOrNull { it.id == sourceDocumentId }
-            ?.originalFilename
         viewModelScope.launch {
             DocumentPreviewActivity.start(
                 context = getApplication<android.app.Application>(),
                 sourceDocumentId = sourceDocumentId,
                 title = fallbackTitle,
-                originalFilename = originalFilename,
-                selectedPage = citedPage,
+                originalFilename = ref?.originalFilename,
+                startPage = citedPage,
+                presignedUrl = ref?.presignedUrl,
+                storagePath = ref?.storagePath,
             )
         }
     }
@@ -1112,23 +1070,150 @@ class ChatViewModel(
         }
     }
 
-    fun speakText(text: String) = tts.speak(text)
+    /**
+     * Id of the message whose read-aloud was last started, or null. Paired with
+     * [CoachingTtsHelper.state] rather than trusted alone: the engine reports
+     * completion and failure through its own state, so a lingering id here is
+     * harmless once that state leaves [TtsState.Speaking].
+     */
+    private val _speakingMessageId = MutableStateFlow<Long?>(null)
+    val speakingMessageId: StateFlow<Long?> = _speakingMessageId.asStateFlow()
 
-    fun stopSpeaking() = tts.stop()
+    /** True when [messageId] is the message currently being read aloud. */
+    fun isSpeaking(messageId: Long): Boolean =
+        tts.state.value is TtsState.Speaking && _speakingMessageId.value == messageId
 
+    /**
+     * Read [messageId] aloud, or stop it if it is already playing — the speaker
+     * button is the same control for both, so a long answer can be cut short
+     * without waiting it out. Tapping a different message switches to it, since
+     * [CoachingTtsHelper.speak] flushes the queue.
+     */
+    fun toggleSpeak(messageId: Long, text: String) {
+        if (isSpeaking(messageId)) {
+            stopSpeaking()
+            return
+        }
+        _speakingMessageId.value = messageId
+        tts.speak(text) {
+            // Guard against clearing a newer utterance's id if this one finishes late.
+            if (_speakingMessageId.value == messageId) _speakingMessageId.value = null
+        }
+    }
+
+    fun stopSpeaking() {
+        _speakingMessageId.value = null
+        tts.stop()
+    }
+
+    /**
+     * Opt into the on-device model and start fetching it.
+     *
+     * Records consent before scheduling, so a download that survives process death is still
+     * backed by a stored choice when it lands.
+     */
+    fun enableLocalModel() {
+        if (sdk.isLowEndDevice) {
+            Log.i(TAG, "enableLocalModel ignored — device is not eligible for the on-device model")
+            return
+        }
+        sdk.localModelPrefs.setChoice(LocalModelChoice.ENABLED)
+
+        // A preserved file needs no download — but it does need the engine loaded, and that
+        // cannot be left to [observeModelState]. Opting out unloads the engine without
+        // touching ModelState, so the model is still Ready here; re-assigning Ready is a
+        // no-op emission (MutableStateFlow conflates equal values), the observer never runs,
+        // and answering silently stays retrieval-only. Loading explicitly is what makes
+        // re-opting-in work without deleting and refetching 304 MB.
+        if (sdk.modelManager.state.value is ModelState.Ready) {
+            Log.i(TRACE_TAG, "enableLocalModel: model already on disk — loading engine directly")
+            viewModelScope.launch {
+                loadInferenceEngine()
+                refreshModelUi()
+            }
+            return
+        }
+        requestModelDownload()
+    }
+
+    /**
+     * Opt out of the on-device model, optionally reclaiming its file.
+     *
+     * Order matters and is not interchangeable: consent is withdrawn first so no concurrent
+     * path can re-load the model, then the engine is unloaded, and only then is the file
+     * eligible for deletion. Deleting while the engine holds the file mapped is a native
+     * crash, and unloading before withdrawing consent leaves a window where an in-flight
+     * message reloads it.
+     *
+     * @param deleteFile true to remove the download and reclaim the space. When false the file
+     *   is kept, so opting back in costs nothing and needs no network.
+     */
+    fun disableLocalModel(deleteFile: Boolean) {
+        Log.i(TAG, "disableLocalModel(deleteFile=$deleteFile)")
+        sdk.localModelPrefs.setChoice(LocalModelChoice.DISABLED)
+        SharedInferenceRouter.forceUnload()
+        if (deleteFile) {
+            deleteLocalModel()
+        } else {
+            refreshModelUi()
+        }
+    }
+
+    /**
+     * Delete the model file and reclaim its space, leaving the stored choice untouched.
+     *
+     * Cancels an in-flight transfer first: without that, the worker would keep writing and
+     * recreate the file moments after it was removed.
+     */
+    fun deleteLocalModel() {
+        SharedInferenceRouter.forceUnload()
+        if (sdk.modelManager.state.value.isTransferInFlight()) {
+            sdk.modelManager.cancelDownload()
+        }
+        sdk.modelManager.deleteModelForUserOptOut()
+        refreshModelUi()
+    }
+
+    /** Dismiss the model offer without deciding, leaving it available in the answering sheet. */
+    fun dismissModelOffer() {
+        sdk.localModelPrefs.recordOfferDismissed()
+        refreshModelUi()
+    }
+
+    /**
+     * Re-project the model's state into the UI after a change the manager's own StateFlow does
+     * not announce — consent and offer dismissals are stored separately from [ModelState].
+     */
+    private fun refreshModelUi() {
+        val modelState = sdk.modelManager.state.value
+        _uiState.update { current ->
+            (current as? ChatUiState.Ready)?.copy(
+                answerMode = resolveCurrentAnswerMode(),
+                modelDownload = modelState.toAiDownloadItemState(damagedReasonFor(modelState)),
+                modelOnDiskBytes = sdk.modelManager.localModelSizeBytes(),
+                modelEnabled = sdk.localModelPrefs.choice.value == LocalModelChoice.ENABLED,
+                showModelOffer = shouldOfferModel(),
+            ) ?: current
+        }
+    }
+
+    /**
+     * Start or retry the download for a user who has already opted in.
+     *
+     * The manager can decline — most notably once the corrupt-file re-download budget is spent
+     * — so the UI is refreshed from its state rather than optimistically showing progress for
+     * work nobody is doing.
+     */
     fun requestModelDownload() {
         if (sdk.isLowEndDevice) {
-            Log.i(TAG, "requestModelDownload ignored — low-end device runs in retrieval-only mode")
+            Log.i(TAG, "requestModelDownload ignored — device is not eligible for the on-device model")
             return
         }
         sdk.modelManager.triggerDownload()
-        _uiState.update {
-            when (it) {
-                is ChatUiState.SetupRequired -> it.copy(isDownloading = true)
-                is ChatUiState.Ready -> it.copy(isModelDownloading = true, modelDownloadProgress = 0)
-                else -> it
-            }
+        if (!sdk.modelManager.state.value.isTransferInFlight()) {
+            Log.i(TAG, "requestModelDownload: manager did not start a download — leaving UI as-is")
         }
+        refreshModelUi()
     }
 
     /** User pressed Pause on the in-flight model download. */
@@ -1188,6 +1273,13 @@ class ChatViewModel(
         internal const val TRACE_TAG = "ChatTrace"
 
         /**
+         * Cap on [readableGroundingCache]. Three chunks per turn means this holds roughly the
+         * last twenty turns' worth of cards, well past the point where a session stops seeing
+         * new ones.
+         */
+        private const val READABLE_GROUNDING_CACHE_MAX = 64
+
+        /**
          * Grounding chunks retrieved per query and injected as reference cards.
          * 3 (was 2): the verified "Low BP 90/60" failure had the correct card at
          * rank 3. Three ~300-char references fit the prompt budget comfortably
@@ -1202,6 +1294,88 @@ class ChatViewModel(
 
         /** Sentence terminators recognised by [trimToCompleteSentence] — EN + Bangla danda. */
         private val SENTENCE_TERMINATORS = charArrayOf('.', '!', '?', '।')
+
+        /**
+         * Escape sequences the model sometimes emits as literal characters rather than as the
+         * whitespace they denote — a backslash followed by `n`, `r` or `t`, which arrives
+         * looking like `\n` in the middle of a sentence.
+         */
+        private val LITERAL_ESCAPE = Regex("""\\[nrt]""")
+
+        /** A complete reasoning block, including a multi-line body. */
+        private val THINK_SPAN = Regex("""<think>[\s\S]*?</think>""", RegexOption.IGNORE_CASE)
+
+        /** Opening tag of a reasoning block generation never closed. */
+        private const val THINK_OPEN = "<think>"
+
+        /**
+         * A leading clause that describes the prompt rather than answering the question,
+         * in either of the two shapes a model reaches for: an "according to X," preface,
+         * or "the X states that". Anchored at the start; nothing mid-answer is touched.
+         */
+        private val SOURCE_PREAMBLE = Regex(
+            """^(?:(?:based on|according to|as per|as stated in|from|per)\s+(?:the\s+)?""" +
+                """(?:context|information|text|reference|references|passage|card|above)[^,.:;]{0,40}[,:;]\s*""" +
+                """|(?:the\s+)?(?:context|information|text|reference|passage|card)\s+""" +
+                """(?:above\s+)?(?:mentions|states|says|provides|indicates|shows)\s+that\s+)""",
+            RegexOption.IGNORE_CASE,
+        )
+
+        /** Below this, what is left after stripping is not an answer — keep the original. */
+        private const val MIN_ANSWER_AFTER_STRIP = 20
+
+        /**
+         * Turn escape sequences the model wrote as text into real whitespace, then tidy it.
+         *
+         * The model has seen plenty of JSON and escaped source in pre-training and sometimes
+         * reproduces `\n` as two characters. Trimming cannot remove that — a backslash is not
+         * whitespace — so it reaches the CHW as visible punctuation at the start of an answer.
+         *
+         * Runs before the sentence-completeness trim, since a leading literal escape would
+         * otherwise be counted as content.
+         */
+        internal fun normalizeModelWhitespace(text: String): String =
+            LITERAL_ESCAPE.replace(text, " ")
+                // Collapse the runs the substitution can leave behind, and any the model
+                // produced itself, without joining separate paragraphs into one line.
+                .replace(Regex("[ \\t]{2,}"), " ")
+                .replace(Regex("\\n{3,}"), "\n\n")
+                .lines().joinToString("\n") { it.trim() }
+                .trim()
+
+        /**
+         * Remove a reasoning model's `<think>…</think>` spans, and an unclosed `<think>`
+         * along with everything after it.
+         *
+         * Thinking is disabled at the engine ([LiteRtLmService.enableThinking]), so this
+         * should find nothing; it exists because a bundle whose chat template ignores that
+         * would otherwise show the CHW the model deliberating as if it were clinical advice.
+         * An unclosed span means generation stopped inside the reasoning block and there is
+         * no answer to salvage — dropping the remainder routes the turn to the
+         * empty-response path rather than serving half a thought.
+         */
+        internal fun stripThinkSpans(text: String): String =
+            THINK_SPAN.replace(text, "")
+                .substringBefore(THINK_OPEN)
+                .trim()
+
+        /**
+         * Drop a leading clause that talks *about* the prompt instead of answering — "The
+         * context mentions that…", "Based on the information provided,…".
+         *
+         * The prompt asks for a direct answer and gives the card text no label to quote, so
+         * this should rarely fire; a small model reaches for the phrasing anyway, and a CHW
+         * being told what "the context" says is both jarring and useless — the source is
+         * shown as an attribution chip beside the answer. Conservative by construction: it
+         * strips only a recognised opener, only at the start, and only when a substantial
+         * answer remains, so a sentence that genuinely reports what the card does *not*
+         * cover survives intact.
+         */
+        internal fun stripSourcePreamble(text: String): String {
+            val stripped = SOURCE_PREAMBLE.replace(text.trimStart(), "")
+            if (stripped.length < MIN_ANSWER_AFTER_STRIP || stripped == text.trimStart()) return text.trim()
+            return stripped.replaceFirstChar { it.uppercaseChar() }.trim()
+        }
 
         /**
          * Cut a window-truncated response back to its last complete sentence.

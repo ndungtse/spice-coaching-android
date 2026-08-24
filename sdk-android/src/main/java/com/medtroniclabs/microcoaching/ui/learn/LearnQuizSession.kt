@@ -95,9 +95,9 @@ internal fun LearnViewModel.startQuiz() {
 
 /**
  * Refresher shortcut: jump straight from the module list to the quiz,
- * skipping the lesson-content state. Used by the v0.3.2 RefresherQuiz
- * bottom sheet. Telemetry path: `module_delivered` → `module_quiz_viewed` →
- * `module_quiz_attempted` (×N, per question) → `module_completed`.
+ * skipping the lesson-content state. Used by the RefresherQuiz bottom sheet.
+ * Telemetry path: `module_delivered` → `module_quiz_viewed` →
+ * `module_quiz_attempted` (×N, one per question).
  */
 internal fun LearnViewModel.selectModuleForQuiz(module: LearnModule) {
     activeModule = module
@@ -197,6 +197,7 @@ internal fun LearnViewModel.selectAnswer(questionIndex: Int, answerIndex: Int) {
             moduleVersion = activeModule?.moduleVersion,
             quizFamilyId = question.id,
             quizScorePct = scorePct,
+            behaviouralGapId = activeModule?.behaviouralGapId,
             triggerType = triggerTypeFor(activeModule?.source),
         )
     }
@@ -259,47 +260,25 @@ internal fun LearnViewModel.finishQuiz(deferSync: Boolean = false) {
     )
 
     viewModelScope.launch {
-        // Gap state is no longer mutated here: the per-question
-        // `module_quiz_attempted` events emitted by `selectAnswer` are the
-        // single input, and `OnDeviceGapStateEngine` derives gap state from
-        // them (replayed over the synced baseline). Keeping the baseline
-        // table backend-authored is what makes the merge correct.
-
-        // Persist module completion + emit quiz_completed telemetry.
+        // The per-question `module_quiz_attempted` events from `selectAnswer`
+        // are the only record of this attempt, on both sides: locally
+        // `OnDeviceGapStateEngine` replays them over the backend-authored
+        // `/sync/gaps` baseline, and the backend folds the same rows into
+        // `chw_module_quiz_progress`. An attempt-level roll-up written here
+        // would be counted a second time by both — a duplicate gap fold and a
+        // duplicate learning-points award — so this writes no event at all,
+        // only the local `chw_module_completion` row.
         sdk.onModuleQuizCompleted(
             moduleFamilyId = module.moduleFamilyId,
             moduleId = module.moduleId,
             scoreFraction = scorePercent / 100f,
             passed = passed,
         )
-        telemetry.recordCoachingEvent(
-            eventType = "module_quiz_attempted",
-            clinicalDomain = module.clinicalDomain,
-            cardType = "quiz",
-            moduleFamilyId = module.moduleFamilyId,
-            moduleId = module.moduleId,
-            moduleVersion = module.moduleVersion,
-            quizScorePct = scorePercent / 100f,
-            outcomeOverride = if (passed) "correct" else "wrong",
-            behaviouralGapId = module.behaviouralGapId,
-            triggerType = triggerTypeFor(module.source),
-        )
-        if (passed) {
-            telemetry.recordCoachingEvent(
-                eventType = "module_completed",
-                clinicalDomain = module.clinicalDomain,
-                cardType = "info",
-                moduleFamilyId = module.moduleFamilyId,
-                moduleId = module.moduleId,
-                moduleVersion = module.moduleVersion,
-            )
-        }
 
         // Quiz attempt is a meaningful milestone — flush the batch
         // immediately rather than waiting for the 15-min WorkManager tick.
         // The synced module_quiz_attempted events are how the backend
-        // records each answer; the legacy /coaching/quiz-answer endpoint
-        // was retired in v3. Then chain an inbound pull so the freshly-
+        // records each answer. Then chain an inbound pull so the freshly-
         // computed `chw_module_partial_completion` row lands locally and
         // the refresher / banner / morning-card filter reflect server
         // truth without waiting for the next 15-min tick.

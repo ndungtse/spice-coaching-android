@@ -1,5 +1,6 @@
 package com.medtroniclabs.microcoaching.ui.learn.modules
 
+import com.medtroniclabs.microcoaching.domain.refresher.RefresherKind
 import com.medtroniclabs.microcoaching.ui.learn.LearnModule
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -13,12 +14,10 @@ import org.junit.Test
  *    (always — completed modules still render here).
  *  - **Knowledge** = no longer a module partition (renders source documents now);
  *    `sections.knowledge` is always empty.
- *  - **Refresher** = **selector-authoritative**: `moduleType != "content_update"
- *    AND fromMorningCard`. A module is a refresher iff the morning-card selector
- *    emitted it (backend `/morning/cards` OR the on-device generator). There is NO
- *    mastery/completion/source/wrong-count gating — a completed or fully-mastered
- *    selector card still surfaces (it just sorts last), and a `fallback`-sourced
- *    card qualifies just like a `gap` one. `content_update` never qualifies.
+ *  - **Refresher** = `moduleType != "content_update"` AND the selector emitted it
+ *    (`fromMorningCard`) AND it still has something to ask (`refresherKind` non-null).
+ *    A `fallback`-sourced card qualifies just like a `gap` one; a finished one — the
+ *    classifier's null kind — does not. `content_update` never qualifies.
  *  - **No section** = a non-selector, non-training module. This is a categorisation
  *    outcome, NOT a "dropper": a selector card always lands in Refresher.
  *
@@ -36,6 +35,8 @@ class ModuleCategorizerTest {
         status: String = "assigned",
         moduleType: String = "initial_training",
         source: String? = null,
+        // Mirrors LearnModuleMapper: a selector card carries a kind unless it is finished.
+        refresherKind: RefresherKind? = if (fromMorningCard) RefresherKind.MICROCOACHING else null,
     ): LearnModule = LearnModule(
         moduleFamilyId = family,
         title = "title-$family",
@@ -45,6 +46,7 @@ class ModuleCategorizerTest {
         source = source,
         moduleType = moduleType,
         fromMorningCard = fromMorningCard,
+        refresherKind = refresherKind,
     )
 
     // ── Training rule (moduleType only) ───────────────────────────────────────
@@ -109,10 +111,18 @@ class ModuleCategorizerTest {
     }
 
     @Test
-    fun `Refresher includes a COMPLETED selector card (no completion drop)`() {
-        // Completion/mastery no longer hides a selector-provided module.
+    fun `Refresher keeps a completed selector card that still has something to ask`() {
+        // "completed" is a module-progress status, not the drill state — the kind decides.
         val m = module("a", fromMorningCard = true, source = "gap", status = "completed", moduleType = "refresher")
         assertTrue(ModuleCategorizer.categorize(listOf(m)).refreshers.any { it.moduleFamilyId == "a" })
+    }
+
+    @Test
+    fun `NOT a refresher once the classifier says it is finished`() {
+        // Null kind = nothing left to drill or read. This is the drop rule: without it a
+        // mastered refresher sat on the Practice Zone forever.
+        val m = module("a", fromMorningCard = true, source = "quiz", moduleType = "refresher", refresherKind = null)
+        assertTrue(ModuleCategorizer.categorize(listOf(m)).refreshers.isEmpty())
     }
 
     @Test

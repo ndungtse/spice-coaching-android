@@ -61,4 +61,18 @@ class SectionStateMapperTest {
         assertEquals(SectionState.Failed<List<String>>(CoachingError.Offline), state)
         assertTrue((state as SectionState.Failed).error.isOffline)
     }
+
+    @Test
+    fun `while a refresh is in flight, a stale failure holds Loading instead of erroring`() {
+        val state = sectionStateFor(rows = emptyList<String>(), outcome = failed, offline = false, syncing = true)
+
+        assertEquals(SectionState.Loading, state)
+    }
+
+    @Test
+    fun `cached rows still show during a refresh even while syncing`() {
+        val state = sectionStateFor(rows = listOf("a"), outcome = failed, offline = false, syncing = true)
+
+        assertEquals(SectionState.Ready(listOf("a"), stale = true), state)
+    }
 }

@@ -6,11 +6,9 @@ import kotlinx.coroutines.flow.StateFlow
 /**
  * Common interface for all on-device LLM inference engines.
  *
- * Implementations:
- *   - [GemmaService] — MediaPipe, loads any Gemma `.task` variant from the model catalog
- *
- * The implementation is selected at runtime by [InferenceRouter]
- * based on the model file extension.
+ * [InferenceRouter] resolves the implementation from the model file extension.
+ * [LiteRtLmService] is the one that ships; the interface earns its place by keeping every
+ * caller — chat included — unaware of which engine answered.
  */
 interface LLMService {
 
@@ -57,7 +55,7 @@ interface LLMService {
 
 /** Configuration for loading and running an LLM. */
 data class LLMConfiguration(
-    /** Absolute path to the model file (.task). */
+    /** Absolute path to the model file (`.task` or `.litertlm`). */
     val modelPath: String,
     /** Maximum number of tokens to generate per response. */
     val maxTokens: Int = 1024,
@@ -65,6 +63,8 @@ data class LLMConfiguration(
     val topK: Int = 40,
     /** Sampling temperature. */
     val temperature: Float = 0.8f,
+    /** Nucleus-sampling cutoff. */
+    val topP: Float = 0.95f,
     /** Preferred inference backend. CPU works on all devices; GPU is faster on high-end. */
     val preferredBackend: InferenceBackend = InferenceBackend.CPU,
 )

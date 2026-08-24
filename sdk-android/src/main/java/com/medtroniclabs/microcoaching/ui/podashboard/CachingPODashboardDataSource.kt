@@ -58,7 +58,7 @@ class CachingPODashboardDataSource(
     }
 
     // ── Online-only — delegate straight through ─────────────────────────────
-    override suspend fun loadSkDetail(skId: String) = delegate.loadSkDetail(skId)
+    override suspend fun loadSkDetail(skId: String, range: DateRange) = delegate.loadSkDetail(skId, range)
     override suspend fun loadSearchedModuleDetail(moduleId: String, range: DateRange) =
         delegate.loadSearchedModuleDetail(moduleId, range)
     override suspend fun loadSuggestionDetail(suggestionId: String) = delegate.loadSuggestionDetail(suggestionId)

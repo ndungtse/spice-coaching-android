@@ -12,13 +12,19 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -109,9 +115,37 @@ internal fun formatVideoDuration(durationMs: Long): String {
 }
 
 /**
- * Download / downloading / remove-download action for a training video, shared
- * by the featured card and the list row. A determinate ring while downloading (or
- * an indeterminate spinner until the size is known), else a toggle icon.
+ * Confirmation for removing a downloaded video. Shared with the player's own header
+ * action so both destructive taps warn identically.
+ *
+ * Worth the friction: the icon for "downloaded" is a bare tick, removal deletes the file
+ * outright, and offline a CHW cannot get it back — so a mis-tap costs them the video
+ * until they next have a connection.
+ */
+@Composable
+fun RemoveDownloadDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.training_videos_remove_dialog_title)) },
+        text = { Text(stringResource(R.string.training_videos_remove_dialog_message)) },
+        confirmButton = {
+            TextButton(onClick = { onDismiss(); onConfirm() }) {
+                Text(
+                    text = stringResource(R.string.training_videos_remove_dialog_confirm),
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) }
+        },
+    )
+}
+
+/**
+ * Download / downloading / remove-download action for a training video. A determinate
+ * ring while downloading (or an indeterminate spinner until the size is known), else a
+ * toggle icon. Removal goes through [RemoveDownloadDialog]; downloading starts at once.
  */
 @Composable
 fun VideoDownloadButton(
@@ -120,6 +154,10 @@ fun VideoDownloadButton(
     modifier: Modifier = Modifier,
     tint: Color = SpiceBlue,
 ) {
+    var confirmRemove by rememberSaveable { mutableStateOf(false) }
+    if (confirmRemove) {
+        RemoveDownloadDialog(onConfirm = onToggle, onDismiss = { confirmRemove = false })
+    }
     when (state) {
         is VideoDownloadState.Downloading -> Box(
             modifier = modifier.size(48.dp),
@@ -135,7 +173,12 @@ fun VideoDownloadButton(
                 CircularProgressIndicator(color = tint, modifier = Modifier.size(22.dp))
             }
         }
-        else -> IconButton(onClick = onToggle, modifier = modifier) {
+        else -> IconButton(
+            onClick = {
+                if (state == VideoDownloadState.Downloaded) confirmRemove = true else onToggle()
+            },
+            modifier = modifier,
+        ) {
             val (icon, desc) = when (state) {
                 VideoDownloadState.Downloaded ->
                     Icons.Filled.DownloadDone to R.string.training_videos_remove_download

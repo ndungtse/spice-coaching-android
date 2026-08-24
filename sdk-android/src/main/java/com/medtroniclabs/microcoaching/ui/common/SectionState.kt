@@ -76,13 +76,19 @@ fun <T> SectionContent(
  * rows, the sync verdict decides — a failure is an error, a success means the backend
  * genuinely published nothing, and [SyncOutcome.Unknown] (nothing attempted yet this process)
  * is still loading rather than a spurious failure.
+ *
+ * [syncing] guards the empty-list case: while a refresh is in flight, hold the loading view
+ * rather than surface a *stale* failure the run is about to replace — a transient network
+ * blip should not flash a full error for a section that has no cached rows yet.
  */
 fun <T> sectionStateFor(
     rows: List<T>,
     outcome: SyncOutcome,
     offline: Boolean,
+    syncing: Boolean = false,
 ): SectionState<List<T>> = when {
     rows.isNotEmpty() -> SectionState.Ready(rows, stale = outcome is SyncOutcome.Failed)
+    syncing -> SectionState.Loading
     outcome is SyncOutcome.Failed -> SectionState.Failed(CoachingError.from(outcome.kind, offline))
     outcome is SyncOutcome.Succeeded -> SectionState.Ready(emptyList())
     else -> SectionState.Loading

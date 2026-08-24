@@ -6,6 +6,7 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import com.medtroniclabs.microcoaching.data.db.dao.AssignedModuleDao
 import com.medtroniclabs.microcoaching.data.db.dao.AssignedVideoDao
+import com.medtroniclabs.microcoaching.data.db.dao.BadgeDao
 import com.medtroniclabs.microcoaching.data.db.dao.BehaviouralGapDao
 import com.medtroniclabs.microcoaching.data.db.dao.ChatMessageDao
 import com.medtroniclabs.microcoaching.data.db.dao.ChwGapProfileDao
@@ -27,6 +28,7 @@ import com.medtroniclabs.microcoaching.data.db.dao.RequestedModuleDao
 import com.medtroniclabs.microcoaching.data.db.dao.TriggerDefinitionDao
 import com.medtroniclabs.microcoaching.data.db.entity.AssignedModuleEntity
 import com.medtroniclabs.microcoaching.data.db.entity.AssignedVideoEntity
+import com.medtroniclabs.microcoaching.data.db.entity.BadgeEntity
 import com.medtroniclabs.microcoaching.data.db.entity.BehaviouralGapEntity
 import com.medtroniclabs.microcoaching.data.db.entity.CachedAssetEntity
 import com.medtroniclabs.microcoaching.data.db.entity.DashboardCacheEntity
@@ -66,6 +68,8 @@ import com.medtroniclabs.microcoaching.data.db.migration.MIGRATION_29_30
 import com.medtroniclabs.microcoaching.data.db.migration.MIGRATION_30_31
 import com.medtroniclabs.microcoaching.data.db.migration.MIGRATION_31_32
 import com.medtroniclabs.microcoaching.data.db.migration.MIGRATION_32_33
+import com.medtroniclabs.microcoaching.data.db.migration.MIGRATION_33_34
+import com.medtroniclabs.microcoaching.data.db.migration.MIGRATION_34_35
 
 /**
  * SDK-owned Room database. Completely separate from SPICE's NCDMergerDatabase.
@@ -128,13 +132,16 @@ import com.medtroniclabs.microcoaching.data.db.migration.MIGRATION_32_33
  *      backs the Training sub-tab with per-CHW assigned videos, inline thumbnail
  *      presigned URLs, and monotonic watch-progress columns for resume + the
  *      YouTube-style progress bars.
+ * v34: badge table — the CHW's achievement badges from /sync/badges (the tenant's
+ *      active catalogue unioned with what this CHW has earned), replacing the
+ *      hardcoded display stub that backed the Badges tab.
  */
 /**
  * Public schema version, mirrored from [Database.version] so callers (e.g.
  * `MicroCoachingSDK.init`) can detect destructive migrations and reset
  * SharedPreferences-based watermarks accordingly.
  */
-const val MICRO_COACHING_ROOM_VERSION: Int = 33
+const val MICRO_COACHING_ROOM_VERSION: Int = 35
 
 @Database(
     entities = [
@@ -160,6 +167,7 @@ const val MICRO_COACHING_ROOM_VERSION: Int = 33
         ChatFaqEntity::class,
         DashboardCacheEntity::class,
         RequestedModuleEntity::class,
+        BadgeEntity::class,
     ],
     version = MICRO_COACHING_ROOM_VERSION,
     exportSchema = false,
@@ -187,6 +195,7 @@ abstract class MicroCoachingDatabase : RoomDatabase() {
     abstract fun chatFaqDao(): ChatFaqDao
     abstract fun dashboardCacheDao(): DashboardCacheDao
     abstract fun requestedModuleDao(): RequestedModuleDao
+    abstract fun badgeDao(): BadgeDao
 
     companion object {
         private const val DATABASE_NAME = "microcoaching.db"
@@ -223,6 +232,8 @@ abstract class MicroCoachingDatabase : RoomDatabase() {
                     MIGRATION_30_31,
                     MIGRATION_31_32,
                     MIGRATION_32_33,
+                    MIGRATION_33_34,
+                    MIGRATION_34_35,
                 )
                 .fallbackToDestructiveMigration(dropAllTables = true)
                 .build()

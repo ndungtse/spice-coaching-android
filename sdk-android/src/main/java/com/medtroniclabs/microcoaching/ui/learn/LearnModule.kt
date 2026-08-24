@@ -21,7 +21,7 @@ data class LearnModule(
     /**
      * Content-domain taxonomy from `ModuleEntity.contentDomain`: "clinical" |
      * "digital" | "operational". Drives the SK/PO content-domain tag on Learning
-     * Library & Practice Zone cards (Med-I617). Distinct from [clinicalDomain] (a
+     * Library & Practice Zone cards. Distinct from [clinicalDomain] (a
      * clinical *topic* code) and [moduleType]. Null → rendered as "clinical", the
      * documented default (see [com.medtroniclabs.microcoaching.ui.learn.modules.components.ContentDomainTag]).
      */
@@ -44,13 +44,12 @@ data class LearnModule(
     val moduleId: String? = null,
     /** Module content version at the time this module was synced. */
     val moduleVersion: Int? = null,
-    /** card_family_id of the first (walkthrough) card. Used for card_shown telemetry. */
+    /** card_family_id of the first (walkthrough) card. Rides on `module_delivered`. */
     val cardFamilyId: String? = null,
     /**
-     * Backend `module_type` enum value: "refresher" | "content_update" |
-     * "digital_proficiency". Drives section assignment on the v0.3.2 modules
-     * screen and determines whether the tap path goes directly to quiz
-     * (refresher) or through the lesson-content flow.
+     * Backend `module_type`: "refresher" | "initial_training" | "digital_proficiency" |
+     * "content_update". Drives section assignment — see
+     * [com.medtroniclabs.microcoaching.ui.learn.modules.ModuleCategorizer].
      */
     val moduleType: String = "refresher",
     /** Estimated minutes for non-refresher modules. Drives the Training-card meta line. */
@@ -68,31 +67,30 @@ data class LearnModule(
      */
     val behaviouralGapId: String? = null,
     /**
-     * Surface source from the morning-cards response: "gap" | "fallback" | null.
-     * Used to display the GAP badge on the refresher tile.
+     * Why the selector surfaced this module: "quiz" | "gap" | "visit" | "fallback" |
+     * "local_fallback", or null when no morning card exists. Feeds
+     * [com.medtroniclabs.microcoaching.domain.refresher.refresherKindOf].
      */
     val source: String? = null,
     /**
-     * A single `module_quiz_question.id` this refresher targets, carried from the
-     * morning-cards response (`morning_card_cache.quiz_id`, non-null only when
-     * `source == "quiz"`). When set, the module is always shown as a **Quiz**
-     * (even before the quiz blob is hydrated) and the refresher drill runs ONLY
-     * this one question — see
-     * [com.medtroniclabs.microcoaching.ui.learn.modules.QuickLearnViewModel.primeRefresherQuiz].
-     * A stale/missing id (not present in the module's current quiz) falls back to
-     * the normal to-reinforce set, same as every other refresher.
+     * The one `module_quiz_question.id` this refresher targets
+     * (`morning_card_cache.quiz_id`, set only when `source == "quiz"`). A stale id — one
+     * absent from the module's current quiz — is treated as null.
      */
     val targetQuizId: String? = null,
     /**
-     * True when the morning-card selector emitted this module — it has a row in
-     * `morning_card_cache` (backend `GET /morning/cards` OR the on-device
-     * [com.medtroniclabs.microcoaching.domain.gaps.ondevice.OnDeviceMorningGenerator]).
-     * This is the SOLE gate for refresher membership (see
-     * [com.medtroniclabs.microcoaching.ui.learn.modules.ModuleCategorizer]): if a
-     * selector surfaced it, it lands on the refresher list regardless of
-     * completion/mastery.
+     * True when the morning-card selector emitted this module: it has a `morning_card_cache`
+     * row, from the backend or the on-device generator. Necessary for refresher membership;
+     * [refresherKind] decides the rest.
      */
     val fromMorningCard: Boolean = false,
+    /**
+     * What this refresher asks of the CHW, or null when there is nothing left to ask and it
+     * should leave the list. Computed once in
+     * [com.medtroniclabs.microcoaching.domain.refresher.refresherKindOf]; both tiles and the
+     * bottom sheet read it, so they cannot disagree. Null for non-refresher modules.
+     */
+    val refresherKind: com.medtroniclabs.microcoaching.domain.refresher.RefresherKind? = null,
     /**
      * Default severity of the behavioural gap that surfaced this module:
      * "low" | "moderate" | "high" (from `behavioural_gap_cache.severity_default`).
@@ -189,15 +187,10 @@ data class LearnModule(
      * **Used only by [com.medtroniclabs.microcoaching.ui.learn.QuizRetryGate].**
      * The gate closes the "Start Quiz" CTA once the reattempt window
      * (Assignment Date + configured days; default 7, admin-configurable via
-     * config sync — MED-1529 Req 1) has elapsed AND the CHW has attempted every
+     * config sync) has elapsed AND the CHW has attempted every
      * question at least once. Within the window CHWs can keep retrying;
      * first-time attempts are always allowed (a never-attempted module is not a
      * retry). Null → gate stays open (fail-safe: never lock out on missing data).
-     *
-     * **To remove the retry-window feature**: delete [QuizRetryGate], remove
-     * the gate call in [com.medtroniclabs.microcoaching.ui.learn.LearnViewModel]'s
-     * `canRetryActiveQuiz`, and drop this field + its assignment in
-     * `CoachingModuleStore.trainingModules`.
      */
     val assignedAtMs: Long? = null,
     /**
@@ -207,11 +200,27 @@ data class LearnModule(
      * the tile / detail header simply omits the image in that case.
      */
     val thumbnailUrl: String? = null,
+    /**
+     * Distinct cards of this module the CHW has read, from `module_card_viewed`
+     * telemetry. Populated **only for modules with no quiz** — those have no other
+     * progress signal, so reading is the progress. A module with questions is
+     * measured by [attemptedQuestionCount] and leaves this null.
+     *
+     * Cards recorded before card ids were sent don't count, so a CHW mid-way
+     * through such a module reads as further back than they are. It corrects
+     * itself as they keep reading.
+     */
+    val viewedCardCount: Int? = null,
 ) {
     /**
-     * Whether this module counts as **complete for progress/reminder purposes**
-     * (MED-1940 Req 2): the CHW has passed it ([status] == "completed"), OR has
-     * attempted every quiz question at least once (pass or fail).
+     * Whether this module counts as **complete for progress/reminder purposes**:
+     * the CHW has passed it ([status] == "completed"), OR has attempted every quiz
+     * question at least once (pass or fail), OR — for a module with no quiz — has
+     * read every card.
+     *
+     * The card clause keeps the ring and this flag agreeing. Without it a CHW who
+     * read every card but backed out before the completion screen would see a full
+     * ring on a module still counted as outstanding.
      *
      * This is the single definition shared by the All Modules progress ring
      * ([com.medtroniclabs.microcoaching.ui.learn.modules.components.progressFractionFor])
@@ -224,13 +233,13 @@ data class LearnModule(
      */
     val isProgressComplete: Boolean
         get() = status == "completed" ||
-            (questionCount > 0 && (attemptedQuestionCount ?: 0) >= questionCount)
+            (questionCount > 0 && (attemptedQuestionCount ?: 0) >= questionCount) ||
+            (questionCount == 0 && cardCount > 0 && (viewedCardCount ?: 0) >= cardCount)
 }
 
 /**
  * UI model for a single quiz question (backed by [QuizQuestionCacheEntity]).
  *
- * Replaces [StubQuiz].
  *
  * @param id Stable question ID from the backend.
  * @param questionText The question shown to the CHW (Bangla).

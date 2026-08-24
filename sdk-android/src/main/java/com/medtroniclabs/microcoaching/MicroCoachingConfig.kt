@@ -91,7 +91,8 @@ data class MicroCoachingConfig internal constructor(
     /**
      * Absolute path to a pre-provisioned model file.
      * Used when [modelDownloadStrategy] is [ModelDownloadStrategy.PROVIDED].
-     * Must be a MediaPipe `.task` file (loaded by [GemmaService]).
+     * Must be a `.litertlm` — the only format a bundled engine loads — and its filename
+     * must match the selected variant's, or it is ignored.
      */
     val modelPath: String = "",
     /** Controls when the on-device model is downloaded. */
@@ -131,12 +132,12 @@ data class MicroCoachingConfig internal constructor(
      * Which model the SDK downloads and loads — an `id` from
      * [com.medtroniclabs.microcoaching.ai.model.ModelCatalog.ALLOWLIST].
      * Default: [com.medtroniclabs.microcoaching.ai.model.ModelCatalog.DEFAULT_ID]
-     * (Gemma 3 270M q8 `.task`). The selected variant is the single source of truth
-     * for download URL, on-disk filename, expected size, and runtime — see
+     * (Qwen3 0.6B mixed-INT4 `.litertlm`). The selected variant is the single source of
+     * truth for download URL, on-disk filename, expected size, and runtime — see
      * [selectedModelVariant].
      *
-     * The global ≥ 3 GB RAM gate still applies; a 270M variant's lower
-     * `minDeviceMemoryGb` is not yet enforced below that cut-off.
+     * The global ≥ 3 GB RAM gate still applies; a variant's lower `minDeviceMemoryGb`
+     * is not yet enforced below that cut-off.
      */
     val selectedModelId: String = ModelCatalog.DEFAULT_ID,
     /**
@@ -149,11 +150,10 @@ data class MicroCoachingConfig internal constructor(
 
     /**
      * TOTAL token window for an inference session — **input prompt + generated output
-     * combined**, not an output cap (MediaPipe's `setMaxTokens` sizes the KV cache). The
-     * grounded chat prompt alone runs ~450–550 tokens, so the window must hold that plus
-     * a full answer or replies get cut off mid-sentence. 1536 fits the prompt budget
-     * (`ChatSession.MAX_PROMPT_CHARS`) plus a 2–4 sentence answer with headroom, within
-     * the KV-cache budget of a 3 GB-RAM device.
+     * combined**, not an output cap: it sizes the engine's KV cache. The window must hold
+     * the grounded prompt plus a full answer, or replies get cut off mid-sentence. The
+     * default fits the context block, capped per card by the prompt builder, plus a short
+     * answer with headroom, inside what a device at the RAM floor can hold.
      */
     val maxInferenceTokens: Int = 1536,
     /**
@@ -377,6 +377,12 @@ data class MicroCoachingConfig internal constructor(
  *           The one clinical-safety guard that should normally stay on.
  * @property enableDrugGuard When true, an answer that names a drug not present in the
  *           references is rejected. Keep on for safety.
+ * @property llmContextCards How many retrieved cards reach the prompt's `Context:`
+ *           block. One is what the prompt was evaluated with, and a sub-1B model is
+ *           easily pulled off-topic by a second card, so raising it needs its own
+ *           measurement. The cap also narrows what the answer is judged against:
+ *           groundedness, the drug/dosage block-list and source attribution all see
+ *           exactly the cards the model saw, never more.
  */
 data class ChatTuning(
     val bm25ScoreThreshold: Float = 1.5f,
@@ -388,6 +394,7 @@ data class ChatTuning(
     val maxResponseWords: Int = 280,
     val enableDosageGuard: Boolean = true,
     val enableDrugGuard: Boolean = true,
+    val llmContextCards: Int = 1,
 )
 
 /**

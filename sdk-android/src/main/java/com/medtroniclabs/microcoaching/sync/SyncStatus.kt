@@ -13,11 +13,17 @@ enum class SyncDomain {
 
     /** `assigned_video` — the Training sub-tab. */
     ASSIGNED_VIDEOS,
+
+    /** `assigned_video` watch progress recovered from the server. */
+    VIDEO_PROGRESS,
     GAPS,
     TRIGGERS,
     CONFIG,
     CHAT_FAQS,
     MORNING_CARDS,
+
+    /** `badge` — the Badges tab and its Your Journey path. */
+    BADGES,
 }
 
 /** Outcome of the last attempt at one [SyncDomain] in this process. */

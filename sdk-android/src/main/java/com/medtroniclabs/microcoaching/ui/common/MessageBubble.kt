@@ -7,6 +7,9 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,17 +22,27 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.ui.chat.ChatMessage
 import com.medtroniclabs.microcoaching.ui.chat.ChatRole
 import com.medtroniclabs.microcoaching.ui.markdown.MarkdownDefaults
@@ -42,11 +55,24 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+/**
+ * A user message, or any role without a dedicated bubble.
+ *
+ * Long-pressing the bubble offers Copy. The user's own text is not wrapped in a
+ * [SelectionContainer] the way an assistant reply is, because selection also claims the
+ * long press — one gesture cannot do both, and a short question is more often copied whole
+ * than part-selected.
+ */
 @Composable
 fun MessageBubble(
     message: ChatMessage,
     modifier: Modifier = Modifier,
 ) {
+    var menuExpanded by remember { mutableStateOf(false) }
+    val copyToClipboard = rememberCopyToClipboard()
+    val copyLabel = stringResource(R.string.chat_copy)
+    val haptics = LocalHapticFeedback.current
+
     val isUser = message.role == ChatRole.USER
     val bubbleColor = if (isUser) UserBubble else AssistantBubble
     val textColor = if (isUser) UserBubbleText else AssistantBubbleText
@@ -66,20 +92,51 @@ fun MessageBubble(
         Column(
             horizontalAlignment = if (isUser) Alignment.End else Alignment.Start,
         ) {
-            Surface(
-                color = bubbleColor,
-                shape = shape,
-                modifier = Modifier.widthIn(max = 280.dp),
-                // Drop shadow on assistant bubbles for a flatter, ai-coach.png look.
-                // User bubbles keep a subtle elevation so the conversation hierarchy stays legible.
-                shadowElevation = if (isUser) 1.dp else 0.dp,
-            ) {
-                Text(
-                    text = message.text,
-                    color = textColor,
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                )
+            Box {
+                Surface(
+                    color = bubbleColor,
+                    shape = shape,
+                    modifier = Modifier
+                        .widthIn(max = 280.dp)
+                        .combinedClickable(
+                            // No indication and no tap action: the bubble is not a button,
+                            // it just answers a long press. `combinedClickable` (over a raw
+                            // gesture detector) is what gives TalkBack the affordance.
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            onLongClickLabel = copyLabel,
+                            onLongClick = {
+                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                menuExpanded = true
+                            },
+                            onClick = {},
+                        ),
+                    // Drop shadow on assistant bubbles for a flatter, ai-coach.png look.
+                    // User bubbles keep a subtle elevation so the conversation hierarchy stays legible.
+                    shadowElevation = if (isUser) 1.dp else 0.dp,
+                ) {
+                    Text(
+                        text = message.text,
+                        color = textColor,
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                    )
+                }
+                DropdownMenu(
+                    expanded = menuExpanded,
+                    onDismissRequest = { menuExpanded = false },
+                ) {
+                    DropdownMenuItem(
+                        text = { Text(copyLabel) },
+                        leadingIcon = {
+                            Icon(imageVector = Icons.Filled.ContentCopy, contentDescription = null)
+                        },
+                        onClick = {
+                            menuExpanded = false
+                            copyToClipboard(message.text)
+                        },
+                    )
+                }
             }
             Text(
                 text = message.timestampMs.toTimeString(),
@@ -130,15 +187,20 @@ fun AssistantBubbleWithAvatar(
                 // bullet lists, numbered steps). Render it through the SDK's GFM
                 // renderer so the CHW sees formatted text, not raw markers. Plain
                 // text (refusals, the welcome seed) flows through as a paragraph.
-                MarkdownText(
-                    content = message.text,
-                    style = MarkdownDefaults.style(
-                        textStyle = MaterialTheme.typography.bodyMedium,
-                        textColor = AssistantBubbleText,
-                        blockSpacing = 6.dp,
-                    ),
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                )
+                //
+                // Selectable so a CHW can lift one line — a dose, a referral threshold —
+                // out of a long answer; the action row below copies the whole reply.
+                SelectionContainer {
+                    MarkdownText(
+                        content = message.text,
+                        style = MarkdownDefaults.style(
+                            textStyle = MaterialTheme.typography.bodyMedium,
+                            textColor = AssistantBubbleText,
+                            blockSpacing = 6.dp,
+                        ),
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                    )
+                }
             }
             Text(
                 text = message.timestampMs.toTimeString(),

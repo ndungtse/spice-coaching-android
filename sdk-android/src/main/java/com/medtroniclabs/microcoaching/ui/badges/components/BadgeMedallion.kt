@@ -39,8 +39,8 @@ private val MedallionSize = 92.dp
  * One badge tile in the Badges grid: the circular [BadgeArtwork] with a state marker, above
  * the badge's name (2 lines max).
  *
- * Earned badges get a green check, the current badge a "NOW" pill, locked badges a lock —
- * matching the greyscale/lock treatment [BadgeArtwork] applies to the medallion itself.
+ * Earned badges get a green check, locked badges a lock — matching the greyscale/lock
+ * treatment [BadgeArtwork] applies to the medallion itself.
  */
 @Composable
 fun BadgeMedallion(badge: AchievementBadge, modifier: Modifier = Modifier) {
@@ -51,7 +51,7 @@ fun BadgeMedallion(badge: AchievementBadge, modifier: Modifier = Modifier) {
     ) {
         Box(modifier = Modifier.size(MedallionSize)) {
             BadgeArtwork(
-                image = badge.image,
+                imageUrl = badge.imageUrl,
                 state = badge.state,
                 contentDescription = badge.name,
                 size = MedallionSize,
@@ -67,17 +67,13 @@ fun BadgeMedallion(badge: AchievementBadge, modifier: Modifier = Modifier) {
                     icon = { Icon(Icons.Filled.Lock, null, tint = MutedText, modifier = Modifier.size(14.dp)) },
                     modifier = Modifier.align(Alignment.BottomEnd),
                 )
-                BadgeState.CURRENT -> NowPill(modifier = Modifier.align(Alignment.BottomCenter))
             }
         }
         Text(
             text = badge.name,
-            style = MaterialTheme.typography.labelMedium.copy(
-                fontWeight = if (badge.state == BadgeState.CURRENT) FontWeight.SemiBold else FontWeight.Medium,
-            ),
+            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Medium),
             color = when (badge.state) {
                 BadgeState.EARNED -> MaterialTheme.colorScheme.onBackground
-                BadgeState.CURRENT -> SpiceBlue
                 BadgeState.LOCKED -> MutedText.copy(alpha = 0.8f)
             },
             textAlign = TextAlign.Center,
@@ -101,21 +97,4 @@ private fun CornerMarker(
             .background(background, CircleShape),
         contentAlignment = Alignment.Center,
     ) { icon() }
-}
-
-/** Blue "NOW" pill flagging the current badge, overlapping the base of the medallion. */
-@Composable
-private fun NowPill(modifier: Modifier = Modifier) {
-    Text(
-        text = stringResource(R.string.badge_now),
-        color = Color.White,
-        style = MaterialTheme.typography.labelSmall.copy(
-            fontWeight = FontWeight.Bold,
-            fontSize = 10.sp,
-        ),
-        modifier = modifier
-            .border(2.dp, Color.White, RoundedCornerShape(50))
-            .background(SpiceBlue, RoundedCornerShape(50))
-            .padding(horizontal = 8.dp, vertical = 2.dp),
-    )
 }

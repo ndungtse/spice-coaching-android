@@ -57,32 +57,62 @@ sealed class CoachingRoute(val route: String) {
     object TrainingRequestForm : CoachingRoute("coaching_training_request_form")
 
     // ── PO dashboard drill-downs ───────────────────────────────────────────────
+    //
+    // Every drill-down that shows range-scoped figures carries the tab's selected
+    // window as {from}/{to} millis. Without it each screen builds its own view model,
+    // which defaults to the last 7 days — so a KPI counted over one window opened onto
+    // a list computed over another, and the two disagreed with nothing on screen to
+    // explain why. [SuggestionDetail] is the one exception: its endpoint takes no date
+    // params at all, so its figures are all-time and it needs no window to carry.
 
-    /** "Active this week" — SKs grouped by status. */
-    object ActiveSks : CoachingRoute("coaching_po_active_sks")
+    /** SKs for one KPI card, scoped to a single status (responsive / non-responsive). */
+    object ActiveSks : CoachingRoute("coaching_po_active_sks/{status}/{from}/{to}") {
+        const val ARG_STATUS = "status"
+        const val ARG_FROM = "from"
+        const val ARG_TO = "to"
+        fun routeFor(status: String, from: Long, to: Long) =
+            "coaching_po_active_sks/$status/$from/$to"
+    }
 
     /** "Chatbot Usage" — SKs grouped by chatbot usage. */
-    object ChatbotUsage : CoachingRoute("coaching_po_chatbot_usage")
+    object ChatbotUsage : CoachingRoute("coaching_po_chatbot_usage/{from}/{to}") {
+        const val ARG_FROM = "from"
+        const val ARG_TO = "to"
+        fun routeFor(from: Long, to: Long) = "coaching_po_chatbot_usage/$from/$to"
+    }
 
     /** "Modules Completed" — per-module completion accordion. */
-    object ModulesCompleted : CoachingRoute("coaching_po_modules_completed")
+    object ModulesCompleted : CoachingRoute("coaching_po_modules_completed/{from}/{to}") {
+        const val ARG_FROM = "from"
+        const val ARG_TO = "to"
+        fun routeFor(from: Long, to: Long) = "coaching_po_modules_completed/$from/$to"
+    }
 
-    /** Single SK detail ("My SK"). Carries the SK id as a path arg. */
-    object SkDetail : CoachingRoute("coaching_po_sk_detail/{skId}") {
+    /** Single SK detail ("My SK"). Carries the SK id + the window. */
+    object SkDetail : CoachingRoute("coaching_po_sk_detail/{skId}/{from}/{to}") {
         const val ARG_SK_ID = "skId"
-        fun routeFor(skId: String) = "coaching_po_sk_detail/$skId"
+        const val ARG_FROM = "from"
+        const val ARG_TO = "to"
+        fun routeFor(skId: String, from: Long, to: Long) =
+            "coaching_po_sk_detail/$skId/$from/$to"
     }
 
-    /** "Top Searched Existing" module drill-down. Carries module_id. */
-    object SearchedModuleDetail : CoachingRoute("coaching_po_searched_module/{moduleId}") {
+    /** "Top Searched Existing" module drill-down. Carries module_id + the window. */
+    object SearchedModuleDetail : CoachingRoute("coaching_po_searched_module/{moduleId}/{from}/{to}") {
         const val ARG_MODULE_ID = "moduleId"
-        fun routeFor(moduleId: String) = "coaching_po_searched_module/$moduleId"
+        const val ARG_FROM = "from"
+        const val ARG_TO = "to"
+        fun routeFor(moduleId: String, from: Long, to: Long) =
+            "coaching_po_searched_module/$moduleId/$from/$to"
     }
 
-    /** Knowledge-document usage drill-down. Carries source_document_id. */
-    object DocumentUsageDetail : CoachingRoute("coaching_po_document/{documentId}") {
+    /** Knowledge-document usage drill-down. Carries source_document_id + the window. */
+    object DocumentUsageDetail : CoachingRoute("coaching_po_document/{documentId}/{from}/{to}") {
         const val ARG_DOCUMENT_ID = "documentId"
-        fun routeFor(documentId: String) = "coaching_po_document/$documentId"
+        const val ARG_FROM = "from"
+        const val ARG_TO = "to"
+        fun routeFor(documentId: String, from: Long, to: Long) =
+            "coaching_po_document/$documentId/$from/$to"
     }
 
     /** "Top Searched Suggested" module/topic drill-down. Carries suggestion_id. */

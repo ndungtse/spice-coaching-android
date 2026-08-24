@@ -16,15 +16,13 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        // Match SPICE 2.0's minSdk so manifest merger doesn't complain. The
-        // mediapipe-genai dependency declares minSdk 24, so the SDK manifest
-        // adds tools:overrideLibrary for it — safe because EdgeInference /
-        // ModelManager gate every mediapipe call behind a runtime API check.
+        // Matches SPICE 2.0. The inference engine declares minSdk 24, so the SDK manifest
+        // overrides it — see the AndroidManifest comment for why that is safe.
         minSdk = 23
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles("consumer-rules.pro")
 
-        buildConfigField("String", "SDK_VERSION", "\"0.5.2-SNAPSHOT\"")
+        buildConfigField("String", "SDK_VERSION", "\"0.6.0-SNAPSHOT\"")
         // HF_TOKEN intentionally NOT baked into the SDK. The published .aar must
         // not ship a HuggingFace token; host apps that need one pass it at runtime
         // via MicroCoachingSDK.Builder.huggingFaceToken(). Models in the public
@@ -57,7 +55,7 @@ android {
 
     // Prevent ONNX/model files from being compressed in the APK
     androidResources {
-        noCompress += listOf("bin", "onnx", "tflite", "task")
+        noCompress += listOf("bin", "onnx", "tflite", "litertlm")
     }
 
     packaging {
@@ -88,7 +86,7 @@ afterEvaluate {
                 from(components["release"])
                 groupId = "com.medtroniclabs.microcoaching"
                 artifactId = "sdk-android"
-                version = "0.5.2-SNAPSHOT"
+                version = "0.6.0-SNAPSHOT"
             }
         }
     }
@@ -154,8 +152,16 @@ dependencies {
     // Note: opentelemetry-semconv omitted for now — attribute keys are inlined as strings
     // Add back when a stable semconv release is available
 
-    // MediaPipe Gemma 3 (on-device, the SDK's only LLM inference engine)
-    implementation(libs.mediapipe.tasks.genai)
+    // LiteRT-LM — the SDK's only on-device inference engine. Every model in the
+    // catalog is a `.litertlm`, so one runtime covers the default and every fallback.
+    implementation(libs.litertlm.android) {
+        // Only the engine's tool-calling entry points (ReflectionTool, ToolKt) reach
+        // kotlin-reflect, and chat constructs neither — it sends one grounded prompt and
+        // reads the answer. Class loading is lazy, so those classes never link and the
+        // missing dependency never resolves. Worth a couple of MiB of minified dex.
+        // Using tool calling means dropping this exclusion first.
+        exclude(group = "org.jetbrains.kotlin", module = "kotlin-reflect")
+    }
 
     // ML Kit on-device translation (EN→BN, ~20 MB language pack downloaded on demand)
     implementation(libs.mlkit.translate)
@@ -180,4 +186,25 @@ dependencies {
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.ui.test.junit4)
+}
+
+/**
+ * Local retrieval lab: runs the real offline-chat ranking stack over a static corpus
+ * file so it can be exercised from a browser without a device or synced backend data.
+ *
+ *   MC_CORPUS=ignored/v3/modules/modules.json ./gradlew :sdk-android:retrievalLab
+ */
+tasks.register<JavaExec>("retrievalLab") {
+    group = "verification"
+    description = "Serve the offline retrieval pipeline on http://127.0.0.1:7171 for tools/retrieval-lab"
+    // Reuse the unit-test runtime classpath AGP already assembled: resolving that
+    // configuration by hand hits Android variant ambiguity.
+    val unitTest = tasks.named<Test>("testDebugUnitTest")
+    dependsOn("compileDebugUnitTestKotlin", "compileDebugUnitTestJavaWithJavac")
+    classpath = files({ unitTest.get().classpath })
+    mainClass.set("com.medtroniclabs.microcoaching.ai.retrieval.DevRetrievalServer")
+    // corpus paths in the docs are written relative to the repo root
+    workingDir = rootDir
+    environment("MC_CORPUS", System.getenv("MC_CORPUS") ?: "ignored/v3/modules/modules.json")
+    environment("MC_LAB_PORT", System.getenv("MC_LAB_PORT") ?: "7171")
 }

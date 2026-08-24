@@ -6,24 +6,18 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 
 /**
- * Low-friction digital proficiency signal captured from SPICE usage.
+ * Low-friction digital proficiency signal — one row per observed SPICE
+ * interaction, carrying only a success flag and an error type.
  *
- * Schema follows DataDesign v1.1 §4.3. One row per observed digital interaction.
- * These signals feed the CHW gap profile, which drives morning card selection (UC-1).
+ * **This table has no writer.** Its one producer wrote a `sync_attempt` row
+ * after every outbound push, which no backend consumer read and which kept the
+ * outbound queue permanently non-empty (each push created the row that made the
+ * next tick find work). The entity, DAO and the `OutboundSyncApi` paging arms
+ * are retained so the table needs no migration; they operate on an empty table.
  *
- * Event types tracked here:
- *   sync_attempt       — data sync attempt (success/failure)
- *   login_attempt      — login success/failure [TEAM-CONFIRM: requires SPICE hook]
- *   form_submit        — SPICE form submission outcome [TEAM-CONFIRM: requires SPICE hook]
- *
- * NOTE: `digital_help_used` (chat assistant turns) is NOT recorded into this
- * entity. It lives in [CoachingEventEntity] because the v1.1 spec needs the
- * `trigger_type` / `inference_mode` / `validator_status` / `fallback_used`
- * columns this entity intentionally doesn't carry. See
- * [com.medtroniclabs.microcoaching.domain.telemetry.EventRecorder.recordDigitalHelpUsed].
- *
- * Recorded by [DigitalSignalRecorder] (Phase F). Synced to Knowledge Layer by
- * OutboundSyncWorker (Phase B) for backend gap-profile computation.
+ * Chat turns are not recorded here — `digital_help_used` lives in
+ * [CoachingEventEntity], which carries the `trigger_type` / `inference_mode` /
+ * `validator_status` / `fallback_used` columns this entity does not.
  */
 @Entity(
     tableName = "digital_proficiency_event",
@@ -54,8 +48,7 @@ data class DigitalProficiencyEventEntity(
     val tenantId: Int? = null,
 
     /**
-     * Interaction type.
-     * Values: digital_help_used | sync_attempt | login_attempt | form_submit
+     * Interaction type. Nothing writes a value today — see the class KDoc.
      */
     @ColumnInfo(name = "event_type")
     val eventType: String,

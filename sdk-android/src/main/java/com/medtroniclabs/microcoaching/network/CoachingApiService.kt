@@ -89,6 +89,18 @@ interface CoachingApiService {
     ): Response<ChatFaqsSyncBundle>
 
     /**
+     * Fetch the tenant's active badge catalogue plus the badges the authenticated
+     * CHW has earned. Both the CHW and the tenant come from the auth token.
+     *
+     * Takes no `since`: every call returns the full snapshot. That is also what
+     * keeps the inline `image_presigned_url` on each badge fresh, since — as with
+     * the source-document catalogue — those URLs only ride on the rows a response
+     * returns and there is no way to re-presign a row that was filtered out.
+     */
+    @GET("sync/badges")
+    suspend fun pullBadges(): Response<BadgesSyncBundle>
+
+    /**
      * Fetch the source-document catalogue — the durable source for both the
      * Knowledge section and the Training sub-tab, in one response.
      *
@@ -109,21 +121,32 @@ interface CoachingApiService {
     ): Response<SourceDocumentsSyncBundle>
 
     /**
-     * Resolve a single media `object_name` (embedded in rich card bodies as
-     * image/video nodes, e.g. `media/<uuid>_<file>.png`) to a short-lived presigned
-     * GET URL. `bucket/object` references are also accepted by the backend.
+     * Fetch watch progress the server holds for the caller's assigned videos,
+     * changed after [since] — the recovery path for a resume position this device
+     * no longer has (reinstall, cleared data, new handset).
      *
-     * @param objectName  object name returned by upload (required).
-     * @param expiresSeconds  URL lifetime in seconds (default 600, max 86400).
-     * @param disposition  `auto` (inline for PDF/images, attachment otherwise),
-     *                      or force `inline` / `attachment`.
+     * A real watermark is safe here, unlike the catalogue pulls: the response
+     * carries no presigned URLs, so a row omitted as unchanged loses nothing.
+     * Progress still travels outward as `video_progress_updated` telemetry; this
+     * endpoint is read-only.
      */
-    @GET("admin/files/presigned-url")
-    suspend fun getMediaPresignedUrl(
-        @Query("object_name") objectName: String,
-        @Query("expires_seconds") expiresSeconds: Int = 600,
-        @Query("disposition") disposition: String = "auto",
-    ): Response<MediaPresignedUrlResponse>
+    @GET("sync/video-progress")
+    suspend fun pullVideoProgress(
+        @Query("since") since: String,
+    ): Response<VideoProgressSyncBundle>
+
+    /**
+     * Re-sign a batch of object-storage paths — the only presign route open to a
+     * device principal, and therefore the only one an SK or PO can use.
+     *
+     * Partial success: paths the server won't sign come back in `missing_paths`
+     * rather than failing the call. Send at most [STORAGE_PATHS_PRESIGN_BATCH_SIZE]
+     * per request.
+     */
+    @POST("sync/presigned-urls")
+    suspend fun getPresignedUrls(
+        @Body request: StoragePathsPresignRequest,
+    ): Response<StoragePathsPresignResponse>
 
     // ── Coaching ───────────────────────────────────────────────────────────────
 

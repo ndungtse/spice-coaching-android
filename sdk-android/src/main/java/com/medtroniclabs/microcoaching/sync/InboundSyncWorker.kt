@@ -11,7 +11,7 @@ import kotlinx.coroutines.sync.withLock
 
 /**
  * WorkManager worker that pulls every inbound resource — modules, source
- * documents, gaps, triggers, config, chat FAQs and morning cards.
+ * documents, gaps, triggers, config, chat FAQs, badges and morning cards.
  *
  * Each pull is independent and non-fatal, so one failing endpoint doesn't block
  * the rest; each reports its own verdict so a UI section can scope its error to
@@ -58,7 +58,16 @@ class InboundSyncWorker(
         // Single-flight: the periodic and chained inbound work names don't dedupe
         // against each other — serialize so two workers can't each deserialize the
         // full catalogue (and race the watermark writes) at once. See [SyncGate].
-        return SyncGate.inbound.withLock { runInboundSync(sdk, syncApi, syncPrefs) }
+        return SyncGate.inbound.withLock {
+            // Publish "a run is in flight" so UI sections can hold a loading/last-known
+            // view instead of surfacing a stale failure this run is about to clear.
+            sdk.syncStatus.markSyncStarted()
+            try {
+                runInboundSync(sdk, syncApi, syncPrefs)
+            } finally {
+                sdk.syncStatus.markSyncFinished()
+            }
+        }
     }
 
     private suspend fun runInboundSync(
@@ -112,6 +121,15 @@ class InboundSyncWorker(
         record(SyncDomain.PUBLISHED_DOCS, sourceDocsResult.published)
         record(SyncDomain.ASSIGNED_VIDEOS, sourceDocsResult.assignedVideos)
 
+        // Watch progress lands after the catalogue so the rows it updates exist.
+        // Normally a no-op — the device leads and telemetry carries progress out —
+        // but it is how a resume position returns after a reinstall or a handset swap.
+        val videoProgressResult = syncApi.pullVideoProgress(syncPrefs.videoProgressWatermark)
+        if (videoProgressResult.success) {
+            videoProgressResult.newWatermark?.let { syncPrefs.videoProgressWatermark = it }
+        }
+        record(SyncDomain.VIDEO_PROGRESS, videoProgressResult)
+
         val gapsResult = syncApi.pullGaps(syncPrefs.gapsWatermark)
         if (gapsResult.success) {
             gapsResult.newWatermark?.let { syncPrefs.gapsWatermark = it }
@@ -149,6 +167,15 @@ class InboundSyncWorker(
         }
         record(SyncDomain.CHAT_FAQS, chatFaqsResult)
 
+        // Badges — non-fatal and not in the retry predicate; on failure the previous
+        // rows stay intact so the Badges tab still renders. Skipped automatically when
+        // no CHW is signed in.
+        val badgesResult = syncApi.pullBadges()
+        // Either side can arrive last: a completion can precede the badge that
+        // rewards it, so re-run the rule once the catalogue has landed too.
+        if (badgesResult.success) sdk.refreshLocalBadgeEarning()
+        record(SyncDomain.BADGES, badgesResult)
+
         val pulls = listOf(modulesResult, gapsResult, triggersResult, configResult)
         if (shouldRetryInbound(pulls)) {
             Log.w(TAG, "All core sync pulls failed with transient network errors — retrying.")
@@ -184,7 +211,7 @@ class InboundSyncWorker(
                 "gaps=${gapsResult.upsertedCount}, " +
                 "triggers=${triggersResult.triggerCount} bindings=${triggersResult.bindingCount}, " +
                 "config=${configResult.upsertedCount}, chatFaqs=${chatFaqsResult.upsertedCount}, " +
-                "morningCards=${morningResult.count}.",
+                "badges=${badgesResult.count}, morningCards=${morningResult.count}.",
         )
         return Result.success()
     }

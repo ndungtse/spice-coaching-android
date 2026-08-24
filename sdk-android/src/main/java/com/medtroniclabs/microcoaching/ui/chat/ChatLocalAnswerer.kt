@@ -43,12 +43,11 @@ import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-// On-device answer paths for ChatViewModel — extracted verbatim as extension functions
-// (behaviour-preserving). Same package, so ChatViewModel call sites are unchanged.
+// On-device answer paths for ChatViewModel, as extensions in the same package.
 /**
- * On-device Gemma path — used when offline on a capable (≥ 3 GB RAM) device.
- * Runs the full L0→L5 pipeline: deny-list, scope gate, BM25 retrieval,
- * Gemma generation, L3/L4 validators, and BN↔EN translation round-trip.
+ * On-device model path — used offline on a device capable of running the local model.
+ * Runs the full L0→L5 pipeline: deny-list, scope gate, BM25 retrieval, generation,
+ * L3/L4 validators, and the BN↔EN translation round-trip.
  *
  * [currentState] is the [ChatUiState.Ready] snapshot captured at the start of
  * [sendMessage] (before the user message was appended) so the prompt history
@@ -60,13 +59,12 @@ internal suspend fun ChatViewModel.handleLocalGemmaMessage(
     moduleFamilyId: String?,
     currentState: ChatUiState.Ready,
 ) {
-    // On-device Gemma. When the model isn't loaded — e.g. an always-online
-    // device that never downloaded it, now falling back from a failed backend
-    // call — degrade to the BM25-only path rather than erroring. Clinician-
-    // authored content is still served from the offline index.
+    // With no model loaded — an always-online device that never downloaded one, now
+    // falling back from a failed backend call — degrade to the retrieval-only path rather
+    // than erroring: clinician-authored content is still served from the offline index.
     val llm = inferenceRouter.activeService ?: run {
-        Log.i(ChatViewModel.TRACE_TAG, "Gemma model unavailable → degrading to BM25-only")
-        handleLowEndMessage(trimmed)
+        Log.i(ChatViewModel.TRACE_TAG, "on-device model unavailable → degrading to BM25-only")
+        handleRetrievalOnlyMessage(trimmed)
         return
     }
 
@@ -103,11 +101,10 @@ internal suspend fun ChatViewModel.handleLocalGemmaMessage(
         trimmed
     }
 
-    // L0 — Hard deny-list. Catches obvious out-of-scope topics (coding,
-    // sports, weather, entertainment, etc.) before any LLM call. Applies
-    // in BOTH Strict and ExtendedClinical modes because the 1B model has
-    // proven unreliable at refusing these on its own even with a tight
-    // open-scope prompt. Cheap (substring match against ~50 terms).
+    // L0 — Hard deny-list. Catches obvious out-of-scope topics (coding, sports,
+    // weather, entertainment) before any LLM call. Applies in BOTH Strict and
+    // ExtendedClinical modes: a small on-device model is unreliable at refusing these
+    // on its own, even with a tight open-scope prompt. Cheap substring match.
     val scopeClassifier = ScopeClassifier.buildFrom(sdk.morningModules.value)
     if (scopeClassifier.isOutOfScope(trimmed) || scopeClassifier.isOutOfScope(englishCurrent)) {
         Log.d(ChatViewModel.TAG, "L0 deny-list: hard out-of-scope match — refusing without LLM call")
@@ -115,7 +112,7 @@ internal suspend fun ChatViewModel.handleLocalGemmaMessage(
         return
     }
 
-    // L1 — Scope allow-list (chat_plan.md §B4). Advisory only: a keyword miss no
+    // L1 — Scope allow-list. Advisory only: a keyword miss no
     // longer hard-refuses before retrieval — that pre-search gate caused
     // false refusals on legitimate clinical questions the gazetteer hadn't seen.
     // The real backstops are L2 retrieval (no grounding → honest refusal below)
@@ -176,17 +173,19 @@ internal suspend fun ChatViewModel.handleLocalGemmaMessage(
     }
     Log.i(ChatViewModel.TRACE_TAG, "BM25 grounding chosen=${selection.chosenLabel} size=${grounding.size}")
 
-    // Phase-0 garbage guard. Refuses only when the top hit shares ZERO clinical
-    // tokens with the query — the "BM25 latched onto a stop-word" failure that
-    // the prior synonym-map bug also enabled (e.g. "low BP 90/60" returning a
-    // diarrhoea card). The tuned refusal floor (Phase 2) replaces this once the
-    // benchmark gives us in- vs out-of-corpus score distributions to calibrate.
+    // Backstop against BM25 latching onto a stop-word: refuse only when the top hits
+    // share ZERO clinical tokens with the query. Deliberately loose — the strict
+    // question↔evidence check runs later, at the serve decision.
     val guardQuery = when {
         banglaQuery != null -> "$trimmed $banglaQuery"          // English mode: EN typed + BN translation
         englishCurrent != trimmed -> "$trimmed $englishCurrent" // Bangla mode: BN typed + EN translation
         else -> trimmed
     }
-    val guardPrimary = OffTopicGuard.bestMatchingHit(
+    // The same choice the retrieval-only path serves with, so the model rewords the card a
+    // CHW would otherwise have been shown verbatim. `bestMatchingHit` re-ranks by
+    // clinical-term overlap and can promote a different card, which is how the two paths
+    // came to answer the same question from different cards.
+    val guardPrimary = OffTopicGuard.selectLowEndServeHit(
         query = guardQuery,
         hits = grounding,
         clinicalTerms = scopeClassifier.scopeTerms(),
@@ -197,7 +196,7 @@ internal suspend fun ChatViewModel.handleLocalGemmaMessage(
             clinicalTerms = scopeClassifier.scopeTerms(),
         )
     ) {
-        Log.i(ChatViewModel.TRACE_TAG, "Phase-0 garbage guard: zero clinical-token overlap across top hits — refusing")
+        Log.i(ChatViewModel.TRACE_TAG, "garbage guard: zero clinical-token overlap across top hits — refusing")
         serveRefusal(
             ChatRefusal.NoGround,
             groundedFrom = emptyList(),
@@ -206,52 +205,54 @@ internal suspend fun ChatViewModel.handleLocalGemmaMessage(
         return
     }
 
-    // Routing — honest-refusal policy: we never let the 1B model answer
-    // ungrounded clinical content. No grounding → honest refusal. With grounding
-    // present the model answers from it (and may answer the part it covers — see
-    // the hardened prompt). The open-scope general-knowledge path was removed.
+    // Routing — honest-refusal policy: the on-device model never answers ungrounded
+    // clinical content. No grounding → honest refusal. With grounding present it
+    // answers from that grounding, including the part of the question the references
+    // cover (see the hardened prompt).
     if (grounding.isEmpty()) {
         serveRefusal(ChatRefusal.NoGround, groundedFrom = emptyList(), topScore = null)
         return
     }
-    val promptGrounding = if (guardPrimary == null) {
-        grounding
-    } else {
-        listOf(guardPrimary) + grounding.filter { it.chunkId != guardPrimary.chunkId }
-    }
+    // Translated to English before it reaches either the prompt or the groundedness check.
+    // The corpus is Bengali-authored and the model is always prompted in English, so
+    // untranslated references are text the model cannot read: it answers from pre-training
+    // instead, and the groundedness comparison across languages is zero overlap by
+    // arithmetic rather than by quality — which discards every answer and serves the card
+    // verbatim.
+    val ordered = readableGrounding(
+        if (guardPrimary == null) {
+            grounding
+        } else {
+            listOf(guardPrimary) + grounding.filter { it.chunkId != guardPrimary.chunkId }
+        },
+    )
+    // Capped here rather than at the prompt, so everything downstream judges the answer
+    // against exactly what the model saw: otherwise the drug/dosage block-list could clear
+    // a name that came from a card the model never read, and attribution could cite it.
+    val promptGrounding = ordered.take(config.chatTuning.llmContextCards)
     val promptMode = PromptMode.Grounded
     Log.d(ChatViewModel.TAG, "promptMode=$promptMode, grounding=${promptGrounding.size} chunks, topScore=${promptGrounding.firstOrNull()?.score}")
 
-    // Build prompt — pass previous messages only; currentMessage is appended by buildPrompt.
-    // Force the English system-prompt variant when round-tripping so all model-facing
-    // instructions are in the language the model handles best.
-    val promptLanguage = if (sdk.language == Language.BANGLA) "en-US" else sdk.language.bcp47
-    val scopeTermsForPrompt = if (promptMode == PromptMode.OpenScope) {
-        (ChatViewModel.CLINICAL_SCOPE_FLOOR + scopeClassifier.scopeTerms()).distinct()
-    } else emptyList()
-    // History is deliberately NOT replayed to the model — every turn is
-    // independent. Verified 2026-06-11: with prior exchanges in the prompt,
-    // the model imitates its own earlier free-form answers (which were
-    // grounded on *different* references) and answers from pre-training
-    // instead of the current reference block — the breastfeeding turn scored
-    // groundedness 0.14 with history vs 0.50 without, identical retrieval.
-    // The conversation stays visible in the UI; this only affects model
-    // context. When follow-up support is needed, re-introduce history as a
-    // standalone-question rewrite (use the last topic to rewrite the query
-    // BEFORE retrieval) rather than verbatim turn replay.
-    val prompt = session.buildPrompt(
-        currentMessage = englishCurrent,
-        history = emptyList(),
-        language = promptLanguage,
-        grounding = promptGrounding,
-        mode = promptMode,
-        scopeTerms = scopeTermsForPrompt,
+    // History is deliberately NOT replayed to the model — every turn is independent.
+    // With prior exchanges in the prompt the model imitates its own earlier answers,
+    // which were grounded on *different* references, and drifts to pre-training
+    // instead of the current reference block. The conversation stays visible in the
+    // UI; this affects model context only. Follow-up support, if added, belongs as a
+    // standalone-question rewrite applied BEFORE retrieval, not verbatim turn replay.
+    // Exactly the text the retrieval-only path would have served for these cards — the
+    // model's job is to reword it, so it must not see a different or shorter version. The
+    // engine renders the model's own chat template, so this stays plain text.
+    val prompt = buildContextAnswerPrompt(
+        context = buildGroundingContext(promptGrounding.map { servedCardText(it, isBangla = false) }),
+        question = englishCurrent,
     )
     Log.d(ChatViewModel.TAG, "Prompt: $prompt")
 
-    // OTel span
-    val modelName = config.modelPath.substringAfterLast("/").ifBlank { "gemma.task" }
-    val engineName = "mediapipe"
+    // OTel span. Named from the selected variant, not `config.modelPath`, which is blank
+    // unless the host pre-provisioned a file.
+    val variant = config.selectedModelVariant()
+    val modelName = variant.fileName
+    val engineName = "litertlm"
     val inferenceSpan = telemetry.startInferenceStream(
         modelName = modelName,
         engineName = engineName,
@@ -264,6 +265,10 @@ internal suspend fun ChatViewModel.handleLocalGemmaMessage(
     // Guard against endInferenceStream being called twice: once from .catch (on error)
     // and once from the success path below. The span must be ended exactly once.
     var inferenceSpanEnded = false
+
+    // Set when the stream cap below aborts generation — with no end-of-turn marker in the
+    // output, this is the only evidence that the answer was cut short.
+    var streamCapTripped = false
 
     val isBangla = sdk.language == Language.BANGLA
 
@@ -297,15 +302,15 @@ internal suspend fun ChatViewModel.handleLocalGemmaMessage(
             }
         }
         .takeWhile {
-            // Stream cap — every chat mode mandates a 2–4 sentence answer. A
-            // stream blowing far past that is the model ignoring the prompt
-            // and free-styling from pre-training (verified 2026-06-11: a 28 s,
-            // 1.3 k-char low-BP essay that the groundedness gate then refused
-            // anyway). Cancelling early reaches the same outcome in a fraction
-            // of the latency; the partial text still runs the normal gates.
+            // Stream cap — every chat mode mandates a 2–4 sentence answer, so a stream
+            // running far past that is the model ignoring the prompt and free-styling
+            // from pre-training. Such answers fail the groundedness gate anyway;
+            // cancelling early reaches the same outcome for a fraction of the latency,
+            // and the partial text still runs every normal gate.
             val streamCap = config.chatTuning.streamCapChars
             val withinCap = responseBuilder.length < streamCap
             if (!withinCap) {
+                streamCapTripped = true
                 Log.i(
                     ChatViewModel.TRACE_TAG,
                     "stream-cap: aborted generation at ${responseBuilder.length} chars " +
@@ -316,35 +321,37 @@ internal suspend fun ChatViewModel.handleLocalGemmaMessage(
         }
         .collect { token ->
             responseBuilder.append(token)
-            // Tokens are buffered, never streamed raw to the UI. The raw
-            // English still has to pass the validation gates (groundedness,
-            // question-echo, L4 block-list), any of which can replace it with
-            // a refusal or card fallback — streaming it live means the CHW
-            // watches an answer appear and then vanish (verified UX failure).
-            // StreamingBubble shows "●●●" while we collect; the validated
-            // text is typewritten afterwards, in every language.
+            // Tokens are buffered, never streamed raw to the UI: the raw text still has
+            // to clear the validation gates (groundedness, question-echo, L4 block-list),
+            // any of which can replace it with a refusal or a card fallback. Streaming
+            // live would show the CHW an answer that then vanishes. StreamingBubble
+            // shows "●●●" while collecting; validated text is revealed afterwards.
         }
 
     val latencyMs = System.currentTimeMillis() - startMs
-    // Strip <end_of_turn> and anything after it — Gemma appends it after its response.
-    val untrimmedResponse = responseBuilder.toString()
-        .substringBefore("<end_of_turn>")
-        .trim()
+    // The engine decodes special tokens itself, so there is no end-of-turn marker to cut
+    // at. A `<think>` span still has to go: thinking is disabled, but a bundle whose
+    // template ignores that must not leak the model's reasoning to the CHW.
+    val untrimmedResponse = ChatViewModel.stripSourcePreamble(
+        ChatViewModel.normalizeModelWhitespace(
+            ChatViewModel.stripThinkSpans(responseBuilder.toString()),
+        ),
+    )
 
     // The model's raw English output, pre-validation/translation.
-    // sawEndOfTurn=false means generation stopped because the SESSION token
-    // window (`maxInferenceTokens` = input + output, see MicroCoachingConfig)
-    // was exhausted, not because the model finished — the reply is cut
-    // mid-sentence. We salvage it by trimming back to the last complete
-    // sentence ('.', '!', '?', or the Bangla danda '।') so the CHW never
-    // sees a dangling fragment like "Pain can be alleviated by".
-    val sawEndOfTurn = responseBuilder.contains("<end_of_turn>")
+    //
+    // A completed stream is a finished turn for this engine, so the only thing that can cut
+    // the text short is our own stream cap. When it trips the reply stops mid-sentence, so
+    // it is trimmed back to the last complete sentence ('.', '!', '?', or the Bangla danda
+    // '।') — the CHW must never see a dangling fragment like "Pain can be alleviated by".
+    val sawEndOfTurn = !streamCapTripped
     val rawResponse =
         if (sawEndOfTurn) untrimmedResponse else ChatViewModel.trimToCompleteSentence(untrimmedResponse)
     Log.i(
         ChatViewModel.TRACE_TAG,
         "LLM raw: len=${untrimmedResponse.length} latencyMs=$latencyMs sawEndOfTurn=$sawEndOfTurn " +
-            "temp=${config.inferenceTemperature} maxTokens=${config.maxInferenceTokens} " +
+            "temp=${variant.temperature ?: config.inferenceTemperature} " +
+            "maxTokens=${variant.maxTokens ?: config.maxInferenceTokens} " +
             "text=\"${tracePreview(untrimmedResponse, 220)}\"",
     )
     if (rawResponse.length != untrimmedResponse.length) {
@@ -373,15 +380,13 @@ internal suspend fun ChatViewModel.handleLocalGemmaMessage(
         return
     }
 
-    // L3c — Groundedness gate (grounded mode only). The [[REFUSE_NO_GROUND]]
-    // sentinel relies on the model NOTICING the references don't cover the
-    // question; when the references are merely adjacent (newborn-warmth cards
-    // for a breast-engorgement question — the verified failure) a 1B model
-    // answers fluently from pre-training instead. Reference vocabulary
-    // survives honest paraphrase, so a near-zero content-word overlap means
-    // the answer did not come from the references. Refuse rather than serve
-    // confident pre-training content as if it were clinician-reviewed. Score
-    // is traced on every grounded turn so the floor can be tuned from logs.
+    // L3c — Groundedness gate (grounded mode only). The [[REFUSE_NO_GROUND]] sentinel
+    // relies on the model NOTICING that the references don't cover the question; when
+    // the references are merely adjacent, a small model answers fluently from
+    // pre-training instead. Reference vocabulary survives honest paraphrase, so a
+    // near-zero content-word overlap means the answer did not come from the references.
+    // Refuse rather than serve pre-training content as if it were clinician-reviewed.
+    // Score is traced on every grounded turn so the floor can be tuned from logs.
     if (promptMode == PromptMode.Grounded && rawResponse.isNotBlank()) {
         val tuning = config.chatTuning
         val topScore = promptGrounding.firstOrNull()?.score
@@ -580,18 +585,24 @@ internal suspend fun ChatViewModel.handleLocalGemmaMessage(
 }
 
 /**
- * Retrieval-only path used on low-end (< 3 GB RAM) devices. Mirrors the
- * scope filters from the capable-device path (L0 deny-list, L1 allow-list
- * in Strict mode) but skips the LLM, the L3 sentinels, and the L4
- * validator entirely — the BM25 result is served verbatim.
+ * Retrieval-only path: the selected card's clinician-authored text is served as written.
+ *
+ * The floor for every device, not a low-end special case — reached whenever the model is
+ * absent, declined, unloadable, or simply not eligible. Retrieval is identical to the
+ * model-backed path; what differs is that nothing rewords the result.
+ *
+ * Mirrors that path's scope filters (L0 deny-list, L1 allow-list in Strict mode) and skips the
+ * layers that exist to police generated text — the L3 sentinels and the L4 validator — because
+ * there is no generated text to police. The topical gate still applies, so an unrelated
+ * top-scoring card is refused rather than served.
  */
-internal suspend fun ChatViewModel.handleLowEndMessage(trimmed: String) {
+internal suspend fun ChatViewModel.handleRetrievalOnlyMessage(trimmed: String) {
     val isBangla = sdk.language == Language.BANGLA
     val scopeClassifier = ScopeClassifier.buildFrom(sdk.morningModules.value)
 
     // L0 — hard deny-list. Cheap; runs on the original (untranslated) text.
     if (scopeClassifier.isOutOfScope(trimmed)) {
-        Log.d(ChatViewModel.TAG, "Low-end L0 deny-list match — refusing without retrieval")
+        Log.d(ChatViewModel.TAG, "Retrieval-only L0 deny-list match — refusing without retrieval")
         serveRefusal(ChatRefusal.Scope, groundedFrom = emptyList(), topScore = null)
         return
     }
@@ -619,7 +630,7 @@ internal suspend fun ChatViewModel.handleLowEndMessage(trimmed: String) {
         val result = sdk.translator.translateBnToEnResult(trimmed)
         Log.i(
             ChatViewModel.TRACE_TAG,
-            "BN→EN translate (low-end): translated=${result.translated} " +
+            "BN→EN translate (retrieval-only): translated=${result.translated} " +
                 "altered=${result.text != trimmed} in=\"${tracePreview(trimmed)}\" " +
                 "out=\"${tracePreview(result.text)}\"",
         )
@@ -641,23 +652,23 @@ internal suspend fun ChatViewModel.handleLowEndMessage(trimmed: String) {
         scoreThreshold = config.chatTuning.bm25ScoreThreshold,
     )
     val grounding = selection.hits
-    Log.i(ChatViewModel.TRACE_TAG, "BM25 low-end[$searchLang] hits=${grounding.size} chosen=${selection.chosenLabel}")
+    Log.i(ChatViewModel.TRACE_TAG, "BM25 retrieval-only[$searchLang] hits=${grounding.size} chosen=${selection.chosenLabel}")
     grounding.forEachIndexed { i, h -> Log.i(ChatViewModel.TRACE_TAG, traceChunk("  hit", i, h)) }
     if (grounding.isEmpty()) {
-        Log.d(ChatViewModel.TAG, "Low-end retrieval miss — no usable grounding chunk")
+        Log.d(ChatViewModel.TAG, "Retrieval-only miss — no usable grounding chunk")
         serveRefusal(ChatRefusal.NoGround, groundedFrom = emptyList(), topScore = null)
         return
     }
-    // Phase-0 garbage guard. Refuse only on weak top scores with zero overlap;
-    // confident hits bypass. Then pick serve target — BM25 #1 unless a later hit
-    // is clearly better aligned (referral timing, stub body, title overlap).
+    // Clinical-overlap backstop: refuse only on weak top scores with zero overlap,
+    // since confident hits bypass it. Then pick the serve target — BM25 #1 unless a
+    // later hit is clearly better aligned (referral timing, stub body, title overlap).
     if (OffTopicGuard.shouldRefuseLowEnd(
             query = guardQuery,
             hits = grounding,
             clinicalTerms = scopeClassifier.scopeTerms(),
         )
     ) {
-        Log.i(ChatViewModel.TRACE_TAG, "Phase-0 garbage guard (low-end): zero clinical-token overlap across top hits — refusing")
+        Log.i(ChatViewModel.TRACE_TAG, "garbage guard (retrieval-only): zero clinical-token overlap across top hits — refusing")
         serveRefusal(ChatRefusal.NoGround, groundedFrom = emptyList(), topScore = grounding.first().score)
         return
     }
@@ -666,15 +677,34 @@ internal suspend fun ChatViewModel.handleLowEndMessage(trimmed: String) {
         hits = grounding,
         clinicalTerms = scopeClassifier.scopeTerms(),
     ) ?: grounding.first()
-    Log.d(ChatViewModel.TAG, "Low-end serving retrieval-only — chunkId=${top.chunkId} score=${top.score}")
+    // Question↔evidence check. Nothing above it verifies that the card is about what
+    // was ASKED: `shouldRefuseLowEnd` short-circuits on any hit scoring ≥ 80 (real
+    // scores are 135–441, so it never fires) and its overlap test passes on a single
+    // shared clinical term — and "গর্ভবতী" is shared by a quarter of the corpus. Serving
+    // a card that matches only on who the question is about is how a diet question came
+    // back with anemia grading; refuse instead.
+    if (!OffTopicGuard.sharesTopicalTerm(guardQuery, top)) {
+        Log.i(
+            ChatViewModel.TRACE_TAG,
+            "topical-refusal (retrieval-only): top card shares no topical term with the question — " +
+                "chunkId=${top.chunkId} score=${top.score}",
+        )
+        serveRefusal(
+            ChatRefusal.NoGround,
+            groundedFrom = grounding.map { it.chunkId },
+            topScore = top.score,
+            validatorReason = "topical_miss",
+        )
+        return
+    }
+    Log.d(ChatViewModel.TAG, "Serving retrieval-only — chunkId=${top.chunkId} score=${top.score}")
     val attribution = resolveSourceAttribution(listOf(top))
-    // Prefer the concise linked quiz explanation; else the card body, clipped so
-    // it never ends mid-sentence. Both are clinician-authored; served in the SDK
-    // language (the other-language side is translated when only it is present) on
-    // the LLM-less low-end path.
+    // Clinician-authored text in the SDK language, served as written. The same
+    // [ChatViewModel.servedCardText] the model-backed path grounds on, so a CHW reading
+    // either answer is reading the same card.
     val explanation = resolveExplanation(top, isBangla)
     serveFallback(
-        bodyBn = explanation ?: clipToCompleteSentence(resolveCardBody(top, isBangla)),
+        bodyBn = servedCardText(top, isBangla),
         groundedFrom = listOf(top.chunkId),
         validatorReason = null,
         fallbackKind = if (explanation != null) "fallback_quiz_explanation" else "served_retrieval_only",

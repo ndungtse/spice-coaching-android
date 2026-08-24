@@ -20,6 +20,8 @@ import com.medtroniclabs.microcoaching.domain.gaps.ondevice.MorningSourcesConfig
 import com.medtroniclabs.microcoaching.domain.gaps.ondevice.OnDeviceMorningGenerator
 import com.medtroniclabs.microcoaching.domain.morning.MorningModuleResolver
 import com.medtroniclabs.microcoaching.domain.triggers.TriggerEvaluator
+import com.medtroniclabs.microcoaching.progress.badgesNewlyEarned
+import com.medtroniclabs.microcoaching.progress.moduleIdList
 import com.medtroniclabs.microcoaching.progress.buildModuleCompletion
 import com.medtroniclabs.microcoaching.sdk.chat.ChatKnowledgeIndexBootstrap
 import com.medtroniclabs.microcoaching.sdk.context.ChwContextStore
@@ -29,6 +31,8 @@ import com.medtroniclabs.microcoaching.sdk.morning.MorningSurfaceCoordinator
 import com.medtroniclabs.microcoaching.sdk.morning.PersonaPolicy
 import com.medtroniclabs.microcoaching.sdk.morning.SkippedRefresherStore
 import com.medtroniclabs.microcoaching.sdk.runtime.SdkNetworkMonitor
+import com.medtroniclabs.microcoaching.ai.model.LocalModelChoice
+import com.medtroniclabs.microcoaching.ai.model.LocalModelPrefs
 import com.medtroniclabs.microcoaching.ai.model.ModelCatalog
 import com.medtroniclabs.microcoaching.ai.model.ModelProvider
 import com.medtroniclabs.microcoaching.ai.model.ModelVariant
@@ -498,6 +502,24 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
     val modelManager: ModelManager by modelManagerLazy
 
     /**
+     * Whether the user wants the on-device model used, and whether its offer may still be
+     * shown. Read before any download is scheduled: the file is hundreds of megabytes of
+     * someone's storage and data, so its presence follows from a choice rather than from
+     * hardware being capable of holding it.
+     */
+    val localModelPrefs: LocalModelPrefs by lazy { LocalModelPrefs(config.context) }
+
+    /**
+     * True when this device may host the on-device model AND the user has opted into it.
+     *
+     * The pairing is what callers actually need: eligibility alone says the hardware could run
+     * a model that may not be wanted, and consent alone says a model is wanted on hardware
+     * that may not survive it.
+     */
+    val localModelEnabled: Boolean
+        get() = !isLowEndDevice && localModelPrefs.choice.value == LocalModelChoice.ENABLED
+
+    /**
      * The on-device model this SDK will download/load — the source of truth for its
      * display name, param count, [ModelVariant.sizeInBytes], runtime and RAM class.
      * Hosts use it to render an accurate download-size label.
@@ -751,19 +773,17 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
     /**
      * Call when the CHW finishes a patient visit. Backfills `patient_visit_id` on
      * this visit's still-pending coaching_event rows (written by
-     * [onAssessmentSubmitted] before the encounterId was final), emits `session_end`,
-     * and triggers a sync push.
+     * [onAssessmentSubmitted] before the encounterId was final) and triggers a
+     * sync push.
      *
      * @param encounterId SPICE encounter id; blank values are skipped.
      */
     fun onVisitCompleted(encounterId: String) {
         val chwId = currentCHWId ?: return
         sdkScope.launch {
-            val recorder = newSdkHookRecorder(chwId)
             visitCompletedHandler.handle(
                 chwId = chwId,
                 encounterId = encounterId,
-                recorder = recorder,
                 flush = { flushTelemetryNow() },
             )
         }
@@ -810,30 +830,18 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
 
     internal suspend fun refilterMorningModules(chwId: String) = morningCoordinator.refilter(chwId)
 
-    /** Call when SPICE surfaces a risk flag for the active patient. */
+    /**
+     * Call when SPICE surfaces a risk flag for the active patient. Runs the
+     * trigger evaluator only — no telemetry row is written, because nothing
+     * downstream reads one. `"risk_flag_observed"` here is a workflow-event
+     * code matched against `trigger_definition.predicate_json`, a separate
+     * namespace from `coaching_event.event_type`.
+     */
     fun onRiskFlagObserved(riskLevel: String, patientId: String? = null) {
         val chwId = currentCHWId ?: return
         val payload = mutableMapOf("risk_level" to riskLevel)
         if (patientId != null) payload["patient_id"] = patientId
         evaluateWorkflowSignal(chwId, "risk_flag_observed", payload)
-
-        // Also emit the wire-level `risk_flag_observed` row for the backend's
-        // clinical_observed feed (mid-visit escalation fires through here too).
-        sdkScope.launch {
-            try {
-                val recorder = newSdkHookRecorder(chwId)
-                val patientIdHash = patientId?.let { PatientIdHasher.hash(it) }
-                recorder.recordRiskFlagObserved(
-                    riskLevel = riskLevel,
-                    patientIdHash = patientIdHash,
-                    networkState = if (isNetworkAvailable()) "online" else "offline",
-                )
-            } catch (e: Exception) {
-                Log.w(TAG, "onRiskFlagObserved event emission failed: ${e.message}")
-            }
-            // Time-sensitive — push immediately (offline-safe; WorkManager queues).
-            flushTelemetryNow()
-        }
     }
 
     /** Call when SPICE reports an equipment anomaly (BP cuff, glucometer, …). */
@@ -868,9 +876,134 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
                     reinforcementDays = config.periodicRefreshDays,
                 )
                 dao.upsert(updated)
+                refreshLocalBadgeEarning()
             } catch (e: Exception) {
                 Log.w(TAG, "onModuleQuizCompleted persist failed: ${e.message}")
             }
+        }
+    }
+
+    /**
+     * Mark a module with no quiz as complete, having read every card.
+     *
+     * A quiz-less module has no other way to complete: the quiz path is the only
+     * writer of `completed_at`, so without this it stays at 0% forever and keeps
+     * counting toward the outstanding-training reminder. Reaching the end of the
+     * cards is the equivalent act, and the caller only invokes this from the screen
+     * the CHW lands on after the last card.
+     *
+     * `passed = true` restarts the reinforcement clock the same way a quiz pass
+     * does; the score stays null because none was taken.
+     */
+    fun onModuleCardsCompleted(moduleFamilyId: String, moduleId: String?) {
+        val chwId = currentCHWId ?: return
+        sdkScope.launch {
+            try {
+                val dao = database.chwModuleCompletionDao()
+                val updated = buildModuleCompletion(
+                    previous = dao.get(chwId, moduleFamilyId),
+                    chwId = chwId,
+                    moduleFamilyId = moduleFamilyId,
+                    moduleId = moduleId,
+                    scoreFraction = null,
+                    passed = true,
+                    reinforcementDays = config.periodicRefreshDays,
+                )
+                dao.upsert(updated)
+                refreshLocalBadgeEarning()
+                // Opening the lesson stamped an in-session "in_progress" overlay, and
+                // the mapper reads that overlay ahead of the table — so writing the row
+                // alone leaves the tile unchanged until the process restarts clears it.
+                // Move the overlay too; this recomputes the pipeline as a side effect.
+                coachingModuleStore.setInSessionStatus(moduleFamilyId, "completed")
+            } catch (e: Exception) {
+                Log.w(TAG, "onModuleCardsCompleted persist failed: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * Award any badge whose modules are all complete, without waiting for the
+     * server to notice.
+     *
+     * Runs after a completion is written and after badges sync, since either side
+     * can be the one that arrives last. Writing only newly-earned rows keeps it
+     * idempotent, so calling it more often than strictly needed costs nothing.
+     *
+     * Failures are swallowed: a missed award is corrected by the next sync, and
+     * this must never take down the completion write that triggered it.
+     */
+    internal suspend fun refreshLocalBadgeEarning() {
+        val chwId = currentCHWId ?: return
+        try {
+            val badges = database.badgeDao().getAllForUser(chwId)
+            if (badges.isEmpty()) return
+
+            val completions = database.chwModuleCompletionDao().getAllForChw(chwId)
+            val completed = completions.filter { it.completedAt != null }
+            if (completed.isEmpty()) return
+            val completedFamilyIds = completed.map { it.moduleFamilyId }.toSet()
+            val completedModuleIds = completed.mapNotNull { it.latestCompletedModuleId }.toSet()
+
+            // Resolve each referenced module version to its family, in one pass, from
+            // every source that knows the mapping. `module_cache` alone is not enough:
+            // it keeps only the newest version of a family, so a badge naming an older
+            // one finds nothing there — which is exactly how a badge ends up looking
+            // unearnable. `assigned_module` and the completion rows both retain the
+            // pairing for versions the cache has since pruned.
+            val moduleDao = database.moduleDao()
+            val referencedIds = badges.flatMap { it.moduleIdList() }.distinct()
+            val familyByModuleId = buildMap {
+                database.assignedModuleDao().getAllForUser(chwId).forEach { assigned ->
+                    assigned.moduleFamilyId?.let { put(assigned.moduleId, it) }
+                }
+                completions.forEach { row ->
+                    row.latestCompletedModuleId?.let { put(it, row.moduleFamilyId) }
+                    row.latestAttemptModuleId?.let { put(it, row.moduleFamilyId) }
+                }
+                referencedIds.forEach { id ->
+                    if (id !in this) moduleDao.getById(id)?.moduleFamilyId?.let { put(id, it) }
+                }
+            }
+
+            val newlyEarned = badgesNewlyEarned(
+                badges = badges,
+                completedModuleIds = completedModuleIds,
+                completedFamilyIds = completedFamilyIds,
+                familyOf = familyByModuleId::get,
+            )
+            if (newlyEarned.isEmpty()) {
+                if (BuildConfig.DEBUG) logBadgeEarningMisses(badges, referencedIds, familyByModuleId)
+                return
+            }
+
+            val earnedAt = java.time.Instant.now().toString()
+            newlyEarned.forEach { database.badgeDao().markLocallyEarned(it.badgeId, earnedAt) }
+            Log.i(TAG, "Badges earned on-device: ${newlyEarned.size}")
+        } catch (e: Exception) {
+            Log.w(TAG, "refreshLocalBadgeEarning failed: ${e.message}")
+        }
+    }
+
+    /**
+     * Say why no badge was awarded, so a badge that looks stuck can be diagnosed from
+     * a log rather than by guessing. Debug builds only — this runs after every module
+     * completion.
+     */
+    private fun logBadgeEarningMisses(
+        badges: List<com.medtroniclabs.microcoaching.data.db.entity.BadgeEntity>,
+        referencedIds: List<String>,
+        familyByModuleId: Map<String, String>,
+    ) {
+        val unresolved = referencedIds.filterNot { it in familyByModuleId }
+        Log.d(
+            TAG,
+            "Badges: none newly earned — badges=${badges.size} " +
+                "alreadyEarned=${badges.count { it.earnedAt != null || it.locallyEarnedAt != null }} " +
+                "referencedModules=${referencedIds.size} unresolvedToFamily=${unresolved.size}",
+        )
+        if (unresolved.isNotEmpty()) {
+            Log.d(TAG, "Badges: module versions with no known family: ${unresolved.take(10)}")
         }
     }
 
@@ -1108,12 +1241,11 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
          */
         fun huggingFaceModelUrl(url: String) = apply { huggingFaceModelUrl = url }
         /**
-         * Pick which on-device model to download/load — an `id` from
-         * [com.medtroniclabs.microcoaching.ai.model.ModelCatalog.ALLOWLIST]
-         * (e.g. `"gemma3-270m-it-q8-task"`, `"gemma3-1b-it-int4-task"`).
-         * Default: [com.medtroniclabs.microcoaching.ai.model.ModelCatalog.DEFAULT_ID].
-         * An unknown id falls back to the default; a non-MediaPipe variant is
-         * accepted but warns (it can't load until the LiteRT-LM runtime is re-added).
+         * Pick which on-device model to download and load — an `id` from
+         * [com.medtroniclabs.microcoaching.ai.model.ModelCatalog.ALLOWLIST], defaulting to
+         * [com.medtroniclabs.microcoaching.ai.model.ModelCatalog.DEFAULT_ID]. An unknown id
+         * falls back to that default; a variant on an unbundled runtime is accepted but
+         * warns, since nothing can load it.
          */
         fun selectedModel(id: String) = apply {
             val variant = ModelCatalog.byId(id)
@@ -1121,7 +1253,7 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
                 variant == null ->
                     Log.w(TAG, "selectedModel('$id') is not in the allowlist — using default '${ModelCatalog.DEFAULT_ID}'")
                 !ModelCatalog.isRunnable(variant) ->
-                    Log.w(TAG, "selectedModel('$id') runtime=${variant.runtime} is not bundled — it won't load until the LiteRT-LM runtime is re-added")
+                    Log.w(TAG, "selectedModel('$id') runtime=${variant.runtime} is not bundled — no engine can load it")
             }
             selectedModelId = variant?.id ?: ModelCatalog.DEFAULT_ID
         }
@@ -1298,10 +1430,11 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
                 "modelPath=${config.modelPath.isNotBlank()} " +
                 "forcedMode=${config.forcedMode ?: "auto"}")
 
-            // Kick off the model download if configured for init — skipped on
-            // low-end devices (they never use the AI model).
+            // Kick off the model download if configured for init. Gated on consent as well as
+            // on hardware: the model is optional, so a device merely being capable of running
+            // it is not a reason to spend the user's data and storage on it.
             if (config.modelDownloadStrategy == ModelDownloadStrategy.ON_SDK_INIT &&
-                !sdk.isLowEndDevice
+                sdk.localModelEnabled
             ) {
                 sdk.modelManager.scheduleDownloadIfNeeded()
             }

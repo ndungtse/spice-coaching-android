@@ -5,13 +5,17 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Prompt-hygiene helpers added after the 2026-06-11 field log:
+ * Prompt-hygiene helpers:
  *
  *  - [dropRefusalExchanges]: refusal turns replayed as history both waste the
- *    token window and prime a 1B model to refuse again.
+ *    token window and prime a small model to refuse again.
  *  - [ChatViewModel.trimToCompleteSentence]: when the session token window
  *    closes mid-sentence (`sawEndOfTurn=false`), the dangling fragment must
  *    never reach the CHW.
+ *  - [ChatViewModel.stripThinkSpans]: a reasoning model's internal deliberation must
+ *    never be shown as clinical advice.
+ *  - [ChatViewModel.stripSourcePreamble]: a CHW asked a clinical question, not what the
+ *    prompt contains.
  */
 class ChatPromptHygieneTest {
 
@@ -88,5 +92,101 @@ class ChatPromptHygieneTest {
             "নবজাতককে দ্রুত শুকিয়ে মুড়িয়ে রাখুন।",
             ChatViewModel.trimToCompleteSentence(truncated),
         )
+    }
+
+
+    // ── stripThinkSpans ───────────────────────────────────────────────────────
+
+    @Test
+    fun `a closed think span is removed and the answer kept`() {
+        val raw = "<think>The card says lie down. Should I mention referral?</think>\n" +
+            "Ask her to lie down and measure her BP again after four hours."
+
+        assertEquals(
+            "Ask her to lie down and measure her BP again after four hours.",
+            ChatViewModel.stripThinkSpans(raw),
+        )
+    }
+
+    @Test
+    fun `multiple think spans are all removed`() {
+        val raw = "<think>first</think>Lie down.<think>second</think> Recheck in four hours."
+
+        assertEquals("Lie down. Recheck in four hours.", ChatViewModel.stripThinkSpans(raw))
+    }
+
+    /**
+     * Generation stopped inside the reasoning block, so there is no answer — only a
+     * half-formed thought. Dropping the remainder routes the turn to the empty-response
+     * path rather than showing the CHW the model reasoning with itself.
+     */
+    @Test
+    fun `an unclosed think span takes everything after it`() {
+        val raw = "<think>The references mention 140 over 90, so maybe I should"
+
+        assertEquals("", ChatViewModel.stripThinkSpans(raw))
+    }
+
+    @Test
+    fun `text with no think span is untouched`() {
+        val answer = "Refer her urgently if she has heavy bleeding, fever, or convulsions."
+
+        assertEquals(answer, ChatViewModel.stripThinkSpans(answer))
+    }
+
+    // ── stripSourcePreamble ───────────────────────────────────────────────────
+
+    @Test
+    fun `a leading talks-about-the-prompt clause is dropped and the answer capitalised`() {
+        val raw = "The context mentions that a newborn weighs 2.2 kg and needs kangaroo care."
+
+        assertEquals(
+            "A newborn weighs 2.2 kg and needs kangaroo care.",
+            ChatViewModel.stripSourcePreamble(raw),
+        )
+    }
+
+    @Test
+    fun `an according-to preface is dropped`() {
+        listOf(
+            "Based on the information provided, refer her urgently to the hospital.",
+            "According to the card, refer her urgently to the hospital.",
+            "As per the references above: refer her urgently to the hospital.",
+        ).forEach { raw ->
+            assertEquals(
+                "Refer her urgently to the hospital.",
+                ChatViewModel.stripSourcePreamble(raw),
+            )
+        }
+    }
+
+    @Test
+    fun `an answer that does not open with a preamble is untouched`() {
+        val answer = "Ask her to lie down and measure her blood pressure again after four hours."
+
+        assertEquals(answer, ChatViewModel.stripSourcePreamble(answer))
+    }
+
+    /** A statement about what the card omits is an answer in its own right, not a preface. */
+    @Test
+    fun `a sentence reporting what the card does not cover survives`() {
+        val answer = "The information above does not mention a dose for this."
+
+        assertEquals(answer, ChatViewModel.stripSourcePreamble(answer))
+    }
+
+    /** Stripping must never leave a fragment where there was a sentence. */
+    @Test
+    fun `a preamble with nothing substantial after it is left alone`() {
+        val raw = "Based on the information provided, yes."
+
+        assertEquals(raw, ChatViewModel.stripSourcePreamble(raw))
+    }
+
+    @Test
+    fun `mid-answer mentions are not touched`() {
+        val answer = "Refer her urgently. According to the card, this applies before 37 weeks."
+
+        assertEquals(answer, ChatViewModel.stripSourcePreamble(answer))
     }
 }

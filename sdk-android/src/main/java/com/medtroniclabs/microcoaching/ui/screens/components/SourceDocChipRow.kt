@@ -2,14 +2,11 @@ package com.medtroniclabs.microcoaching.ui.screens.components
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Description
@@ -27,22 +24,28 @@ import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.network.SourceDocumentRef
 
 /**
- * Citation chip row rendered below an assistant chat bubble that came from a
- * BM25-matched or backend-RAG answer. Each chip dereferences a single
- * source-document UUID via
+ * Citation chip rendered below an assistant chat bubble that came from a BM25-matched or
+ * backend-RAG answer. The chip dereferences a source-document UUID via
  * [com.medtroniclabs.microcoaching.network.CoachingApiService.getSourceDocumentPresignedUrls].
  *
- * Per-chip label resolution (first non-blank wins):
+ * Only the **first** document is shown. Retrieval routinely cites several, but they are
+ * ranked, so the rest add width without adding much: the reader wants the one place to
+ * look, and the tail was pushing the chip row into a horizontal scroll.
+ *
+ * Label resolution (first non-blank wins):
  *  1. the document's own `title`,
  *  2. its `original_filename`,
  *  3. the dominant grounding module's title ([moduleTitle]),
  *  4. a generic "Source document" default.
  *
- * @param sourceDocuments Rich refs to render — one chip per document, in order.
+ * @param sourceDocuments Ranked refs; all but the first are ignored.
  * @param moduleTitle Cached title of the dominant grounding module in the
- *   active SDK locale, used only as a fallback when a document has no title.
- * @param onTap Invoked when the user taps a chip. Caller fires the
+ *   active SDK locale, used only as a fallback when the document has no title.
+ * @param onTap Invoked when the user taps the chip. Caller fires the
  *   presigned-url fetch + preview navigation.
+ * @param startPage Cited page, forwarded to [onTap] so the viewer can land on it.
+ *   Deliberately not shown in the label: a page number is a retrieval detail the
+ *   reader can't act on, and it crowded out the document title it was appended to.
  */
 @Composable
 fun SourceDocChipRow(
@@ -52,34 +55,21 @@ fun SourceDocChipRow(
     startPage: Int? = null,
     modifier: Modifier = Modifier,
 ) {
-    if (sourceDocuments.isEmpty()) return
+    val doc = sourceDocuments.firstOrNull() ?: return
 
-    val defaultLabel = stringResource(R.string.chat_source_default)
+    val label = doc.title?.takeIf { it.isNotBlank() }
+        ?: doc.originalFilename?.takeIf { it.isNotBlank() }
+        ?: moduleTitle?.takeIf { it.isNotBlank() }
+        ?: stringResource(R.string.chat_source_default)
 
-    LazyRow(
-        modifier = modifier.padding(top = 6.dp),
-        contentPadding = PaddingValues(horizontal = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        items(sourceDocuments.size) { index ->
-            val doc = sourceDocuments[index]
-            val label = doc.title?.takeIf { it.isNotBlank() }
-                ?: doc.originalFilename?.takeIf { it.isNotBlank() }
-                ?: moduleTitle?.takeIf { it.isNotBlank() }
-                ?: defaultLabel
-            SourceDocChip(
-                label = label,
-                pageLabel = startPage?.let { "p. $it" },
-                onClick = { onTap(doc.id, label, startPage) },
-            )
-        }
+    Row(modifier = modifier.padding(top = 6.dp, start = 4.dp, end = 4.dp)) {
+        SourceDocChip(label = label, onClick = { onTap(doc.id, label, startPage) })
     }
 }
 
 @Composable
 private fun SourceDocChip(
     label: String,
-    pageLabel: String? = null,
     onClick: () -> Unit,
 ) {
     Surface(
@@ -103,7 +93,7 @@ private fun SourceDocChip(
             )
             Spacer(Modifier.width(6.dp))
             Text(
-                text = if (pageLabel != null) "$label · $pageLabel" else label,
+                text = label,
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
                 maxLines = 2,

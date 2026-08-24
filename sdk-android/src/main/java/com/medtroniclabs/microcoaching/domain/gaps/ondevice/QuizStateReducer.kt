@@ -2,11 +2,15 @@ package com.medtroniclabs.microcoaching.domain.gaps.ondevice
 
 /**
  * Pure fold of one quiz-attempt outcome onto a [QuizState], mirroring the backend
- * `QuizQuestionStateService` (quiz-level telemetry mode):
+ * `QuizQuestionStateService`:
  *  - incorrect → `failedAttemptsCount + 1` (reset to 1 when the previous failure is
  *    outside the escalation window), `status = ACTIVE`, escalate at the threshold;
- *  - correct → `failedAttemptsCount − 1` (floor 0); reaching 0 ⇒ `RESOLVED`;
+ *  - correct → clears the counter outright and resolves;
  *  - unknown → record the attempt timestamp only (no per-question signal).
+ *
+ * The correct-answer rule differs from `GapStateReducer`, which decrements: the backend
+ * likewise resets for quiz state and decrements for gap state. Getting this wrong leaves a
+ * question the backend considers resolved still being re-emitted on-device.
  *
  * Stateless and deterministic — `nowMillis` (the event's timestamp) is passed in,
  * never read from the clock, so it runs in the plain JUnit source set.
@@ -36,14 +40,18 @@ object QuizStateReducer {
                     escalatedToSupervisor = failed >= config.escalationFailureCount,
                 )
             }
-            GapOutcome.CORRECT -> {
-                val failed = (state.failedAttemptsCount - 1).coerceAtLeast(0)
+            // Guarded on a non-zero count exactly as the backend is: a correct answer to a
+            // question that was never failed records the attempt and nothing more.
+            GapOutcome.CORRECT -> if (state.failedAttemptsCount == 0) {
+                state.copy(lastAttemptAt = nowMillis, firstAttemptAt = firstAttemptAt)
+            } else {
                 state.copy(
-                    failedAttemptsCount = failed,
+                    failedAttemptsCount = 0,
+                    lastFailedAttemptAt = null,
                     lastAttemptAt = nowMillis,
                     firstAttemptAt = firstAttemptAt,
-                    status = if (failed == 0) GapStatus.RESOLVED else state.status,
-                    escalatedToSupervisor = state.escalatedToSupervisor && failed >= config.escalationFailureCount,
+                    status = GapStatus.RESOLVED,
+                    escalatedToSupervisor = false,
                 )
             }
             GapOutcome.UNKNOWN -> state.copy(lastAttemptAt = nowMillis, firstAttemptAt = firstAttemptAt)

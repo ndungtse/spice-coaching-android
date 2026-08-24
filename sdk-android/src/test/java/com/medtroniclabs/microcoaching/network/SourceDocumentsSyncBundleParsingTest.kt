@@ -74,6 +74,17 @@ class SourceDocumentsSyncBundleParsingTest {
     }
 
     @Test
+    fun `only video reaches the Training tab - audio and docs do not`() {
+        fun itemOf(type: String?) = SourceDocumentSyncDownloadItem(sourceDocumentId = "x", sourceType = type)
+
+        assertTrue(itemOf("video").isVideo)
+        assertTrue("matching is case-insensitive", itemOf("VIDEO").isVideo)
+        assertFalse("audio belongs in the Knowledge grid now", itemOf("audio").isVideo)
+        assertFalse(itemOf("pdf").isVideo)
+        assertFalse(itemOf(null).isVideo)
+    }
+
+    @Test
     fun `unknown fields and explicit nulls do not fail the bundle`() {
         // The backend also emits assignment metadata and tenant ids, and sends an
         // explicit null for URLs it couldn't presign. kotlinx rejects a null on a

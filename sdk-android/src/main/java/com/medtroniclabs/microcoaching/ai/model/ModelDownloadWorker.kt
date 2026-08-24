@@ -38,7 +38,8 @@ import java.util.concurrent.TimeUnit
  * On success, [KEY_FILE_PATH] in output data holds the absolute path to the model file.
  * [ModelManager] observes this worker's [WorkInfo][androidx.work.WorkInfo] to update [ModelState].
  *
- * Backend endpoint: `{backendUrl}/api/v1/models/gemma/download`
+ * Backend endpoint: `{backendUrl}/api/v1/models/gemma/download` — serves a `.task`, which
+ * no bundled engine loads, so this provider is skipped (see [tryBackend]).
  * HuggingFace endpoint: the selected [ModelCatalog] variant's `downloadUrl`
  * (overridable via [MicroCoachingConfig.huggingFaceModelUrl]).
  */
@@ -46,6 +47,9 @@ class ModelDownloadWorker(
     context: Context,
     params: WorkerParameters,
 ) : CoroutineWorker(context, params) {
+
+    /** Last `Content-Length` handed to [recordObservedSize]; dedupes the preference write. */
+    private var lastRecordedTotalBytes: Long = 0L
 
     override suspend fun getForegroundInfo(): ForegroundInfo =
         buildForegroundInfo(progress = 0, bytesDownloaded = 0L, totalBytes = 0L)
@@ -96,7 +100,12 @@ class ModelDownloadWorker(
 
             when (outcome) {
                 is DownloadOutcome.Success -> {
-                    Log.i(TAG, "Download complete via $providerName → ${outcome.file.name} (${outcome.file.length() / 1_048_576} MB)")
+                    // Exact bytes, not MB — a short file can round to the expected megabytes.
+                    Log.i(
+                        TAG,
+                        "Download complete via $providerName → ${outcome.file.name} " +
+                            "(${outcome.file.length()} bytes, expected ${variant.sizeInBytes})",
+                    )
                     // Persist the ready flag before returning so ModelManager.reconcileReadyState()
                     // on the next process start can emit Ready immediately even if the WorkInfo
                     // SUCCEEDED event was never observed by a live ModelManager (e.g. worker
@@ -135,6 +144,18 @@ class ModelDownloadWorker(
             return DownloadOutcome.Failure("backendUrl not configured — set via Builder.backendUrl()")
         }
 
+        // This endpoint serves a `.task`, which no bundled engine can load, so its bytes
+        // are certain to fail validation — after transferring hundreds of megabytes over
+        // what may be a metered field connection. Skipping to the next provider is the
+        // difference between one wasted download per device and none. Using this provider
+        // again means serving `.litertlm` from it.
+        if (!variant.fileName.endsWith(".task")) {
+            return DownloadOutcome.Failure(
+                "backend endpoint serves a Gemma .task, which no bundled engine loads — " +
+                    "'${variant.fileName}' must come from another provider",
+            )
+        }
+
         val authToken = inputData.getString(KEY_AUTH_TOKEN) ?: ""
         val downloadUrl = "${backendUrl.trimEnd('/')}/api/v1/models/gemma/download"
         // Write to the variant's filename so on-disk resolution (ModelManager /
@@ -155,6 +176,8 @@ class ModelDownloadWorker(
             headers = headers,
             outputFile = outputFile,
             minValidBytes = ModelSizeProbe.minValidSizeBytes(applicationContext, variant),
+            validate = validatorFor(variant),
+            variant = variant,
         )
     }
 
@@ -176,7 +199,7 @@ class ModelDownloadWorker(
 
         if (hfToken.isBlank() && variant.requiresAccessToken) {
             Log.w(TAG, "[HF] token=<BLANK> but model '${variant.id}' is gated — download will fail")
-        } else if (BuildConfig.DEBUG) {
+        } else if (BuildConfig.DEBUG && hfToken.isNotBlank()) {
             Log.d(TAG, "[HF] token=${hfToken.take(1)}…${hfToken.takeLast(1)} (len=${hfToken.length})")
         }
         if (BuildConfig.DEBUG) {
@@ -184,11 +207,22 @@ class ModelDownloadWorker(
             Log.d(TAG, "[HF] outputFile=${outputFile.absolutePath}")
         }
 
+        // Send the token only where it can help. On an ungated repo — which the default
+        // Qwen3 variant is — a stale or revoked token turns a download that would have
+        // worked anonymously into a 401, and there is no reason to hand credentials to a
+        // public URL either. A host `huggingFaceModelUrl` override is the exception: it may
+        // well point at a gated file the catalog knows nothing about, so it keeps the token.
+        val usesHostUrl = hfUrl != variant.downloadUrl
+        val sendToken = hfToken.isNotBlank() && (variant.requiresAccessToken || usesHostUrl)
         val headers = buildMap<String, String> {
-            if (hfToken.isNotBlank()) put("Authorization", "Bearer $hfToken")
+            if (sendToken) put("Authorization", "Bearer $hfToken")
         }
         if (BuildConfig.DEBUG) {
-            Log.d(TAG, "[HF] Authorization header present=${headers.containsKey("Authorization")}")
+            Log.d(
+                TAG,
+                "[HF] Authorization header present=${headers.containsKey("Authorization")} " +
+                    "(gated=${variant.requiresAccessToken}, hostUrlOverride=$usesHostUrl)",
+            )
         }
 
         return streamDownload(
@@ -196,21 +230,59 @@ class ModelDownloadWorker(
             headers = headers,
             outputFile = outputFile,
             minValidBytes = ModelSizeProbe.minValidSizeBytes(applicationContext, variant),
+            validate = validatorFor(variant),
+            variant = variant,
         )
+    }
+
+    // ── Completeness validation ───────────────────────────────────────────────
+
+    /**
+     * Structural check for [variant]'s format, or null when there is none. The expected
+     * length has to be passed in, because nothing inside the container proves the transfer
+     * finished.
+     *
+     * That length is whatever the host has said: the `Content-Length` observed for this
+     * variant — [ModelSizeProbe.recordObservedSize] caches it as this very download
+     * progresses — falling back to the catalog's figure on a first run.
+     */
+    private fun validatorFor(variant: ModelVariant): ((File) -> String?)? =
+        if (ModelCatalog.isLiteRtLmBundle(variant)) {
+            { file ->
+                val expected = ModelSizeProbe.cachedSize(applicationContext, variant)
+                    ?: variant.sizeInBytes
+                ModelFileIntegrity.validateLiteRtLmBundle(file, expected)
+            }
+        } else {
+            null
+        }
+
+    /**
+     * Caches the served `Content-Length` so the displayed size comes from the host instead
+     * of a constant that goes stale when the model is republished. Guarded to one write per
+     * distinct value, since progress fires repeatedly.
+     */
+    private fun recordObservedSize(variant: ModelVariant, totalBytes: Long) {
+        if (totalBytes <= 0L || totalBytes == lastRecordedTotalBytes) return
+        lastRecordedTotalBytes = totalBytes
+        ModelSizeProbe.recordObservedSize(applicationContext, variant, totalBytes)
     }
 
     // ── Shared streaming download ─────────────────────────────────────────────
 
     /**
-     * Streams [url] to [outputFile] (resume + throttled progress + size-floor check) via the
-     * shared [ResumableHttpDownloader], reporting progress through [emitProgress]. Maps the
-     * shared result back to this worker's provider-fallback [DownloadOutcome].
+     * Streams [url] to [outputFile] (resume + throttled progress + size floor + [validate])
+     * via the shared [ResumableHttpDownloader], reporting progress through [emitProgress].
+     * Maps the result to this worker's provider-fallback [DownloadOutcome], so a rejected
+     * file falls through to the next provider instead of being stored.
      */
     private suspend fun streamDownload(
         url: String,
         headers: Map<String, String>,
         outputFile: File,
         minValidBytes: Long,
+        validate: ((File) -> String?)?,
+        variant: ModelVariant,
     ): DownloadOutcome = when (
         val result = ResumableHttpDownloader.download(
             url = url,
@@ -218,7 +290,11 @@ class ModelDownloadWorker(
             minValidBytes = minValidBytes,
             headers = headers,
             logTag = TAG,
-        ) { percent, bytesDownloaded, totalBytes -> emitProgress(percent, bytesDownloaded, totalBytes) }
+            validate = validate,
+        ) { percent, bytesDownloaded, totalBytes ->
+            recordObservedSize(variant, totalBytes)
+            emitProgress(percent, bytesDownloaded, totalBytes)
+        }
     ) {
         is DownloadResult.Success -> DownloadOutcome.Success(outputFile)
         is DownloadResult.Failure -> DownloadOutcome.Failure(result.reason)

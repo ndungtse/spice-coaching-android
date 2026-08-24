@@ -15,7 +15,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.contentOrNull
 
 /**
- * In-memory retrieval index over the on-device module corpus (B1 of chat_plan.md).
+ * In-memory retrieval index over the on-device module corpus.
  *
  * Each module contributes one chunk per entry in `cards_json` (title + body, BN/EN
  * where available). Quiz JSON is **not** indexed — cards + `search_metadata` only.
@@ -28,10 +28,9 @@ import kotlinx.serialization.json.contentOrNull
  *   - KEYWORD  (module `keywords`/`search_phrases_*` + per-card `keywords_*` +
  *              legacy per-card `retrieval_metadata`; low-weight recall hint)
  * and the per-field scores are combined as a weighted sum. Each field is
- * length-normalised against its OWN peers, so module-level metadata can no longer
- * inflate a card's body length and depress its real body TF — the bug that flattened
- * within-module ranking and de-calibrated the old absolute threshold. `synonyms_en`
- * is NOT indexed; it rides query expansion ([ClinicalSynonymMap]) instead.
+ * length-normalised against its OWN peers, so module-level metadata cannot inflate a
+ * card's body length and depress its real body term frequency. `synonyms_en` is NOT
+ * indexed; it rides query expansion ([ClinicalSynonymMap]) instead.
  *
  * Two languages stay fully separate (EN query never scores against BN tokens).
  * Build cost is ≪ 100 ms for ~200 chunks. Rebuild on app start and after every
@@ -48,13 +47,33 @@ class ModuleKnowledgeIndex private constructor(
     /** Which per-language index a [search] call scores against. */
     enum class Lang { EN, BN }
 
-    /** BM25 fields scored independently and combined by [fieldWeight]. */
+    /** BM25 fields scored independently and combined by [FieldWeights]. */
     enum class Field { TITLE, BODY, QUESTION, KEYWORD }
 
     /**
+     * Per-field multipliers for the combined score. Exposed as a value so the balance
+     * between "the card is TITLED this" and "the card MENTIONS this" can be swept
+     * against the benchmark instead of argued about.
+     */
+    data class FieldWeights(
+        val title: Float = W_TITLE,
+        val body: Float = W_BODY,
+        val question: Float = W_QUESTION,
+        val keyword: Float = W_KEYWORD,
+    ) {
+        operator fun get(field: Field): Float = when (field) {
+            Field.TITLE -> title
+            Field.BODY -> body
+            Field.QUESTION -> question
+            Field.KEYWORD -> keyword
+        }
+
+        companion object { val DEFAULT = FieldWeights() }
+    }
+
+    /**
      * Top-K most relevant chunks for [query]. Returns empty when nothing clears the
-     * gate — caller treats that as the "no grounding found" refusal trigger (L2 in
-     * chat_plan.md §B4).
+     * gate — the caller treats that as the "no grounding found" refusal trigger.
      *
      * @param scoreThreshold absolute floor on the combined field-weighted score.
      *   `0f` (used by unit tests) bypasses the gate to isolate "was it indexed?" from
@@ -68,6 +87,9 @@ class ModuleKnowledgeIndex private constructor(
         k: Int = 2,
         scoreThreshold: Float = DEFAULT_SCORE_THRESHOLD,
         language: Lang = Lang.EN,
+        charBigramWeight: Float = DEFAULT_CHAR_BIGRAM_WEIGHT,
+        fieldWeights: FieldWeights = FieldWeights.DEFAULT,
+        definitionBoost: Boolean = true,
     ): List<GroundingChunk> {
         if (query.isBlank() || chunks.isEmpty()) {
             Log.i(TAG, "search lang=$language → 0 hits (blankQuery=${query.isBlank()} emptyIndex=${chunks.isEmpty()})")
@@ -97,13 +119,23 @@ class ModuleKnowledgeIndex private constructor(
         // "…During Pregnancy" title) drowns out the real discriminator the CHW typed
         // (e.g. "90/60"). Expansions still widen recall in BODY/QUESTION/KEYWORD.
         val originalWeights = (tokens + bigrams).associateWith { 1.0f }
+            .downWeightCharBigrams(charBigramWeight)
+        val weightedTerms = termWeights.downWeightCharBigrams(charBigramWeight)
+
+        // A bare "X কি?" is the one shape where term statistics point the wrong way —
+        // see DefinitionQueryBoost. Null for every other question, so this is inert
+        // on the vast majority of traffic.
+        val definitionTopic = if (definitionBoost) DefinitionQueryBoost.topicOf(query) else null
 
         val combined = chunks.indices.map { i ->
             var s = 0f
             for (field in Field.entries) {
-                val weights = if (field == Field.TITLE) originalWeights else termWeights
+                val weights = if (field == Field.TITLE) originalWeights else weightedTerms
                 val fieldScore = scorers.getValue(field).scoreWeighted(weights, i)
-                if (fieldScore != 0f) s += fieldWeight(field) * fieldScore
+                if (fieldScore != 0f) s += fieldWeights[field] * fieldScore
+            }
+            if (s > 0f && definitionTopic != null && DefinitionQueryBoost.matches(chunks[i], definitionTopic)) {
+                s *= DefinitionQueryBoost.BOOST
             }
             i to s
         }
@@ -132,16 +164,85 @@ class ModuleKnowledgeIndex private constructor(
     /** Total number of chunks currently indexed. Exposed for telemetry / diagnostics. */
     val size: Int = chunks.size
 
+    /**
+     * Why a chunk scored what it scored: the per-field contributions already multiplied
+     * by [fieldWeight], plus the same score computed from the CHW's words alone so the
+     * character-bigram share is visible. Diagnostics only — used by the retrieval lab to
+     * explain a ranking; runs the same scorers as [search], so it cannot drift from it.
+     */
+    internal fun explain(
+        query: String,
+        chunkId: String,
+        language: Lang = Lang.EN,
+        charBigramWeight: Float = DEFAULT_CHAR_BIGRAM_WEIGHT,
+        fieldWeights: FieldWeights = FieldWeights.DEFAULT,
+    ): Explanation? {
+        val i = chunks.indexOfFirst { it.chunkId == chunkId }
+        if (i < 0) return null
+        val scorers = if (language == Lang.BN) scorersBn else scorersEn
+        val raw = queryWeights(query, scorers) ?: return null
+        val weights = QueryWeights(
+            original = raw.original.downWeightCharBigrams(charBigramWeight),
+            expanded = raw.expanded.downWeightCharBigrams(charBigramWeight),
+        )
+        val perField = Field.entries.associateWith { field ->
+            val w = if (field == Field.TITLE) weights.original else weights.expanded
+            fieldWeights[field] * scorers.getValue(field).scoreWeighted(w, i)
+        }
+        // Words only: drop the two-character Bangla fragments the tokenizer emits for
+        // morphology, which otherwise dominate the total on long Bangla queries.
+        val wordsOnly = weights.expanded.filterKeys { !it.isBanglaCharBigram() }
+        val wordsOnlyTitle = weights.original.filterKeys { !it.isBanglaCharBigram() }
+        val wordScore = Field.entries.sumOf { field ->
+            val w = if (field == Field.TITLE) wordsOnlyTitle else wordsOnly
+            (fieldWeights[field] * scorers.getValue(field).scoreWeighted(w, i)).toDouble()
+        }.toFloat()
+        return Explanation(perField = perField, total = perField.values.sum(), wordOnlyTotal = wordScore)
+    }
+
+    /** Per-field breakdown for one chunk against one query. */
+    internal data class Explanation(
+        val perField: Map<Field, Float>,
+        val total: Float,
+        val wordOnlyTotal: Float,
+    ) {
+        /** Share of the score that came from character bigrams rather than real words. */
+        val charBigramShare: Float
+            get() = if (total <= 0f) 0f else (1f - wordOnlyTotal / total).coerceIn(0f, 1f)
+    }
+
+    /** Indexed token count of one chunk's field — BM25 penalises longer fields (b=0.75). */
+    internal fun fieldLength(chunkId: String, field: Field, language: Lang = Lang.EN): Int? {
+        val i = chunks.indexOfFirst { it.chunkId == chunkId }
+        if (i < 0) return null
+        val scorers = if (language == Lang.BN) scorersBn else scorersEn
+        return scorers.getValue(field).documentLength(i)
+    }
+
+    private data class QueryWeights(val original: Map<String, Float>, val expanded: Map<String, Float>)
+
+    /** Query-term weights shared by [search] and [explain] so the two cannot disagree. */
+    private fun queryWeights(query: String, scorers: Map<Field, Bm25Scorer>): QueryWeights? {
+        val tokens = BanglaTokenizer.tokenizeQuery(query)
+        if (tokens.isEmpty()) return null
+        val bigrams = BanglaTokenizer.wordBigrams(query)
+        val df: (String) -> Int = { t -> scorers.values.maxOf { it.documentFrequency(t) } }
+        return QueryWeights(
+            original = (tokens + bigrams).associateWith { 1.0f },
+            expanded = ClinicalSynonymMap.expandQueryWeighted(tokens + bigrams, df, dynamicSynonyms),
+        )
+    }
+
     companion object {
 
         private const val TAG = "ModuleKnowledgeIndex"
 
         /**
          * Field weights for the combined score. TITLE is the strongest single-field
-         * signal (replaces the old title×3 token-duplication hack); QUESTION is second
-         * so per-card `retrieval_hints_*` strongly pull the intended card without
-         * out-voting a literal title hit; KEYWORD is a low-weight recall floor
-         * that lifts the right module into range without flattening within-module rank.
+         * signal; QUESTION is second, so per-card `retrieval_hints_*` pull the intended
+         * card without out-voting a literal title hit; KEYWORD is a low-weight recall
+         * floor that lifts the right module into range without flattening within-module
+         * rank. Raising TITLE further was measured to cost self-retrieval accuracy.
          */
         private const val W_TITLE = 3.0f
         private const val W_BODY = 1.0f
@@ -158,12 +259,31 @@ class ModuleKnowledgeIndex private constructor(
          */
         private const val DEFAULT_SCORE_THRESHOLD = 1.5f
 
-        private fun fieldWeight(field: Field): Float = when (field) {
-            Field.TITLE -> W_TITLE
-            Field.BODY -> W_BODY
-            Field.QUESTION -> W_QUESTION
-            Field.KEYWORD -> W_KEYWORD
+        /**
+         * Weight applied to the tokenizer's Bangla character bigrams relative to the
+         * words a CHW actually typed. They exist to bridge inflection (ম্যালেরিয়ার vs
+         * ম্যালেরিয়া) but they outnumber real words roughly 10:1 on a short question, and
+         * BM25 sums over terms — so at full weight a card can rank on Bengali
+         * orthography alone, sharing no word with the query. Tunable so the trade can
+         * be measured rather than argued.
+         *
+         * At full weight a card can rank on Bangla orthography alone, sharing no actual
+         * word with the question. Dropping bigrams entirely costs accuracy the other way,
+         * because they genuinely bridge inflection (ম্যালেরিয়ার → ম্যালেরিয়া). A quarter
+         * weight keeps the bridge and sheds most of the noise; re-sweep it with the
+         * retrieval benchmark if the corpus changes materially.
+         */
+        internal const val DEFAULT_CHAR_BIGRAM_WEIGHT = 0.25f
+
+        /** A two-character all-Bangla token is a morphology bigram, not a word. */
+        private fun Map<String, Float>.downWeightCharBigrams(factor: Float): Map<String, Float> {
+            if (factor == 1.0f) return this
+            return mapValues { (term, w) -> if (term.isBanglaCharBigram()) w * factor else w }
         }
+
+        /** A two-character all-Bangla token is a morphology bigram, not a word. */
+        private fun String.isBanglaCharBigram(): Boolean =
+            length == 2 && all { it.code in 0x0980..0x09FF }
 
         /** Build an empty index — useful as a no-op fallback before sync runs. */
         fun empty(): ModuleKnowledgeIndex {

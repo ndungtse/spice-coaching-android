@@ -103,22 +103,6 @@ class SyncPayloadMapperGapTest {
     }
 
     @Test
-    fun `timestamp_utc is never null - falls back to timestamp_local`() {
-        // The backend coaching_events insert rejects a null timestamp_utc; the
-        // entity never captures a separate UTC value, so it must default to the
-        // (UTC epoch) timestamp_local.
-        val payload = minimalEntity(timestampLocal = 1_700_000_000_000L, timestampUtc = null).toPayload()
-        assertEquals(1_700_000_000_000L, payload.timestampUtc)
-        assertEquals(payload.timestampLocal, payload.timestampUtc)
-    }
-
-    @Test
-    fun `explicit timestamp_utc is preserved`() {
-        val payload = minimalEntity(timestampLocal = 1_700_000_000_000L, timestampUtc = 1_699_999_999_000L).toPayload()
-        assertEquals(1_699_999_999_000L, payload.timestampUtc)
-    }
-
-    @Test
     fun `a structured payload string is emitted flat, not wrapped under raw`() {
         // recordSpiceActionObserved stores a flat JSON object as the payload
         // string; it must be flattened into payload_json (Events-Modelling §70),

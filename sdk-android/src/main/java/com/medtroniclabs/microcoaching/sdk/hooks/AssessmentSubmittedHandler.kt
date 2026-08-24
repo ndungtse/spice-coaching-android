@@ -90,8 +90,7 @@ import com.medtroniclabs.microcoaching.domain.refresher.CoachingModuleStore
 import com.medtroniclabs.microcoaching.domain.config.LearningPoints
 import com.medtroniclabs.microcoaching.ui.learn.QuizRetryGate
 
-// onAssessmentSubmitted body — extracted verbatim from MicroCoachingSDK as an extension
-// (behaviour-preserving). The facade keeps the public method as a thin delegate.
+// onAssessmentSubmitted body. The facade keeps the public method as a thin delegate.
 private const val TAG = "MicroCoachingSDK"
 
 internal fun MicroCoachingSDK.handleAssessmentSubmitted(
@@ -100,11 +99,9 @@ internal fun MicroCoachingSDK.handleAssessmentSubmitted(
     assessmentData: Map<String, Any>,
 ) {
     val chwId = currentCHWId ?: return
-    // Test-loop diagnostic: the key set lands here so we can grep
-    // logcat in docs/gaps/GAPS_TEST.md and confirm SPICE actually
-    // wrote `referralFacilityType` / `referred_site_id` etc. Values
-    // are intentionally omitted — they may contain de-identified
-    // clinical data that doesn't belong in logcat.
+    // The key set alone confirms from logcat whether SPICE actually wrote
+    // `referralFacilityType` / `referred_site_id` etc. Values are omitted —
+    // they may carry de-identified clinical data that doesn't belong there.
     Log.i(
         TAG,
         "onAssessmentSubmitted — encounterId='${encounterId}' " +
@@ -115,79 +112,9 @@ internal fun MicroCoachingSDK.handleAssessmentSubmitted(
         ("patient_id" to patientId)
     evaluateWorkflowSignal(chwId, "assessment_submitted", payload)
 
-    // UC-2 / UC-3: emit the assessment-level telemetry the backend expects
-    // (conditional `risk_flag_observed`, stub `card_shown`). Referral
-    // correctness (`spice_action_observed`) is deliberately NOT emitted
-    // here — at assessment-save the CHW has not yet picked a destination
-    // facility, so any referral verdict would be fabricated. That row is
-    // owned entirely by [onReferralSubmitted], which sees the actual pick.
-    // The render path is not yet built — `card_shown` is a placeholder
-    // until the post-assessment counselling card surface exists.
-    sdkScope.launch {
-        try {
-            val recorder = newSdkHookRecorder(chwId)
-            val patientIdHash = PatientIdHasher.hash(patientId)
-            val visitId = encounterId.takeIf { it.isNotBlank() }
-            val villageId = assessmentData["village_id"] as? String
-            val upazilaId = assessmentData["upazila_id"] as? String
-            val patientTrackId = assessmentData["patient_track_id"] as? String
-            val gapId = assessmentData["behavioural_gap_id"] as? String
-            val riskLevel = (assessmentData["risk_level"] as? String).orEmpty()
-            val networkState = if (isNetworkAvailable()) "online" else "offline"
-
-            // Referral-compliance gaps are evaluated only at
-            // [onReferralSubmitted] (the moment the `actual.*` pick exists);
-            // the assessment-submit payload is flat, so no gap can fire here
-            // and no `spice_action_observed` row is written. This keeps
-            // assessment-save free of any (necessarily fabricated) referral
-            // verdict and avoids double-counting a gap across both hooks.
-
-            if (riskLevel.equals("HIGH", ignoreCase = true) ||
-                riskLevel.equals("EMERGENCY", ignoreCase = true)
-            ) {
-                recorder.recordRiskFlagObserved(
-                    riskLevel = riskLevel,
-                    patientIdHash = patientIdHash,
-                    patientVisitId = visitId,
-                    patientTrackId = patientTrackId,
-                    villageId = villageId,
-                    upazilaId = upazilaId,
-                    behaviouralGapId = gapId,
-                    networkState = networkState,
-                )
-            }
-
-            // STUB: post-assessment coaching surface "fires" — replace
-            // with a render-path-driven emission once the visit card UI
-            // is built. Marked `inferenceMode = "cached"` because that's
-            // the only resolution path in scope this week.
-            recorder.recordCardShown(
-                cardType = "action",
-                triggerType = "workflow_event",
-                inferenceMode = "cached",
-                patientIdHash = patientIdHash,
-                patientVisitId = visitId,
-                patientTrackId = patientTrackId,
-                villageId = villageId,
-                upazilaId = upazilaId,
-                behaviouralGapId = gapId,
-                networkState = networkState,
-            )
-        } catch (e: Exception) {
-            Log.w(TAG, "onAssessmentSubmitted event emission failed: ${e.message}")
-        }
-
-        // Push the freshly-written `clinical_observed` rows immediately
-        // instead of waiting for the 15-min WorkManager tick. Assessment
-        // submit is a meaningful milestone (the supervisor dashboard's
-        // "correct referral" tile depends on these), and a CHW with
-        // network connectivity should see their action surface server-
-        // side within seconds.
-        //
-        // Offline-safe: `flushTelemetryNow` enqueues a WorkManager job
-        // with a `NetworkType.CONNECTED` constraint, so an offline
-        // device queues the work and it fires the moment connectivity
-        // is restored. No need to gate on `isNetworkAvailable()` here.
-        flushTelemetryNow()
-    }
+    // No telemetry is written here. Referral correctness
+    // (`spice_action_observed`) is owned entirely by [onReferralSubmitted],
+    // which sees the destination facility the CHW actually picked — at
+    // assessment-save that pick does not exist yet, so any verdict written
+    // here would be fabricated.
 }

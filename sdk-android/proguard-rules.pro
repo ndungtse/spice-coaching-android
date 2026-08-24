@@ -2,5 +2,4 @@
 # You can control the set of applied configuration files using the
 # proguardFiles setting in build.gradle.kts.
 -dontwarn io.opentelemetry.**
--dontwarn com.google.mediapipe.**
 -dontwarn com.google.ai.edge.**

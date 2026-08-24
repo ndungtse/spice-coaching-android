@@ -35,7 +35,7 @@ import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueDark
  * [MorningCard] on the home screen — both use [MicroCoachingSDK.getSelectedMorningModule]).
  *
  * Renamed from `QuickLearnCard` (v0.3.2). Tap opens [RefresherBottomSheet]
- * in question-first mode (1 question → lesson cards).
+ * (its phases follow the refresher's kind).
  *
  * Dormant since the sub-tab split.
  *

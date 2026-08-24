@@ -5,22 +5,20 @@ import com.medtroniclabs.microcoaching.MicroCoachingSDK
 
 /**
  * Looks up the presigned URL for a source document among the rows the last sync
- * wrote.
- *
- * The backend has no on-demand presign endpoint, so a document's URL only ever
- * arrives attached to the source-document catalogue. Everything that opens or
- * plays a document reads it from here rather than asking the network, which also
- * means the lookup works offline for as long as the stored URL is valid.
+ * wrote, so opening a document costs no network call and keeps working offline
+ * for as long as the stored URL is valid.
  *
  * Two tables can hold it: `published_source_document` for anything in the
  * Knowledge grid, and `assigned_video` for the CHW's assigned media. A document
  * can be in both, so the published copy is preferred simply because it is
- * refreshed on every sync regardless of who is signed in.
+ * refreshed on every sync regardless of who is signed in. A document in neither —
+ * cited by chat but linked to no published module and assigned to nobody —
+ * resolves to null here; its URL arrives on the citation itself instead.
  *
  * A URL past its expiry is reported as absent rather than returned: handing back
  * a stale signature would surface as an opaque storage error instead of the
- * "not downloaded yet" state the callers already handle. Recovering means
- * syncing again, which re-presigns everything.
+ * "not downloaded yet" state the callers already handle. [renew] re-signs from a
+ * storage path without waiting for the next sync.
  */
 internal object SourceDocumentUrlStore {
 
@@ -60,6 +58,50 @@ internal object SourceDocumentUrlStore {
 
     /** Convenience for callers that only need the URL. */
     suspend fun presignedUrlFor(sourceDocumentId: String?): String? = resolve(sourceDocumentId)?.url
+
+    /**
+     * Re-sign this document from a storage path, ignoring whatever is cached.
+     *
+     * This is the escape hatch for a URL that has lapsed: the stored expiry can
+     * still look fresh while object storage has already stopped honouring the
+     * signature, and a URL carried on a chat citation goes stale within the hour.
+     *
+     * The path comes from the document's catalogue row, falling back to
+     * [fallbackStoragePath] for a document in neither catalogue — the caller's own
+     * copy of the path, which is all a chat-only citation has. Returns null when
+     * neither yields one.
+     */
+    suspend fun renew(sourceDocumentId: String?, fallbackStoragePath: String? = null): String? {
+        val id = sourceDocumentId?.takeIf { it.isNotBlank() } ?: return null
+        val sdk = runCatching { MicroCoachingSDK.getInstance() }.getOrNull() ?: return null
+
+        val storagePath = runCatching {
+            sdk.database.publishedSourceDocumentDao().getById(id)?.storagePath
+                ?: sdk.currentCHWId?.takeIf { it.isNotBlank() }?.let { chwId ->
+                    sdk.database.assignedVideoDao().getById(id, chwId)?.storagePath
+                }
+        }.getOrNull()?.takeIf { it.isNotBlank() }
+            ?: fallbackStoragePath?.takeIf { it.isNotBlank() }
+        if (storagePath == null) {
+            Log.d(TAG, "No storage path known for $id — cannot re-sign.")
+            return null
+        }
+
+        return runCatching {
+            val response = sdk.apiService.getPresignedUrls(StoragePathsPresignRequest(listOf(storagePath)))
+            if (!response.isSuccessful) {
+                Log.w(TAG, "Re-sign failed for $id: HTTP ${response.code()}")
+                return@runCatching null
+            }
+            val body = response.body()
+            val entry = body?.urls?.firstOrNull { it.storagePath == storagePath }
+            if (entry == null || entry.presignedUrl.isBlank()) {
+                Log.w(TAG, "Re-sign declined for $id (missing_paths=${body?.missingPaths})")
+                return@runCatching null
+            }
+            entry.presignedUrl
+        }.onFailure { Log.w(TAG, "Re-sign error for $id: ${it.message}", it) }.getOrNull()
+    }
 
     private fun fresh(url: String?, expiresAt: Long?, nowSec: Long): PresignedRef? {
         if (url.isNullOrBlank() || expiresAt == null || expiresAt <= nowSec) return null

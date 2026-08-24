@@ -161,4 +161,14 @@ class BanglaTokenizerTest {
         assertTrue(bigrams.contains("উচ্চ_রক্তচাপ"))
         assertTrue(bigrams.contains("রক্তচাপ_নিয়ন্ত্রণ"))
     }
+
+    @Test
+    fun `bengali digits fold to ascii so mixed-script clinical numbers match`() {
+        // Card bodies and their own hints mix scripts for the same threshold
+        // ("০-৩ মাস" vs "0-3 মাস", "১৪০/৯০" vs "140/90"), so without folding the two
+        // forms share no token at all.
+        assertEquals(BanglaTokenizer.tokenize("140/90"), BanglaTokenizer.tokenize("১৪০/৯০"))
+        assertTrue(BanglaTokenizer.tokenize("৬ মাস").contains("6"))
+        assertTrue(BanglaTokenizer.tokenizeQuery("প্রেশার ১৪৫/৯৫").contains("145/95"))
+    }
 }

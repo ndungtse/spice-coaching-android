@@ -31,6 +31,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.ui.common.CenterProgress
@@ -41,6 +42,7 @@ import com.medtroniclabs.microcoaching.ui.podashboard.SuggestionDetailViewModel
 import com.medtroniclabs.microcoaching.ui.podashboard.SuggestionEvidenceItem
 import com.medtroniclabs.microcoaching.ui.podashboard.components.MutedText
 import com.medtroniclabs.microcoaching.ui.podashboard.components.poCard
+import com.medtroniclabs.microcoaching.ui.podashboard.components.FREE_TEXT_MAX_LINES
 import com.medtroniclabs.microcoaching.ui.theme.SpiceBlue
 import com.medtroniclabs.microcoaching.ui.theme.SurfaceMuted
 
@@ -65,7 +67,7 @@ fun SuggestionDetailScreen(suggestionId: String, onBack: () -> Unit, onHome: () 
         when (val s = state) {
             is SuggestionDetailUiState.Loading -> CenterProgress()
             is SuggestionDetailUiState.Error ->
-                DashboardErrorState(offline = !networkAvailable, message = s.message, onRetry = vm::retry)
+                DashboardErrorState(offline = !networkAvailable, message = s.message, onRetry = vm::retry, isAuth = s.isAuth)
             is SuggestionDetailUiState.Ready -> Content(s.detail)
         }
     }
@@ -83,7 +85,12 @@ private fun Content(detail: SuggestionDetail) {
                     style = MaterialTheme.typography.labelMedium,
                 )
                 Spacer(Modifier.height(4.dp))
-                Text(detail.rationale, style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    text = detail.rationale,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = FREE_TEXT_MAX_LINES,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
             Spacer(Modifier.height(16.dp))
         }
@@ -128,7 +135,13 @@ private fun EvidenceAccordionRow(item: SuggestionEvidenceItem, expanded: Boolean
             modifier = Modifier.fillMaxWidth().clickable(onClick = onToggle).padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(item.text, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+            Text(
+                text = item.text,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = FREE_TEXT_MAX_LINES,
+                overflow = TextOverflow.Ellipsis,
+            )
             Spacer(Modifier.width(8.dp))
             Text("${item.occurrenceCount}", color = SpiceBlue, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
             Icon(

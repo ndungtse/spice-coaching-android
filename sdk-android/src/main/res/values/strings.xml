@@ -16,7 +16,10 @@
     <string name="chat_model_download_action">Download</string>
     <string name="chat_show_english">Show English</string>
     <string name="chat_show_bengali">Show Bengali</string>
+    <string name="chat_copy">Copy</string>
+    <string name="chat_copied">Copied</string>
     <string name="chat_speak">Speak</string>
+    <string name="chat_stop_speaking">Stop speaking</string>
     <string name="chat_feedback_helpful">Helpful response</string>
     <string name="chat_feedback_not_helpful">Not a helpful response</string>
     <string name="chat_feedback_sheet_title">Tell us more</string>
@@ -42,10 +45,8 @@
     <string name="chat_source_loading">Loading document&#8230;</string>
     <string name="chat_source_indexed_suffix">%1$s — SA %2$d</string>
     <string name="chat_ai_coaching_title">AI Coaching</string>
-    <string name="chat_model_download_description">The AI model needs to be downloaded before you can start coaching sessions.</string>
     <string name="chat_downloading_model_progress">Downloading model&#8230; (%1$d%%)</string>
     <string name="chat_downloading_model_preparing">Downloading model&#8230; (preparing)</string>
-    <string name="chat_model_size_hint">Requires ~%1$s. Recommended over Wi-Fi.</string>
     <string name="chat_download_ai_model">Download AI Model</string>
     <string name="chat_suggested_questions">Suggested Questions</string>
     <string name="chat_next_question">Next Question</string>
@@ -55,14 +56,12 @@
     <string name="chat_header_online">Online</string>
     <string name="chat_header_offline">Offline</string>
     <!-- Manual on-device/online chat mode chip in the header -->
-    <string name="chat_mode_online">Online</string>
-    <string name="chat_mode_on_device">On-device</string>
-    <string name="chat_mode_online_unavailable">· No internet</string>
-    <string name="chat_mode_tap_to_change">· Tap to change</string>
-    <string name="chat_mode_switch_to_online">Switch to online AI</string>
-    <string name="chat_mode_switch_to_on_device">Switch to on-device AI</string>
-    <string name="chat_model_unsupported">The downloaded AI model can\'t run on this app version. Please contact support or switch to online chat.</string>
-    <string name="chat_model_load_failed_retry">Couldn\'t start the AI model: %1$s. Tap “Go to chat” to try again.</string>
+    <!-- Shown when the model file itself is fine but the engine wouldn't start — retrying is worth a try. -->
+    <string name="chat_model_load_failed_transient">Couldn\'t start the AI model. Tap “Go to chat” to try again.</string>
+    <!-- Shown when the downloaded file failed its integrity check; only a re-download fixes this. -->
+    <string name="chat_model_file_damaged">The AI model download is incomplete, so it can\'t start. Download it again to fix this.</string>
+    <!-- Same situation, but the re-download allowance is spent — don't promise an action we'll refuse. -->
+    <string name="chat_model_file_damaged_no_retry">The AI model download keeps arriving incomplete. Please try again on a stronger connection, or contact support.</string>
     <string name="chat_today">Today</string>
     <string name="chat_welcome_message">How can I help you today? You can ask me about patient counselling, clinical protocols, or SPICE.</string>
     <string name="chat_close_sheet">Close chat</string>
@@ -130,6 +129,7 @@
     <string name="quiz_question_counter">Question %1$d / %2$d</string>
     <string name="quiz_select_answer">Select an answer</string>
     <string name="quiz_next_question">Next Question</string>
+    <string name="quiz_finish">Finish</string>
     <string name="quiz_case_context_label">Context</string>
     <string name="quiz_nav_previous">Previous question</string>
     <string name="quiz_nav_next">Next question</string>
@@ -201,15 +201,14 @@
     <string name="module_detail_learning_cards">Learning cards</string>
     <string name="module_detail_quiz_section">Quiz</string>
     <string name="module_detail_knowledge_check">Knowledge check</string>
-    <string name="module_detail_listen_bangla">Listen in Bangla</string>
-    <string name="module_detail_listen_english">Listen in English</string>
+    <string name="module_detail_listen">Listen</string>
     <string name="module_detail_listen_caption">Auto-speak will start when you open the lesson</string>
     <string name="lesson_player_auto_speak_on">Auto-speak is on. Tap to turn off.</string>
     <string name="lesson_player_auto_speak_off">Auto-speak is off. Tap to turn on.</string>
     <string name="tts_language_missing">Voice not installed. Opening device settings.</string>
     <string name="module_detail_cards_stat">Cards</string>
     <string name="module_detail_questions_stat">Questions</string>
-    <string name="module_detail_duration_stat">Duration</string>
+    <string name="module_detail_duration_stat">Minutes</string>
     <string name="module_detail_min">%1$d min</string>
     <string name="lesson_player_progress">Learning %1$d of %2$d</string>
     <string name="lesson_player_next">Next</string>
@@ -423,13 +422,16 @@
     <string name="stt_banner_cancel">Cancel</string>
 
     <!-- ── Coaching setup screen ───────────────────────────────────────────────── -->
-    <string name="coaching_setup_title">Set up coaching</string>
-    <string name="coaching_setup_description">We\'ll download what coaching needs to work offline. This runs in the background. You can keep using the app.</string>
-    <string name="coaching_setup_go_to_chat">Go to chat</string>
 
     <!-- ── Download item cards on the coaching setup screen ─────────────────────── -->
     <string name="download_card_ai_title">AI Model</string>
-    <string name="download_card_ai_size">~%1$s</string>
+    <!-- Expected download size, still approximate while the exact size is unresolved. -->
+    <!-- Exact size, once known from the catalog or a server probe. -->
+    <string name="download_card_ai_size_exact">%1$s</string>
+    <!-- What actually landed against what was expected, e.g. "280 MB of 290 MB". -->
+    <string name="download_card_ai_size_partial">%1$s of %2$s</string>
+    <string name="download_card_ai_damaged">Download incomplete</string>
+    <string name="download_card_ai_redownload">Download again</string>
     <string name="download_card_voice_title">Bengali Voice Model</string>
     <string name="download_card_voice_size">~90 MB</string>
     <string name="download_card_label_required">Required</string>
@@ -443,8 +445,9 @@
     <string name="download_card_status_preparing">Preparing…</string>
     <string name="download_card_status_extracting">Unpacking…</string>
     <string name="download_card_status_paused_progress">Paused at %1$d%%</string>
-    <string name="download_card_progress_mb">%1$d MB / %2$d MB · %3$d%%</string>
-    <string name="download_card_progress_indeterminate">%1$d MB downloaded</string>
+    <!-- Sizes are pre-formatted by the platform Formatter so every size on this card uses one unit system. -->
+    <string name="download_card_progress_mb">%1$s / %2$s · %3$d%%</string>
+    <string name="download_card_progress_indeterminate">%1$s downloaded</string>
     <string name="download_card_progress_percent">%1$d%%</string>
     <string name="download_card_tts_title">Read-aloud voice</string>
     <string name="download_card_tts_hint">For reading answers aloud</string>
@@ -455,9 +458,10 @@
     <string name="notification_model_download_channel_desc">Shows progress while the on-device AI coaching model downloads in the background.</string>
     <string name="notification_model_download_title">Downloading AI coaching model</string>
     <!-- Body when total size is known: "450 MB / 900 MB · 50%" -->
-    <string name="notification_model_download_progress">%1$d MB / %2$d MB · %3$d%%</string>
+    <!-- Sizes are pre-formatted by the platform Formatter, matching the setup card. -->
+    <string name="notification_model_download_progress">%1$s / %2$s · %3$d%%</string>
     <!-- Body when total size is unknown yet (chunked / pre-headers): "Downloaded 12 MB" -->
-    <string name="notification_model_download_progress_indeterminate">Downloaded %1$d MB</string>
+    <string name="notification_model_download_progress_indeterminate">Downloaded %1$s</string>
 
     <!-- In-app variant of chat_downloading_model_progress that also shows MB. -->
     <string name="chat_downloading_model_progress_mb">Downloading model… (%1$d MB / %2$d MB · %3$d%%)</string>
@@ -479,8 +483,10 @@
     <string name="leaderboard_xp_value">%1$s XP</string>
     <string name="coaching_streak_banner">%1$d-day streak! Keep going — you\'re on a roll</string>
 
-    <!-- ── Coaching sub-tabs restructure (Training/Refresher/Knowledge/Badges) ─── -->
-    <string name="coaching_tab_badges">Badges</string>
+    <!-- ── Coaching sub-tabs restructure (Training/Refresher/Knowledge/Milestones) ─ -->
+    <!-- Label for the tab and its screen heading. Renamed to "Milestones" while the
+         key, the `badge` table and every identifier stay as they are. -->
+    <string name="coaching_tab_badges">Milestones</string>
     <string name="coaching_subtab_training">Training</string>
     <string name="coaching_subtab_refresher">Refresher</string>
     <string name="coaching_subtab_knowledge">Knowledge</string>
@@ -494,8 +500,12 @@
     <string name="training_videos_meta_duration">%1$d min</string>
     <string name="training_videos_coming_soon">Video playback coming soon</string>
     <string name="training_videos_empty">No training videos yet</string>
+    <string name="training_videos_no_more">No more videos assigned</string>
     <string name="training_videos_download">Download</string>
     <string name="training_videos_remove_download">Remove download</string>
+    <string name="training_videos_remove_dialog_title">Remove downloaded video?</string>
+    <string name="training_videos_remove_dialog_message">It will be deleted from this device. You\'ll need an internet connection to download it again.</string>
+    <string name="training_videos_remove_dialog_confirm">Remove</string>
     <string name="training_videos_storage_full">Not enough storage to download this video.</string>
     <string name="training_videos_download_failed">Couldn\'t download this video. Please try again.</string>
     <string name="badges_earned_count">%1$d of %2$d earned</string>
@@ -503,12 +513,10 @@
     <string name="badges_journey_subtitle">Track the milestones you unlock as you learn</string>
     <string name="badges_journey_see_path">See your learning path</string>
     <string name="badges_milestones_count">%1$d of %2$d milestones</string>
-    <string name="badge_now">NOW</string>
     <string name="journey_start_lesson">Start lesson</string>
     <string name="knowledge_empty_none">No knowledge documents yet</string>
 
     <!-- ── PO dashboard ───────────────────────────────────────────────────────── -->
-    <string name="po_showing_data_for">Showing data for</string>
     <string name="po_date_from">From</string>
     <string name="po_date_to">To</string>
     <string name="common_ok">OK</string>
@@ -517,6 +525,16 @@
     <string name="po_metric_inactive">Non-Responsive SKs</string>
     <string name="po_metric_finished_modules">Finished Modules</string>
     <string name="po_metric_chatbot_engaged">Chatbot Engaged</string>
+    <!-- Metric-card info bottom sheet (no em-dashes) -->
+    <string name="po_metric_desc_active_now">SKs who open a Learning or Refresher module within the selected date range, regardless of completion.</string>
+    <string name="po_metric_desc_inactive">SKs who do not open any Learning or Refresher module within the selected date range.</string>
+    <string name="po_metric_desc_finished_modules">SKs who have finished all assigned modules during the selected period.</string>
+    <string name="po_metric_desc_chatbot_engaged">SKs who sent at least one message to the AI chatbot during the selected period.</string>
+    <!-- Custom sheet title for Finished Modules; others reuse the card label. -->
+    <string name="po_metric_sheet_title_finished">SKs Finished All Modules</string>
+    <!-- Phrases highlighted (spice blue) inside the descriptions above. Must be a verbatim
+         substring of the matching description, per locale. -->
+    <string name="po_metric_info_dismiss">Got it</string>
     <string name="po_section_my_sks">My SKs</string>
     <string name="po_section_module_completion">Module Completion</string>
     <string name="po_section_top_searched_existing_modules">Top Searched Existing Modules</string>
@@ -531,7 +549,15 @@
     <string name="po_document_last_opened_by">Last opened %1$s by %2$s</string>
     <string name="po_document_opens_list">Opens</string>
     <string name="po_document_empty_opens">No documents opened in this period</string>
+    <!-- Drill-down for a single document: its two tabs, and the fetch ceiling. -->
+    <string name="po_document_detail_empty_opens">No opens in this period</string>
+    <string name="po_document_detail_empty_readers">No readers in this period</string>
+    <string name="po_document_events_truncated">Showing the most recent %1$d of %2$d opens</string>
     <string name="po_document_reader_with_role">%1$s (%2$s)</string>
+    <plurals name="po_document_open_count">
+        <item quantity="one">%1$d open</item>
+        <item quantity="other">%1$d opens</item>
+    </plurals>
     <string name="po_search_hint_documents">Search documents…</string>
     <string name="po_section_refreshers_completed">Refreshers Completed</string>
     <string name="po_search_hint">Search SKs…</string>
@@ -546,6 +572,7 @@
     <string name="po_group_active">RESPONSIVE (%1$d)</string>
     <string name="po_group_needs_attention">NEEDS ATTENTION (%1$d)</string>
     <string name="po_group_inactive">NON-RESPONSIVE (%1$d)</string>
+    <string name="po_group_no_sks">No SKs in this period</string>
     <string name="po_group_using_chatbot">USING CHATBOT (%1$d)</string>
     <string name="po_group_not_using_chatbot">NOT USING CHATBOT (%1$d)</string>
     <string name="po_queries_count">%1$d queries</string>
@@ -561,6 +588,9 @@
     <string name="po_sk_module_pending">Pending</string>
     <string name="po_fraction">%1$d/%2$d</string>
     <string name="po_error_pull_to_refresh">Pull down to refresh.</string>
+    <!-- Shown for a 401 (expired/invalid session) instead of the pull-to-refresh hint. -->
+    <string name="po_error_session_expired">Your session has expired.</string>
+    <string name="po_error_session_expired_hint">Please log out and log back in.</string>
     <string name="po_stale_notice">@string/common_couldnt_refresh</string>
     <string name="po_offline_message">@string/common_error_offline</string>
     <string name="po_error_generic">@string/common_error_generic</string>
@@ -635,4 +665,55 @@
     <string name="common_couldnt_refresh">Couldn\'t refresh — showing saved content.</string>
     <string name="coaching_sync_partial_notice">Some content couldn\'t be updated. Pull down to try again.</string>
 
+
+    <!-- ── How answers are found: mode bar, answering sheet, optional model ──────────
+         Deliberate vocabulary: the on-device model rewords guidance that retrieval has
+         already selected, so nothing here may promise better or more accurate answers.
+         "Keyword search", "BM25", "AI model" and "LLM" are all absent by design — the
+         choice is described by what the CHW receives, not by the mechanism.
+
+         On-device is also a mode the CHW may pick while perfectly well connected, so no
+         string may equate it with being offline: it works with or without internet, which
+         is not the same claim as "works with no internet". -->
+    <string name="chat_mode_bar_online">Online</string>
+    <string name="chat_mode_bar_on_device_direct">On this phone</string>
+    <string name="chat_mode_bar_on_device_assisted">On this phone · simple words</string>
+    <string name="chat_mode_bar_on_device_online_unavailable">On this phone · online unavailable</string>
+    <string name="chat_mode_bar_change">Change</string>
+    <string name="chat_mode_bar_open_sheet">Change how answers are found</string>
+    <string name="chat_mode_bar_upgrade_progress">Adding simple words · %1$d%%</string>
+    <string name="chat_mode_bar_upgrade_preparing">Adding simple words · starting…</string>
+    <string name="chat_mode_bar_upgrade_paused">Adding simple words · paused at %1$d%%</string>
+    <string name="chat_mode_bar_upgrade_waiting_wifi">Adding simple words · waiting for Wi-Fi</string>
+    <string name="chat_mode_bar_upgrade_waiting_network">Adding simple words · waiting for internet</string>
+
+    <string name="answering_sheet_title">How answers are found</string>
+    <string name="answering_sheet_online_title">Online</string>
+    <string name="answering_sheet_online_body">Searches the full guideline library. Needs internet.</string>
+    <string name="answering_sheet_online_unavailable">Online isn\'t reachable right now, so answers are coming from this phone. It resumes on its own.</string>
+    <string name="answering_sheet_on_device_title">On this phone</string>
+    <string name="answering_sheet_on_device_body">Searches the guides saved on your phone. Works with or without internet.</string>
+    <string name="answering_sheet_style_title">Answer style</string>
+    <string name="answering_sheet_style_direct_title">Exact words from your guide</string>
+    <string name="answering_sheet_style_direct_body">Shows the guidance exactly as it is written.</string>
+    <string name="answering_sheet_style_assisted_title">Explained in simple words</string>
+    <string name="answering_sheet_style_assisted_body">Same guidance, put into everyday language.</string>
+    <string name="answering_sheet_style_assisted_body_sized">Same guidance, put into everyday language. %1$s one-time download.</string>
+    <string name="answering_sheet_free_up_space">Free up %1$s</string>
+
+    <string name="answering_opt_out_title">Use exact guideline wording?</string>
+    <string name="answering_opt_out_body">Answers will show the guidance exactly as it is written. You will still get the same guidance, with or without internet.</string>
+    <string name="answering_opt_out_delete">Also remove the download</string>
+    <string name="answering_opt_out_delete_sized">Also remove the download and free up %1$s</string>
+    <string name="answering_opt_out_confirm">Use exact wording</string>
+    <string name="answering_opt_out_cancel">Cancel</string>
+
+    <string name="local_model_offer_title">Your phone can explain answers in simple words</string>
+    <string name="local_model_offer_body">Works with or without internet. Best set up over Wi-Fi. You can remove it any time.</string>
+    <string name="local_model_offer_body_sized">Works with or without internet. One-time %1$s download — best over Wi-Fi. You can remove it any time.</string>
+    <string name="local_model_offer_accept">Set up</string>
+    <string name="local_model_offer_dismiss">Not now</string>
+
+    <string name="download_card_status_waiting_wifi">Waiting for Wi-Fi</string>
+    <string name="download_card_status_waiting_network">Waiting for internet</string>
 </resources>

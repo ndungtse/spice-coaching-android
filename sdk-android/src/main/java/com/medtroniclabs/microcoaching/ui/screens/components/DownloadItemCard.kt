@@ -34,14 +34,14 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import android.text.format.Formatter
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.medtroniclabs.microcoaching.R
-
-private const val BYTES_PER_MB: Long = 1_048_576L
 
 /**
  * Predefined card icons. Keeps the call site to a single enum instead of
@@ -50,16 +50,19 @@ private const val BYTES_PER_MB: Long = 1_048_576L
 enum class DownloadItemIcon { AiSparkle, Microphone, ReadAloud }
 
 /**
- * Compact card showing a single downloadable asset (AI model or voice model)
- * with inline status + actions. Designed for the redesigned
- * [CoachingSetupContent] but reusable for any "list of pending downloads" UX.
+ * Compact card showing a single downloadable asset with inline status and actions. Used by the
+ * answering sheet for the optional on-device model, and reusable for any "list of pending
+ * downloads" UX.
  *
  * Action buttons reflect [state]:
  *   - [DownloadItemUiState.Idle] / [DownloadItemUiState.Failed] → Download / Retry
- *   - [DownloadItemUiState.Downloading] / Preparing → Pause + Cancel
+ *   - [DownloadItemUiState.Downloading] / Preparing / WaitingForNetwork → Pause + Cancel
  *   - [DownloadItemUiState.Extracting] → spinner only (extraction is short and uncancellable)
  *   - [DownloadItemUiState.Paused] → Resume + Cancel
  *   - [DownloadItemUiState.Done] → green check, no actions
+ *   - [DownloadItemUiState.Unusable] → warning glyph and "Download again", no check mark.
+ *     The action is suppressed when [DownloadItemUiState.Unusable.canRetry] is false, so the
+ *     card never offers a re-download the SDK would decline.
  */
 @Composable
 fun DownloadItemCard(
@@ -115,6 +118,7 @@ fun DownloadItemCard(
             // ── Optional progress + cancel row ───────────────────────────────
             val progressRow = state is DownloadItemUiState.Downloading ||
                 state is DownloadItemUiState.Preparing ||
+                state is DownloadItemUiState.WaitingForNetwork ||
                 state is DownloadItemUiState.Paused
             if (progressRow) {
                 Spacer(Modifier.height(10.dp))
@@ -129,7 +133,7 @@ private fun LeadingIcon(icon: DownloadItemIcon, state: DownloadItemUiState) {
     val (iconColor, bgColor) = when (state) {
         is DownloadItemUiState.Done ->
             MaterialTheme.colorScheme.onPrimary to MaterialTheme.colorScheme.primary
-        is DownloadItemUiState.Failed ->
+        is DownloadItemUiState.Failed, is DownloadItemUiState.Unusable ->
             MaterialTheme.colorScheme.onErrorContainer to MaterialTheme.colorScheme.errorContainer
         else ->
             MaterialTheme.colorScheme.onSecondaryContainer to
@@ -145,6 +149,8 @@ private fun LeadingIcon(icon: DownloadItemIcon, state: DownloadItemUiState) {
         val vector: ImageVector = when {
             state is DownloadItemUiState.Done -> Icons.Filled.Check
             state is DownloadItemUiState.Failed -> Icons.Filled.WarningAmber
+            // Not a check: the file is on disk but cannot be used.
+            state is DownloadItemUiState.Unusable -> Icons.Filled.WarningAmber
             icon == DownloadItemIcon.AiSparkle -> Icons.Filled.AutoAwesome
             icon == DownloadItemIcon.ReadAloud -> Icons.AutoMirrored.Filled.VolumeUp
             else -> Icons.Filled.Mic
@@ -171,8 +177,16 @@ private fun SubtitleRow(
     val statusText: String? = when (state) {
         is DownloadItemUiState.Done -> stringResource(R.string.download_card_status_done)
         is DownloadItemUiState.Failed -> stringResource(R.string.download_card_status_failed)
+        is DownloadItemUiState.Unusable -> stringResource(R.string.download_card_ai_damaged)
         is DownloadItemUiState.Preparing ->
             stringResource(R.string.download_card_status_preparing)
+        is DownloadItemUiState.WaitingForNetwork -> stringResource(
+            if (state.wifiOnly) {
+                R.string.download_card_status_waiting_wifi
+            } else {
+                R.string.download_card_status_waiting_network
+            },
+        )
         is DownloadItemUiState.Extracting ->
             stringResource(R.string.download_card_status_extracting)
         is DownloadItemUiState.Paused ->
@@ -201,6 +215,15 @@ private fun TrailingAction(
                 Text(actionLabel ?: stringResource(R.string.download_card_action_download))
             }
         }
+        is DownloadItemUiState.Unusable -> {
+            // Only offer the action when the SDK will perform it; past the re-download
+            // budget the subtitle states the problem and stops there.
+            if (state.canRetry) {
+                FilledTonalButton(onClick = onDownload) {
+                    Text(stringResource(R.string.download_card_ai_redownload))
+                }
+            }
+        }
         is DownloadItemUiState.Paused -> {
             FilledTonalButton(onClick = onResume) {
                 Icon(
@@ -212,7 +235,12 @@ private fun TrailingAction(
                 Text(stringResource(R.string.download_card_action_resume))
             }
         }
-        is DownloadItemUiState.Downloading, is DownloadItemUiState.Preparing -> {
+        is DownloadItemUiState.Downloading,
+        is DownloadItemUiState.Preparing,
+        // Pausable while constraint-blocked too: the transfer is scheduled, and a user who
+        // does not want it resuming the moment Wi-Fi returns needs a way to say so.
+        is DownloadItemUiState.WaitingForNetwork,
+        -> {
             IconButton(onClick = onPause) {
                 Icon(
                     imageVector = Icons.Filled.Pause,
@@ -245,12 +273,19 @@ private fun ProgressRow(
         is DownloadItemUiState.Downloading -> {
             percent = state.progressPercent
             val hasBytes = state.totalBytes > 0L && state.progressPercent >= 0
-            val dl = (state.bytesDownloaded / BYTES_PER_MB).coerceAtLeast(0L).toInt()
-            val total = (state.totalBytes / BYTES_PER_MB).coerceAtLeast(0L).toInt()
+            // Formatted by the platform, as the size line above is — dividing by 1 MiB here
+            // and labelling it "MB" would make the two rows disagree about the same file.
+            val context = LocalContext.current
+            val downloaded = Formatter.formatShortFileSize(context, state.bytesDownloaded.coerceAtLeast(0L))
             statusText = if (hasBytes) {
-                stringResource(R.string.download_card_progress_mb, dl, total, percent)
-            } else if (dl > 0) {
-                stringResource(R.string.download_card_progress_indeterminate, dl)
+                stringResource(
+                    R.string.download_card_progress_mb,
+                    downloaded,
+                    Formatter.formatShortFileSize(context, state.totalBytes),
+                    percent,
+                )
+            } else if (state.bytesDownloaded > 0L) {
+                stringResource(R.string.download_card_progress_indeterminate, downloaded)
             } else {
                 stringResource(R.string.download_card_status_preparing)
             }
@@ -260,6 +295,19 @@ private fun ProgressRow(
             percent = 0
             statusText = stringResource(R.string.download_card_status_preparing)
             indeterminate = true
+        }
+        is DownloadItemUiState.WaitingForNetwork -> {
+            percent = state.progressPercent.coerceAtLeast(0)
+            statusText = stringResource(
+                if (state.wifiOnly) {
+                    R.string.download_card_status_waiting_wifi
+                } else {
+                    R.string.download_card_status_waiting_network
+                },
+            )
+            // Nothing is being transferred, so an animated bar would imply movement. A
+            // determinate bar parked at the bytes already received is the honest picture.
+            indeterminate = false
         }
         is DownloadItemUiState.Paused -> {
             percent = state.progressPercent

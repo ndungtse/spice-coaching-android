@@ -3,13 +3,15 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <!--
-        mediapipe-genai declares minSdk 24. We ship at minSdk 23 to match
-        SPICE 2.0; mediapipe is gated behind a runtime API check in
-        EdgeInference / ModelManager so the override is safe on API 23.
-        Without this, every host app would need to add the override line
-        themselves.
+        The inference engine declares minSdk 24; the SDK ships at 23 to match SPICE.
+        Declaring the override here spares every host app from repeating it.
+
+        Safe because nothing reaches the engine on such a device: the model needs
+        arm64-v8a and is offered only above DeviceCapability.MIN_RAM_BYTES_FOR_FULL_MODE,
+        and chat degrades to retrieval-only whenever no engine is loaded. Note that
+        nothing guards the engine class by API level directly.
     -->
-    <uses-sdk tools:overrideLibrary="com.google.mediapipe.tasks.genai" />
+    <uses-sdk tools:overrideLibrary="com.google.ai.edge.litertlm" />
 
     <!-- Required for OTel OTLP export and backend API calls -->
     <uses-permission android:name="android.permission.INTERNET" />

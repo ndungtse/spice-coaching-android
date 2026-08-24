@@ -48,7 +48,6 @@ private const val SYNCED_RETENTION_MS = 30L * 24 * 60 * 60 * 1000
  * On success: marks all sent rows as `synced` in Room and continues to the
  * next batch until drained (or [MAX_OUTBOUND_BATCHES], a runaway guard).
  * On failure: increments retry counts; rows stay `pending` for the next attempt.
- * Always records a `sync_attempt` event per batch regardless of outcome.
  *
  * @return [OutboundResult] with aggregate counts and any failure reason.
  */
@@ -205,7 +204,6 @@ private suspend fun SyncApi.pushBatch(
                 }
             }
 
-            recordSyncAttempt(success = true, networkState = "online")
             Log.i(
                 TAG,
                 "Outbound sync OK — sent: coaching_events=${events.size} " +
@@ -217,16 +215,13 @@ private suspend fun SyncApi.pushBatch(
             OutboundResult(syncedCount = syncedSet.size, failedCount = rejectedSet.size)
         } else {
             val errorMsg = "HTTP ${response.code()}"
-            recordSyncAttempt(success = false, errorType = errorMsg, networkState = "online")
             Log.w(TAG, "Outbound sync server error: $errorMsg")
             OutboundResult(error = errorMsg, errorKind = httpKindFor(response.code()))
         }
     } catch (e: IOException) {
-        recordSyncAttempt(success = false, errorType = e.javaClass.simpleName, networkState = "offline")
         Log.w(TAG, "Outbound sync network error: ${e.message}")
         OutboundResult(error = e.message ?: "network error", errorKind = SyncErrorKind.NETWORK)
     } catch (e: Exception) {
-        recordSyncAttempt(success = false, errorType = e.javaClass.simpleName, networkState = "online")
         Log.w(TAG, "Outbound sync unexpected error: ${e.message}", e)
         OutboundResult(error = e.message ?: "unexpected error", errorKind = SyncErrorKind.UNEXPECTED)
     }

@@ -96,7 +96,13 @@ fun ModuleCompletionRow(
                         contentColor = if (check.done) StatusGreen else StatusRed,
                     )
                     Spacer(Modifier.width(12.dp))
-                    Text(check.name, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        text = check.name,
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                     Icon(
                         imageVector = if (check.done) Icons.Filled.CheckCircle else Icons.Outlined.Circle,
                         contentDescription = null,

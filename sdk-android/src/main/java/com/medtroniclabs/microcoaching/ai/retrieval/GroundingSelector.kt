@@ -81,7 +81,12 @@ object GroundingSelector {
         nativeQuery: String,
         runEnglishSearch: Boolean,
     ): List<GroundingChunk> {
-        if (!runEnglishSearch) {
+        // The rerank arbitrates between the two indices. When the EN index returned
+        // nothing there is nothing to arbitrate, and re-sorting the native hits by
+        // the sibling boost can only reorder raw BM25 — the boost requires two
+        // candidates from the same family, so it structurally taxes a lone
+        // exactly-titled card in favour of multi-card families. Keep native order.
+        if (!runEnglishSearch || englishHits.isEmpty()) {
             return nativeHits
         }
         val merged = LinkedHashMap<String, GroundingChunk>()

@@ -46,6 +46,7 @@ import com.medtroniclabs.microcoaching.ui.learn.startQuiz
 import com.medtroniclabs.microcoaching.ui.learn.canTakeQuiz
 import com.medtroniclabs.microcoaching.ui.learn.LearnUiState
 import com.medtroniclabs.microcoaching.ui.coaching.CoachingHomeHost
+import com.medtroniclabs.microcoaching.ui.podashboard.DateRange
 import com.medtroniclabs.microcoaching.ui.podashboard.drilldown.ActiveSksScreen
 import com.medtroniclabs.microcoaching.ui.podashboard.drilldown.ChatbotUsageScreen
 import com.medtroniclabs.microcoaching.ui.podashboard.drilldown.ModulesCompletedScreen
@@ -119,25 +120,19 @@ internal fun NavGraphBuilder.learnGraph(
                 lastRefresherFamilyId.value = module.moduleFamilyId
             },
             onShowQuickLearn = { moduleFamilyId, queueFamilyIds ->
-                android.util.Log.d("CoachingNavGraph", "Showing RefresherBottomSheet (cards-first) target=$moduleFamilyId queue=${queueFamilyIds.size}")
-                // Every refresher entry — including the QuizRefresherCard banner —
-                // opens cards-first (lesson cards → quiz).
+                android.util.Log.d("CoachingNavGraph", "Showing RefresherBottomSheet target=$moduleFamilyId queue=${queueFamilyIds.size}")
                 RefresherBottomSheet.show(
                     fragmentManager, chwId,
                     fromHomeScreen = false,
-                    entryMode = RefresherBottomSheet.EntryMode.CARDS_FIRST,
                     targetModuleFamilyId = moduleFamilyId,
                     queueFamilyIds = queueFamilyIds,
                 )
             },
             onShowRefresherQuiz = { queueFamilyIds ->
-                android.util.Log.d("CoachingNavGraph", "Showing RefresherBottomSheet (cards-first) for tile=${lastRefresherFamilyId.value} queue=${queueFamilyIds.size}")
-                // RefresherList entries open cards-first (lesson cards → quiz),
-                // same as every other refresher entry point.
+                android.util.Log.d("CoachingNavGraph", "Showing RefresherBottomSheet for tile=${lastRefresherFamilyId.value} queue=${queueFamilyIds.size}")
                 RefresherBottomSheet.show(
                     fragmentManager, chwId,
                     fromHomeScreen = false,
-                    entryMode = RefresherBottomSheet.EntryMode.CARDS_FIRST,
                     targetModuleFamilyId = lastRefresherFamilyId.value,
                     queueFamilyIds = queueFamilyIds,
                 )
@@ -167,26 +162,52 @@ internal fun NavGraphBuilder.learnGraph(
                     )
                 }
             },
-            onOpenActiveSks = {
-                navController.whenSettled { navController.navigate(CoachingRoute.ActiveSks.route) }
+            // Every range-scoped drill-down carries the tab's selected window, so the
+            // figures it shows cover the same period as the card or row that was tapped.
+            onOpenActiveSks = { status, range ->
+                navController.whenSettled {
+                    navController.navigate(
+                        CoachingRoute.ActiveSks.routeFor(status.name, range.fromMillis, range.toMillis),
+                    )
+                }
             },
-            onOpenChatbotUsage = {
-                navController.whenSettled { navController.navigate(CoachingRoute.ChatbotUsage.route) }
+            onOpenChatbotUsage = { range ->
+                navController.whenSettled {
+                    navController.navigate(
+                        CoachingRoute.ChatbotUsage.routeFor(range.fromMillis, range.toMillis),
+                    )
+                }
             },
-            onOpenModulesCompleted = {
-                navController.whenSettled { navController.navigate(CoachingRoute.ModulesCompleted.route) }
+            onOpenModulesCompleted = { range ->
+                navController.whenSettled {
+                    navController.navigate(
+                        CoachingRoute.ModulesCompleted.routeFor(range.fromMillis, range.toMillis),
+                    )
+                }
             },
-            onOpenSkDetail = { skId ->
-                navController.whenSettled { navController.navigate(CoachingRoute.SkDetail.routeFor(skId)) }
+            onOpenSkDetail = { skId, range ->
+                navController.whenSettled {
+                    navController.navigate(
+                        CoachingRoute.SkDetail.routeFor(skId, range.fromMillis, range.toMillis),
+                    )
+                }
             },
-            onOpenSearchedModule = { moduleId ->
-                navController.whenSettled { navController.navigate(CoachingRoute.SearchedModuleDetail.routeFor(moduleId)) }
+            onOpenSearchedModule = { moduleId, range ->
+                navController.whenSettled {
+                    navController.navigate(
+                        CoachingRoute.SearchedModuleDetail.routeFor(moduleId, range.fromMillis, range.toMillis),
+                    )
+                }
             },
             onOpenSuggestion = { suggestionId ->
                 navController.whenSettled { navController.navigate(CoachingRoute.SuggestionDetail.routeFor(suggestionId)) }
             },
-            onOpenDocument = { documentId ->
-                navController.whenSettled { navController.navigate(CoachingRoute.DocumentUsageDetail.routeFor(documentId)) }
+            onOpenDocument = { documentId, range ->
+                navController.whenSettled {
+                    navController.navigate(
+                        CoachingRoute.DocumentUsageDetail.routeFor(documentId, range.fromMillis, range.toMillis),
+                    )
+                }
             },
             onShowAllSection = { section, range ->
                 navController.whenSettled {
@@ -212,18 +233,17 @@ internal fun NavGraphBuilder.learnGraph(
         // Refreshers get their own full-screen list (tiles are list-shaped,
         // not grid cells) sourced from the shared store. Tapping a tile runs
         // the IDENTICAL path to the home Refresher list: capture the tapped
-        // module's family id, then open RefresherBottomSheet cards-first.
+        // module's family id, then open RefresherBottomSheet.
         if (moduleType == ALL_MODULES_TYPE_REFRESHER) {
             RefreshersScreen(
                 onRefresherStart = { module ->
                     lastRefresherFamilyId.value = module.moduleFamilyId
                 },
                 onShowRefresherQuiz = { queueFamilyIds ->
-                    android.util.Log.d("CoachingNavGraph", "RefreshersScreen → RefresherBottomSheet (cards-first) for tile=$lastRefresherFamilyId.value queue=${queueFamilyIds.size}")
+                    android.util.Log.d("CoachingNavGraph", "RefreshersScreen → RefresherBottomSheet for tile=$lastRefresherFamilyId.value queue=${queueFamilyIds.size}")
                     RefresherBottomSheet.show(
                         fragmentManager, chwId,
                         fromHomeScreen = false,
-                        entryMode = RefresherBottomSheet.EntryMode.CARDS_FIRST,
                         targetModuleFamilyId = lastRefresherFamilyId.value,
                         queueFamilyIds = queueFamilyIds,
                     )
@@ -399,6 +419,9 @@ internal fun NavGraphBuilder.learnGraph(
                 // quiz keep the direct onStartQuiz path below — no bridge screen.
                 hasQuiz = module.questionCount > 0,
                 onFinishCards = {
+                    // Reaching the end of the cards is what completes a quiz-less
+                    // module — it has no other way to get there.
+                    learnVm.onLessonCardsFinished()
                     navController.whenSettled {
                         navController.navigate(CoachingRoute.LessonComplete.route)
                     }

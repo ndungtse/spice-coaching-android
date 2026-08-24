@@ -8,6 +8,7 @@ import com.medtroniclabs.microcoaching.data.localized.readLocalizedBody
 import com.medtroniclabs.microcoaching.data.mapper.decodeIncompleteQuizIds
 import com.medtroniclabs.microcoaching.data.repository.GapProfileRepositoryImpl
 import com.medtroniclabs.microcoaching.domain.gaps.ondevice.ActionGapLink
+import com.medtroniclabs.microcoaching.progress.refresherDrillQuestionIds
 import com.medtroniclabs.microcoaching.progress.toReinforceQuestionIds
 import com.medtroniclabs.microcoaching.ui.learn.LearnModule
 import com.medtroniclabs.microcoaching.ui.learn.parseInlineQuiz
@@ -25,11 +26,11 @@ import java.util.concurrent.ConcurrentHashMap
 /**
  * Enriches cached [ModuleEntity] rows into fully-populated [LearnModule]s: per-module JSON
  * parsing, DB progress reads (completions / partials / per-question outcomes), morning-card
- * + action-gap resolution, severity/status ranking, and the list-slim copy.
+ * + action-gap resolution, [refresherKindOf] classification, severity/status ranking, and
+ * the list-slim copy.
  *
- * Extracted verbatim from [CoachingModuleStore] (which now keeps only the Flow wiring). This
- * class owns the in-session status overlay it reads, so `setInSessionStatus` writes here and
- * the store just re-triggers its pipeline.
+ * The in-session status overlay lives here rather than in [CoachingModuleStore] because this
+ * is what reads it, so `setInSessionStatus` writes here and the store re-triggers its pipeline.
  */
 internal class LearnModuleMapper(
     private val database: MicroCoachingDatabase,
@@ -175,16 +176,24 @@ internal class LearnModuleMapper(
             // "To reinforce" = questions not yet mastered, INCLUDING never-attempted
             // ones — the right notion for the progress bar. Computed via the pure
             // overload so it adds NO extra per-module DB queries.
-            val toReinforceCount: Int = if (totalQ == 0) {
-                0
+            val toReinforceIds: Set<String> = if (totalQ == 0) {
+                emptySet()
             } else {
                 toReinforceQuestionIds(
                     allQuestionIds = questionIds,
                     localCorrect = localCorrectIds,
                     localWrong = localWrongIds,
                     serverIncomplete = partial?.decodeIncompleteQuizIds()?.toSet(),
-                ).size
+                )
             }
+            val toReinforceCount = toReinforceIds.size
+            // A quiz id the module no longer carries is no target at all — resolve that here
+            // so [refresherKindOf] and the drill set can't disagree about staleness.
+            val targetQuizId = card?.quizId?.takeIf { it in questionIds }
+            // What the refresher tile advertises must be what its sheet drills, so the
+            // card's targeted question narrows the count the same way it narrows the
+            // question set (see [refresherDrillQuestionIds]).
+            val drillCount = refresherDrillQuestionIds(toReinforceIds, targetQuizId).size
 
             // wrongQuestionCount = questions whose LATEST local attempt was wrong —
             // the CHW's local gap. A never-attempted module reports 0.
@@ -197,6 +206,18 @@ internal class LearnModuleMapper(
                 totalQ == 0 -> 0
                 completion?.completedAt != null -> totalQ
                 else -> (localCorrectIds + localWrongIds).size
+            }
+
+            // A module with no quiz has reading as its only progress signal, so
+            // count the distinct cards read. Skipped entirely for modules with
+            // questions — those are measured by attempts, and this is a per-module
+            // query we shouldn't pay for where it means nothing. A recorded
+            // completion clamps to "all read" so a fresh device doesn't show a
+            // finished module as unread.
+            val viewedCards: Int? = when {
+                totalQ > 0 -> null
+                completion?.completedAt != null -> shell.cardCount
+                else -> dao.countDistinctCardsViewed(chwId, entity.moduleFamilyId)
             }
 
             // Progress prioritization:
@@ -233,21 +254,32 @@ internal class LearnModuleMapper(
             shell.copy(
                 quizScorePct = quizScore,
                 wrongQuestionCount = wrongCount,
-                reinforceQuestionCount = toReinforceCount,
+                reinforceQuestionCount = drillCount,
                 attemptedQuestionCount = attemptedCount,
+                viewedCardCount = viewedCards,
                 severity = shell.behaviouralGapId?.let { gapSeverityById[it] },
-                // Backend "quiz"-source cards target ONE question; carried so the
-                // tile renders as a Quiz and the drill runs only that question.
-                targetQuizId = card?.quizId,
+                targetQuizId = targetQuizId,
                 isActionGap = isActionGap,
-                // Selector provenance: a morning_card_cache row (backend or on-device)
-                // exists for this exact module version → it's a refresher, full stop.
                 fromMorningCard = card != null,
-                // Lazy-load (MEM-08): this eagerly-held list must NOT retain the heavy
-                // card/quiz blobs. cardCount/questionCount are already populated on
-                // `shell`, so list tiles render fully; detail/lesson/quiz re-read the
-                // blobs by id on tap (LearnViewModel.hydrate). selectFeatured and all
-                // list count-reads use questionCount/cardCount, never these fields.
+                // The one classification every refresher surface reads. Null also means
+                // "no longer a refresher" — see ModuleCategorizer.
+                refresherKind = card?.let {
+                    refresherKindOf(
+                        source = it.source,
+                        targetQuizId = targetQuizId,
+                        toReinforce = toReinforceIds,
+                        hasQuestions = totalQ > 0,
+                        hasCards = shell.cardCount > 0,
+                        // A recorded completion, not the viewed-card tally: coaching_event
+                        // rows are purged on sync, so the tally decays and would resurrect
+                        // finished refreshers.
+                        cardsRead = completion?.completedAt != null,
+                        isActionGap = isActionGap,
+                    )
+                },
+                // This eagerly-held list must NOT retain the heavy card/quiz blobs.
+                // cardCount/questionCount are already on `shell`, so list tiles render
+                // fully; detail/lesson/quiz re-read the blobs by id on tap.
                 cardsJson = "[]",
                 inlineQuestions = null,
             )

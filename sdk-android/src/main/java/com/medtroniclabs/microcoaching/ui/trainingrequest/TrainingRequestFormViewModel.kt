@@ -1,5 +1,6 @@
 package com.medtroniclabs.microcoaching.ui.trainingrequest
 
+import android.util.Log
 import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -98,7 +99,7 @@ class TrainingRequestFormViewModel(
                 moduleDao.observePickerRowsLatestPerFamily(),
                 assignedModuleDao.getAssignedForUser(chwId),
             ) { rows, assigned ->
-                rows
+                val items = rows
                     .map { row ->
                         ModulePickerItem(
                             moduleId = row.moduleId,
@@ -117,11 +118,22 @@ class TrainingRequestFormViewModel(
                             { it.moduleFamilyId },
                         ),
                     )
-                    // The picker offers only modules the CHW isn't already assigned.
-                    .excludingAssigned(
-                        assignedModuleIds = assigned.map { it.moduleId }.toSet(),
-                        assignedFamilyIds = assigned.mapNotNull { it.moduleFamilyId }.toSet(),
-                    )
+                val assignedModuleIds = assigned.map { it.moduleId }.toSet()
+                val assignedFamilyIds = assigned.mapNotNull { it.moduleFamilyId }.toSet()
+                // The picker offers only modules the CHW isn't already assigned.
+                val pickerItems = items.excludingAssigned(
+                    assignedModuleIds = assignedModuleIds,
+                    assignedFamilyIds = assignedFamilyIds,
+                )
+                // Debug logging
+                Log.d(
+                    TAG,
+                    "picker funnel: cacheRows=${runCatching { moduleDao.countActive() }.getOrDefault(-1)} " +
+                        "families=${rows.size} assigned=${assigned.size} " +
+                        "assignedWithFamilyId=${assignedFamilyIds.size} " +
+                        "excluded=${items.size - pickerItems.size} shown=${pickerItems.size}",
+                )
+                pickerItems
             }.collect { pickerItems ->
                 _uiState.update { state ->
                     // Re-resolve the selection on every emission: a sync or
@@ -224,6 +236,8 @@ class TrainingRequestFormViewModel(
     }
 
     companion object {
+        private const val TAG = "TrainingRequestVM"
+
         fun factory(chwId: String): ViewModelProvider.Factory =
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")

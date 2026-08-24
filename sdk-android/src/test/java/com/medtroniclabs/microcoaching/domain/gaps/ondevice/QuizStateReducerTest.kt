@@ -1,6 +1,7 @@
 package com.medtroniclabs.microcoaching.domain.gaps.ondevice
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 /**
@@ -27,25 +28,31 @@ class QuizStateReducerTest {
     }
 
     @Test
-    fun `correct decrements and resolves at zero`() {
+    fun `correct clears the counter and resolves`() {
         val failed = state().copy(failedAttemptsCount = 1, lastFailedAttemptAt = t0)
         val resolved = QuizStateReducer.reduce(failed, GapOutcome.CORRECT, config, t0 + 1000)
         assertEquals(0, resolved.failedAttemptsCount)
         assertEquals(GapStatus.RESOLVED, resolved.status)
+        assertNull(resolved.lastFailedAttemptAt)
     }
 
     @Test
-    fun `correct decrement above zero stays active`() {
-        val failed = state().copy(failedAttemptsCount = 2, lastFailedAttemptAt = t0, status = GapStatus.ACTIVE)
+    fun `one correct answer resolves however many times the question was failed`() {
+        // The backend's record_correct_attempt resets outright. Decrementing instead left
+        // a question the server considered resolved still being re-emitted on-device.
+        val failed = state().copy(failedAttemptsCount = 3, lastFailedAttemptAt = t0, status = GapStatus.ACTIVE)
         val next = QuizStateReducer.reduce(failed, GapOutcome.CORRECT, config, t0 + 1000)
-        assertEquals(1, next.failedAttemptsCount)
-        assertEquals(GapStatus.ACTIVE, next.status)
+        assertEquals(0, next.failedAttemptsCount)
+        assertEquals(GapStatus.RESOLVED, next.status)
     }
 
     @Test
-    fun `correct never goes below zero`() {
+    fun `correct on a never-failed question only records the attempt`() {
+        // Guarded on a non-zero count exactly as the backend is.
         val next = QuizStateReducer.reduce(state(), GapOutcome.CORRECT, config, t0)
         assertEquals(0, next.failedAttemptsCount)
+        assertEquals(GapStatus.ACTIVE, next.status)
+        assertEquals(t0, next.lastAttemptAt)
     }
 
     @Test

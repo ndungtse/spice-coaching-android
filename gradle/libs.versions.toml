@@ -24,8 +24,8 @@ workManager = "2.10.1"
 opentelemetry = "1.48.0"
 opentelemetrySemconv = "1.30.0-alpha"
 
-# MediaPipe
-mediapipeGenai = "0.10.24"
+# LiteRT-LM — the on-device inference engine
+litertlm = "0.16.1"
 
 # ML Kit Translation
 mlkitTranslate = "17.0.3"
@@ -97,8 +97,8 @@ opentelemetry-exporter-otlp = { group = "io.opentelemetry", name = "opentelemetr
 opentelemetry-exporter-logging = { group = "io.opentelemetry", name = "opentelemetry-exporter-logging", version.ref = "opentelemetry" }
 opentelemetry-semconv = { group = "io.opentelemetry.semconv", name = "opentelemetry-semconv", version.ref = "opentelemetrySemconv" }
 
-# MediaPipe GenAI (Gemma 3 on-device)
-mediapipe-tasks-genai = { group = "com.google.mediapipe", name = "tasks-genai", version.ref = "mediapipeGenai" }
+# LiteRT-LM — loads the `.litertlm` model bundles
+litertlm-android = { group = "com.google.ai.edge.litertlm", name = "litertlm-android", version.ref = "litertlm" }
 
 # ML Kit Translation (EN→BN on-device)
 mlkit-translate = { group = "com.google.mlkit", name = "translate", version.ref = "mlkitTranslate" }

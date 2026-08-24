@@ -81,7 +81,7 @@ fun PoSectionListScreen(
         when (val s = state) {
             is PoSectionListUiState.Loading -> CenterProgress()
             is PoSectionListUiState.Error ->
-                DashboardErrorState(offline = !networkAvailable, message = s.message, onRetry = vm::retry)
+                DashboardErrorState(offline = !networkAvailable, message = s.message, onRetry = vm::retry, isAuth = s.isAuth)
             is PoSectionListUiState.Ready -> {
                 Column(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),

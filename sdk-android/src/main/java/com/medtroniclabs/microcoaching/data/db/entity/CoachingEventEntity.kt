@@ -14,12 +14,14 @@ import androidx.room.PrimaryKey
  * SPICE accesses pending events via [CoachingDataRepository.getPendingCoachingEvents]
  * or receives them via [MicroCoachingDataCallback.onCoachingEventsReady].
  *
- * Event taxonomy (eventType values):
- *   card_shown, card_skipped, card_accepted, counselling_used, audio_played
- *   module_quiz_viewed, module_quiz_attempted
- *   spice_action_observed, risk_flag_observed, equipment_anomaly_observed
- *   session_start, session_end
- *   digital_help_used
+ * Event taxonomy (eventType values the SDK actually writes):
+ *   module_delivered, module_card_viewed, module_quiz_viewed, module_quiz_attempted
+ *   module_requested, video_progress_updated, document_viewed
+ *   digital_help_used, chat_feedback_positive, chat_feedback_negative
+ *   spice_action_observed
+ *
+ * Each one has a backend consumer. A type nothing reads costs the CHW bandwidth
+ * and earns the rollups nothing — check the platform side before adding one.
  */
 @Entity(
     tableName = "coaching_event",
@@ -59,7 +61,7 @@ data class CoachingEventEntity(
 
     /**
      * Our normalised visit key — mapped from SPICE encounterId at the SDK boundary.
-     * Null for morning open / non-visit events such as session_start.
+     * Null for events with no visit context, which is most of the learn flow.
      */
     @ColumnInfo(name = "patient_visit_id")
     val patientVisitId: String? = null,
@@ -74,7 +76,7 @@ data class CoachingEventEntity(
     /**
      * SHA-256 hash of the raw SPICE patient_id.
      * The only patient identifier that is allowed to leave the device or enter analytics.
-     * Null for non-patient events (session_start, digital_help_used, etc.).
+     * Null for non-patient events, which is everything outside the SPICE hooks.
      */
     @ColumnInfo(name = "patient_id_hash")
     val patientIdHash: String? = null,
@@ -214,13 +216,23 @@ data class CoachingEventEntity(
 
     // ── Timestamps ────────────────────────────────────────────────────────────
 
-    /** Event time as device-local epoch millis (always present). */
+    /**
+     * Event time as a **UTC** epoch in millis, despite the column name — it is
+     * `System.currentTimeMillis()`, which carries no zone. Every local query
+     * that orders or compares timestamps reads this column, so it stays on one
+     * clock; the device offset is applied at the wire boundary instead, by
+     * [com.medtroniclabs.microcoaching.data.mapper.toPayload].
+     */
     @ColumnInfo(name = "timestamp_local")
     val timestampLocal: Long = System.currentTimeMillis(),
 
     /**
-     * Event time as UTC epoch millis (NTP-corrected).
-     * Null when NTP is unavailable (offline CHW devices).
+     * Intended for an NTP-corrected UTC epoch, for devices whose clock has
+     * drifted. **Always null today** — the SDK has no time-sync client, and no
+     * write path sets this. [timestampLocal] is already a UTC epoch, so
+     * [com.medtroniclabs.microcoaching.data.mapper.toPayload] falls back to it
+     * and the wire field is never null; the backend's `coaching_events` insert
+     * rejects one that is.
      */
     @ColumnInfo(name = "timestamp_utc")
     val timestampUtc: Long? = null,

@@ -25,35 +25,28 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.medtroniclabs.microcoaching.R
+import com.medtroniclabs.microcoaching.domain.refresher.RefresherKind
 import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueContainer
 import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueDark
 
 /**
- * List-row tile rendering a refresher module. Layout per
- * `docs/designs/Modules-Screen.png`: leading 56.dp square icon block in
- * [SpiceBlueContainer], category label in [SpiceBlueDark], bold title,
- * meta line, optional CRITICAL red badge on the right.
+ * List-row tile for a refresher: leading 56.dp icon block, the kind label, bold title and a
+ * meta line.
  *
- * @param category Localised category label (e.g. "Clinical Assessment").
+ * @param kind What the refresher will ask of the CHW — names the tile and picks its icon.
  * @param title Module title (Bangla preferred, falls back to English).
- * @param meta Already-formatted meta line ("Quiz · 4 questions" / "Learning").
- * @param isCritical When true a red CRITICAL pill is rendered next to category.
- * @param isGap When true an orange GAP pill is rendered next to category. Indicates
- *   the module was surfaced by the backend gap-detection engine after a previous
- *   incorrect quiz attempt.
- * @param onClick Opens the refresher quiz bottom sheet.
+ * @param meta Already-formatted meta line, e.g. "Quiz · 4 questions".
+ * @param onClick Opens the refresher bottom sheet.
  */
 @Composable
 fun RefresherTile(
-    category: String,
+    kind: RefresherKind?,
     title: String,
     meta: String,
-    isCritical: Boolean,
-    isGap: Boolean = false,
-    severity: String? = null,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     thumbnailUrl: String? = null,
@@ -74,36 +67,28 @@ fun RefresherTile(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            RefresherIconBlock(category = category, thumbnailUrl = thumbnailUrl)
+            RefresherIconBlock(kind = kind, thumbnailUrl = thumbnailUrl)
             Column(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = category,
-                        color = SpiceBlueDark,
-                        style = MaterialTheme.typography.labelMedium.copy(
-                            fontWeight = FontWeight.SemiBold,
-                            letterSpacing = 0.4.sp,
-                        ),
-                    )
-                    // Hide severity chip and critical badge for now
-                    /* 
-                    if (isCritical) {
-                        CriticalBadge()
-                    }
-                    SeverityChip(severity)
-                     */
-                }
+                Text(
+                    text = stringResource(refresherKindLabel(kind)),
+                    color = SpiceBlueDark,
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = 0.4.sp,
+                    ),
+                )
                 Text(
                     text = title,
                     style = MaterialTheme.typography.titleSmall.copy(
                         fontWeight = FontWeight.Bold,
                     ),
+                    // Authored titles are occasionally a whole paragraph, which grew
+                    // the tile until it pushed the rest of the list off-screen.
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                 )
                 Text(
                     text = meta,
@@ -116,9 +101,11 @@ fun RefresherTile(
 }
 
 @Composable
-private fun RefresherIconBlock(category: String, thumbnailUrl: String? = null) {
-    val icon: ImageVector = when {
-        category.contains("quiz", ignoreCase = true) -> Icons.Outlined.Assignment
+private fun RefresherIconBlock(kind: RefresherKind?, thumbnailUrl: String? = null) {
+    // Keyed off the enum, not the rendered label — matching on localised text meant the
+    // quiz icon never appeared in Bangla.
+    val icon: ImageVector = when (kind) {
+        RefresherKind.QUIZ, null -> Icons.Outlined.Assignment
         else -> Icons.Outlined.MedicalServices
     }
     ModuleThumbnail(
@@ -163,11 +150,7 @@ internal fun CriticalBadge() {
     }
 }
 
-/**
- * Small colored chip showing the behavioural-gap severity next to the refresher
- * type label. Hidden (renders nothing) when [severity] is null/unknown — e.g. a
- * fallback (non-gap) refresher.
- */
+/** Severity chip used by the hero and training cards. Renders nothing for an unknown severity. */
 @Composable
 internal fun SeverityChip(severity: String?) {
     val (color, labelRes) = when (severity?.lowercase()) {
@@ -184,25 +167,6 @@ internal fun SeverityChip(severity: String?) {
     ) {
         Text(
             text = stringResource(labelRes),
-            color = Color.White,
-            style = MaterialTheme.typography.labelSmall.copy(
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 0.5.sp,
-            ),
-        )
-    }
-}
-
-@Composable
-private fun GapBadge() {
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(4.dp))
-            .background(Color(0xFFD97706))
-            .padding(horizontal = 6.dp, vertical = 2.dp),
-    ) {
-        Text(
-            text = androidx.compose.ui.res.stringResource(com.medtroniclabs.microcoaching.R.string.badge_gap),
             color = Color.White,
             style = MaterialTheme.typography.labelSmall.copy(
                 fontWeight = FontWeight.Bold,

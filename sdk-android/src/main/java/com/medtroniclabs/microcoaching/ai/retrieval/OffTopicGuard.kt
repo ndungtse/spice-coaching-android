@@ -1,29 +1,31 @@
 package com.medtroniclabs.microcoaching.ai.retrieval
 
 /**
- * Phase-0 garbage guard for the offline retrieval paths
- * (`ChatViewModel.handleLocalGemmaMessage` and `handleLowEndMessage`).
+ * Relevance guards for the offline retrieval paths (`ChatViewModel`'s
+ * `handleLocalGemmaMessage` and `handleRetrievalOnlyMessage`).
  *
- * Closes the failure mode where BM25 latches onto a stop-word or generic verb in
- * the query and returns a top hit that has *zero* clinical-token overlap with what
- * the CHW actually asked. The model then dutifully answers about the wrong topic.
+ * Two checks with different strictness:
+ *  - [isClearlyUnanswerable] / [shouldRefuseLowEnd] — a deliberately loose backstop
+ *    against BM25 latching onto a stop-word and returning a hit with *zero* clinical
+ *    overlap. Any single shared clinical term passes it.
+ *  - [sharesTopicalTerm] — the question↔evidence check applied at the serve decision.
+ *    Stricter, because demographic words ("গর্ভবতী", "মহিলা") are shared by a large part
+ *    of a maternal-health corpus and are not evidence that a card answers anything.
  *
- * Intentionally LOOSE: any single shared clinical term is enough to pass. The
- * tuned refusal floor (top1−top2 margin / normalized score, calibrated against the
- * benchmark distributions) is Phase 2. This guard only exists to close the
- * "confident wrong card" hole while we measure.
- *
- * `clinicalTerms` is the same gazetteer used by [ScopeClassifier] — static seed
- * terms plus dynamically-harvested module domain / subdomain / title words. Reusing
- * it keeps the guard's vocabulary in lockstep with what L1 considers in-scope.
+ * `clinicalTerms` is the same gazetteer [ScopeClassifier] uses — static seed terms plus
+ * module domain / subdomain / title words harvested at build — so the guard's vocabulary
+ * stays in lockstep with what the scope filter considers in-scope.
  */
 object OffTopicGuard {
 
     /**
-     * Minimum score on BM25 hit[0] before we trust retrieval enough to serve even
-     * when the clinical-overlap guard finds no shared gazetteer terms. Strong
-     * in-corpus BRAC hits typically score 80+; weak out-of-scope latch-ons stay
-     * well below this (BRAC Q40 garbled-text false refusal).
+     * Score on hit[0] above which [shouldRefuseLowEnd] serves without consulting the
+     * clinical-overlap check.
+     *
+     * The threshold is not calibrated to the current corpus: field-weighted scores on
+     * real questions run far above it, so in practice this bypass is always taken and
+     * the overlap check never runs. [sharesTopicalTerm], applied at the serve decision,
+     * is what actually screens an irrelevant card today.
      */
     const val CONFIDENT_RETRIEVAL_MIN_SCORE = 80f
 
@@ -79,10 +81,10 @@ object OffTopicGuard {
     /**
      * Pick which top-k hit to serve on the UC3 low-end path.
      *
-     * Defaults to BM25 rank-1. Promotes a later hit only when hit[0] is clearly
-     * misaligned (referral-timing question vs facility-services card, stub body,
-     * or weak title overlap). Avoids the old [bestMatchingHit] behaviour that
-     * demoted the correct BM25 winner on generic clinical-token overlap.
+     * Defaults to BM25 rank-1, promoting a later hit only when hit[0] is clearly
+     * misaligned: a referral-timing question against a facility-services card, a stub
+     * body, or no title overlap. Generic clinical-token overlap alone is not enough to
+     * demote the BM25 winner.
      */
     fun selectLowEndServeHit(
         query: String,
@@ -104,7 +106,8 @@ object OffTopicGuard {
             }
         }
 
-        // BM25 rank-1 with title/clinical alignment — keep short definition cards (BRAC Q6).
+        // Trust rank-1 when it aligns on title or clinical terms; short definition
+        // cards are legitimate answers even though their bodies are brief.
         if (
             hasQueryAlignment(query, top, clinicalTerms) &&
             substantiveBodyLength(top) >= MIN_ALIGNED_SERVE_BODY_LEN
@@ -187,6 +190,60 @@ object OffTopicGuard {
         minScore: Float,
     ): GroundingChunk? =
         bestMatchingHit(query, hits, clinicalTerms)?.takeIf { it.score >= minScore }
+
+    /**
+     * Who the question is about rather than what it is about. These words are shared by a
+     * large share of a maternal-health corpus — "গর্ভবতী" alone appears in roughly a
+     * quarter of card chunks — so a card matching only these has not been shown to be
+     * about the question at all. Measured: every wrong card served in the August audit
+     * overlapped the question ONLY on words from this set, while every correct one also
+     * shared a topical term (ম্যালেরিয়া, যক্ষ্মা, 140/90, পানি).
+     */
+    private val DEMOGRAPHIC_TERMS = setOf(
+        // Bangla
+        "গর্ভবতী", "গর্ভবতীর", "মহিলা", "মহিলার", "মহিলাদের", "নারী", "নারীর",
+        "মা", "মায়ের", "মাকে", "রোগী", "রোগীর", "শিশু", "শিশুর", "শিশুকে",
+        "ব্যক্তি", "ব্যক্তির", "লোক", "মানুষ",
+        // English (English-mode queries carry both sides into the guard query)
+        "pregnant", "woman", "women", "mother", "mothers", "patient", "patients",
+        "child", "children", "baby", "person", "people", "lady",
+    )
+
+    /**
+     * True when [query] and [hit] share at least one TOPICAL word — a content word that
+     * is not merely demographic. This is the question↔evidence check the rest of the
+     * validation stack lacks: groundedness and the L4 validator both compare the ANSWER
+     * to the references and therefore pass a faithful summary of the wrong card.
+     *
+     * Deliberately permissive: one shared topical word is enough. It is meant to catch
+     * the "diet question answered with an anemia card" class, where the only thing the
+     * question and the card have in common is that both mention pregnant women.
+     */
+    fun sharesTopicalTerm(query: String, hit: GroundingChunk): Boolean {
+        val queryTopical = topicalTokens(query)
+        if (queryTopical.isEmpty()) return true // nothing discriminating was asked — don't block
+        val hitText = listOfNotNull(hit.titleBn, hit.bodyBn, hit.titleEn, hit.bodyEn)
+            .joinToString(" ")
+        if (hitText.isBlank()) return false
+        val hitTokens = BanglaTokenizer.tokenize(hitText).toSet()
+        return queryTopical.any { it in hitTokens }
+    }
+
+    /**
+     * Query content words minus demographics. Stop-words are already dropped by
+     * [BanglaTokenizer.tokenizeQuery]; the character bigrams it also emits are dropped
+     * here, because a two-character Bangla fragment matches nearly every card and would
+     * make the check vacuous.
+     */
+    private fun topicalTokens(query: String): Set<String> =
+        BanglaTokenizer.tokenizeQuery(query)
+            .filterNotTo(mutableSetOf()) { token ->
+                token in DEMOGRAPHIC_TERMS || token.isBanglaCharBigram()
+            }
+
+    /** A two-character all-Bangla token is the tokenizer's morphology bigram, not a word. */
+    private fun String.isBanglaCharBigram(): Boolean =
+        length == 2 && all { it.code in 0x0980..0x09FF }
 
     /**
      * Subset of [clinicalTerms] that is genuinely present in [text]. Multi-word terms

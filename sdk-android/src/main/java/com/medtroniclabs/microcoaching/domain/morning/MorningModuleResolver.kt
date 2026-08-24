@@ -6,20 +6,21 @@ import com.medtroniclabs.microcoaching.data.db.MicroCoachingDatabase
 import com.medtroniclabs.microcoaching.data.db.entity.ModuleEntity
 import com.medtroniclabs.microcoaching.data.db.entity.MorningCardCacheEntity
 import com.medtroniclabs.microcoaching.domain.gaps.ondevice.OnDeviceMorningGenerator
+import com.medtroniclabs.microcoaching.domain.refresher.isActionGapStillActive
+import com.medtroniclabs.microcoaching.domain.refresher.refresherKindOf
 import com.medtroniclabs.microcoaching.network.CoachingApiService
 import com.medtroniclabs.microcoaching.progress.toReinforceQuestionIds
 import com.medtroniclabs.microcoaching.sync.SyncApi
 import com.medtroniclabs.microcoaching.sync.pullMorningCards
 import com.medtroniclabs.microcoaching.ui.learn.parseInlineQuiz
+import com.medtroniclabs.microcoaching.ui.learn.parseLessonCards
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 /**
  * Resolves the prioritised morning-module list and publishes it into the SDK's
- * [morningModules] / [morningCardsItems] flows. Split out of `MicroCoachingSDK`
- * (which was a god object) — behaviour is unchanged; this only relocates the
- * 4-tier resolution cluster behind a single collaborator.
+ * [morningModules] / [morningCardsItems] flows.
  *
  * The tiers, in order:
  *   1. seed from the local `morning_card_cache`,
@@ -91,8 +92,8 @@ internal class MorningModuleResolver(
             // It ASSISTS the backend's morning cards — adding gap-driven cards the
             // backend doesn't compute (e.g. referral compliance) — and is the sole
             // source when the endpoint is unavailable. It MERGES with any backend
-            // cards from the live fetch (preserving them), so it's no longer gated
-            // on the live fetch failing. `publish` then resolves + filters the union.
+            // cards from the live fetch (preserving them). `publish` then resolves
+            // and filters the union.
             val generated = onDeviceMorningGenerator.generate(chwId, System.currentTimeMillis())
             Log.i(TAG, "Morning cards on-device assist: +$generated item(s)")
             publish(database.morningCardCacheDao().getAllOrderedOnce(), chwId)
@@ -106,10 +107,9 @@ internal class MorningModuleResolver(
     }
 
     /**
-     * Re-apply [keepIfHasReinforceQuestions] to the latest morning-card cache.
-     * Invoked from the SDK's event-flow collector so the home banner walks to the
-     * next unmastered module the moment the CHW finishes the last wrong question
-     * of the current one — no need to wait for a fresh `onHomeScreenShown`.
+     * Re-apply [stillHasSomethingToAsk] to the latest morning-card cache, so the home
+     * banner walks to the next unfinished module the moment the CHW clears the current
+     * one. Invoked from the SDK's event-flow collector.
      *
      * Also called by `InboundSyncWorker` after `chw_module_partial_completion`
      * rows land, so a fresh-device CHW sees the morning list re-filter against the
@@ -149,25 +149,22 @@ internal class MorningModuleResolver(
     }
 
     /**
-     * Resolves the morning-card cache to modules and publishes both the cache list
-     * and the module list together, in backend-priority order.
+     * Resolves the morning-card cache to modules and publishes both the cache list and the
+     * module list together, in backend-priority order.
      *
-     * Filtering, in order:
-     *  1. [resolveFromCache] drops cards whose module isn't synced locally (logged loudly).
-     *  2. [keepIfHasReinforceQuestions] drops modules the CHW has **fully mastered
-     *     locally** — every quiz question attempted and its latest attempt correct — so a
-     *     refresher disappears once answered correctly, **offline and even over a stale
-     *     backend card**. Never-/partially-attempted modules (and quizless content) are
-     *     kept, and server-known partials are honoured, so a cross-device gap is never
-     *     wrongly dropped. (Quiz-level requirement; supersedes the earlier
-     *     selector-authoritative "no droppers" stance for the quiz era.)
+     * Two filters: [resolveFromCache] drops cards whose module isn't synced locally, then
+     * [stillHasSomethingToAsk] drops the ones the CHW has finished. That second test is the
+     * same [refresherKindOf] rule the refresher list uses, so the two surfaces cannot drift
+     * apart the way they did when this held a mastery check of its own.
      */
     private suspend fun publish(cache: List<MorningCardCacheEntity>, chwId: String) {
         val resolved = resolveFromCache(cache)
-        val kept = resolved.filter { keepIfHasReinforceQuestions(it, chwId) }
+        val cardByModuleId = cache.associateBy { it.moduleId }
+        val actionGapIds = database.behaviouralGapDao().getActiveWithRules().map { it.gapId }.toSet()
+        val kept = resolved.filter { stillHasSomethingToAsk(it, cardByModuleId[it.moduleId], actionGapIds, chwId) }
         val dropped = resolved.size - kept.size
         if (dropped > 0) {
-            Log.i(TAG, "publish: dropped $dropped mastered module(s) (no local to-reinforce questions); kept=${kept.size}")
+            Log.i(TAG, "publish: dropped $dropped finished module(s); kept=${kept.size}")
         }
         val keptIds = kept.map { it.moduleId }.toSet()
         morningCardsItems.value = cache.filter { it.moduleId in keptIds }
@@ -175,37 +172,67 @@ internal class MorningModuleResolver(
     }
 
     /**
-     * `true` when the module either has no inline quiz, or has at least one
-     * question whose latest attempt was wrong / never attempted.
+     * Whether [entity] still has a drill or a read outstanding, via [refresherKindOf].
      *
-     * Routes through [toReinforceQuestionIds] so a fresh-device CHW with a
-     * server-known partial-completion row still sees the morning card surface
-     * (even though the local `coaching_event` table is empty).
+     * Gathers the rule's inputs one module at a time — `LearnModuleMapper` batches the same
+     * reads across the whole catalogue, which is why the rule is a pure function rather than
+     * shared code that owns its own queries. The action-gap link is deliberately passed as
+     * null: [isActionGapStillActive] then falls back to the catalogue check, which keeps a
+     * live action gap rather than risking dropping one from a per-card resolution the mapper
+     * does more precisely.
      */
-    private suspend fun keepIfHasReinforceQuestions(entity: ModuleEntity, chwId: String): Boolean {
+    private suspend fun stillHasSomethingToAsk(
+        entity: ModuleEntity,
+        card: MorningCardCacheEntity?,
+        actionGapIds: Set<String>,
+        chwId: String,
+    ): Boolean {
         val parsed = parseInlineQuiz(entity.quizJson, langCode())
-        if (parsed.isEmpty()) return true
         val allIds = parsed.map { it.id }.toSet()
-        val toReinforce = toReinforceQuestionIds(
-            db = database,
-            chwId = chwId,
-            moduleFamilyId = entity.moduleFamilyId,
-            allQuestionIds = allIds,
+        val toReinforce = if (allIds.isEmpty()) {
+            emptySet()
+        } else {
+            toReinforceQuestionIds(
+                db = database,
+                chwId = chwId,
+                moduleFamilyId = entity.moduleFamilyId,
+                allQuestionIds = allIds,
+            )
+        }
+        val kind = refresherKindOf(
+            source = card?.source,
+            targetQuizId = card?.quizId?.takeIf { it in allIds },
+            toReinforce = toReinforce,
+            hasQuestions = allIds.isNotEmpty(),
+            hasCards = parseLessonCards(entity.cardsJson).isNotEmpty(),
+            cardsRead = database.chwModuleCompletionDao()
+                .get(chwId, entity.moduleFamilyId)?.completedAt != null,
+            isActionGap = isActionGapStillActive(
+                link = null,
+                cardGapId = card?.behaviouralGapId,
+                actionGapIds = actionGapIds,
+                questionIds = allIds,
+                passedSinceMistake = emptySet(),
+            ),
         )
-        return toReinforce.isNotEmpty()
+        return kind != null
     }
 
     /**
-     * Tier-4 morning-module fallback. When [morningModules] is empty (fresh CHW
-     * with zero observed gaps, empty backend morning-cards response, or every
-     * morning-card module just got mastered), surface the first non-`content_update`
-     * module with un-mastered questions so the home banner and refresher card still
-     * have a useful target. Purely client-side and transient — never persisted.
+     * Tier-4 morning-module fallback. When [morningModules] is empty (fresh CHW with zero
+     * observed gaps, empty backend morning-cards response, or every morning-card module just
+     * got finished), surface the first non-`content_update` module that still has something
+     * to ask, so the home banner and refresher card have a target. Purely client-side and
+     * transient — never persisted, so it never reaches the refresher list.
      */
     private suspend fun applyLocalFallbackIfEmpty(chwId: String) {
         if (morningModules.value.isNotEmpty()) return
+        val actionGapIds = database.behaviouralGapDao().getActiveWithRules().map { it.gapId }.toSet()
         val candidate = database.moduleDao().getAllOrderedOnce()
-            .firstOrNull { it.moduleType != "content_update" && keepIfHasReinforceQuestions(it, chwId) }
+            .firstOrNull {
+                it.moduleType != "content_update" &&
+                    stillHasSomethingToAsk(it, card = null, actionGapIds = actionGapIds, chwId = chwId)
+            }
         if (candidate == null) {
             Log.d(TAG, "Morning modules: no local-fallback candidate available")
             return

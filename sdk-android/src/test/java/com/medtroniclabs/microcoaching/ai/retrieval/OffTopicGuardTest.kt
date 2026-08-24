@@ -248,4 +248,56 @@ class OffTopicGuardTest {
         assertEquals(0, selected?.positionalId)
         assertEquals("What is Hypertension?", selected?.titleEn)
     }
+
+    // ── sharesTopicalTerm: the question↔evidence check ──────────────────────
+
+    private fun card(titleBn: String, bodyBn: String) = GroundingChunk(
+        source = GroundingChunk.Source.CARD,
+        moduleFamilyId = "fam",
+        positionalId = 0,
+        titleEn = null,
+        bodyEn = null,
+        titleBn = titleBn,
+        bodyBn = bodyBn,
+        score = 300f,
+    )
+
+    /** The exact August failure: a diet question served an anemia-grading card. */
+    @Test
+    fun `card sharing only demographic words is not topically related`() {
+        val anemia = card(
+            "উচ্চ ঝুঁকিপূর্ণ গর্ভবতী মহিলা: রক্তে হিমোগ্লোবিন",
+            "রক্তে হিমোগ্লোবিন কম হলে রক্তস্বল্পতা বলা হয়। গর্ভবতী মহিলা উচ্চ ঝুঁকিপূর্ণ বিবেচিত হয়।",
+        )
+        assertFalse(
+            OffTopicGuard.sharesTopicalTerm("একজন গর্ভবতী মহিলা প্রতিদিন কী খাবার খাবেন", anemia),
+        )
+    }
+
+    @Test
+    fun `card sharing a topical word is related`() {
+        val nutrition = card(
+            "গর্ভকালীন পরিচর্যা: দ্বিতীয় ত্রৈমাসিক",
+            "গর্ভবতী মহিলাদের প্রতিদিন তিনটি প্রধান খাবার এবং দুটি হালকা খাবার খেতে হবে।",
+        )
+        assertTrue(
+            OffTopicGuard.sharesTopicalTerm("একজন গর্ভবতী মহিলা প্রতিদিন কী খাবার খাবেন", nutrition),
+        )
+    }
+
+    /** English mode passes typed EN text and its BN translation together. */
+    @Test
+    fun `english side of the guard query also counts`() {
+        val malaria = card("ম্যালেরিয়া কী এবং এর কারণ", "ম্যালেরিয়া প্লাজমোডিয়াম পরজীবী দ্বারা সৃষ্ট।")
+        assertTrue(OffTopicGuard.sharesTopicalTerm("What causes malaria? ম্যালেরিয়া কি কারণ?", malaria))
+        val bp = card("রক্তচাপ পরিমাপ", "রক্তচাপ 140/90 এর বেশি হলে উচ্চ ঝুঁকি।")
+        assertFalse(OffTopicGuard.sharesTopicalTerm("What causes malaria? ম্যালেরিয়া কি কারণ?", bp))
+    }
+
+    /** A question with nothing discriminating must not be blocked by this gate. */
+    @Test
+    fun `query with only demographic words does not trigger a refusal`() {
+        val any = card("যেকোনো কার্ড", "এই কার্ডে সাধারণ তথ্য রয়েছে।")
+        assertTrue(OffTopicGuard.sharesTopicalTerm("গর্ভবতী মহিলা", any))
+    }
 }

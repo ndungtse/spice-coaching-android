@@ -25,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -58,7 +59,8 @@ private val META_TEXT_COLOR = Color(0xFF6B7280)
  * - [ModuleTileVariant.TRAINING]  → a circular completion ring driven by
  *   [progress] (0f–1f), with the percentage in the centre.
  *
- * Everything except the trailing affordance is identical between variants.
+ * The variants differ only in that trailing affordance and in how the thumbnail is
+ * scaled — see the thumbnail call below.
  */
 @Composable
 fun ModuleTile(
@@ -94,12 +96,19 @@ fun ModuleTile(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             // ── Leading thumbnail (shared) ──────────────────────────────────
+            // Knowledge thumbnails are document pages, where cropping to the square
+            // hides content (headings, diagram edges), so they are contained inside
+            // black bars instead. Training thumbnails are authored artwork and still
+            // fill the frame.
+            val knowledge = variant == ModuleTileVariant.KNOWLEDGE
             ModuleThumbnail(
                 thumbnailUrl = thumbnailUrl,
                 contentDescription = title,
                 modifier = Modifier
                     .size(56.dp)
                     .clip(RoundedCornerShape(12.dp)),
+                contentScale = if (knowledge) ContentScale.Fit else ContentScale.Crop,
+                letterboxColor = if (knowledge) Color.Black else null,
                 fallback = {
                     when (variant) {
                         // Same gradient + file-type icon as KnowledgeCard so a

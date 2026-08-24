@@ -24,6 +24,8 @@ import androidx.fragment.app.FragmentManager
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
+import com.medtroniclabs.microcoaching.domain.decision.AnswerMode
+import com.medtroniclabs.microcoaching.ui.screens.components.DownloadItemUiState
 import com.medtroniclabs.microcoaching.ui.screens.ChatScreen
 import com.medtroniclabs.microcoaching.ui.theme.MicroCoachingTheme
 
@@ -130,9 +132,9 @@ class CoachingChatBottomSheet : BottomSheetDialogFragment() {
          * Idempotent: if a sheet with [TAG] is already present (e.g. a rapid
          * double-tap on the FAB, or the SDK FAB and host FAB both firing), this
          * returns without showing a second one. That guarantees one sheet → one
-         * [ChatViewModel] → one [InferenceRouter], so the MediaPipe engine's
-         * `.task` is never loaded twice (the multi-load native crash the router
-         * guards against is not reachable across two separate router instances).
+         * [ChatViewModel] → one [InferenceRouter], so the model is never loaded twice
+         * (the multi-load native crash the router guards against is not reachable
+         * across two separate router instances).
          *
          * @param patientId Optional hashed patient ID for telemetry tagging.
          * @param systemContext Optional pre-seeded system context for focused chat.
@@ -202,7 +204,10 @@ private fun ChatSheetPopulatedPreview() {
                             source = MessageSource.LOCAL_MODEL,
                         ),
                     ),
-                    modelPresent = true,
+                    answerMode = AnswerMode.ON_DEVICE_ASSISTED,
+                    modelEligible = true,
+                    modelEnabled = true,
+                    modelDownload = DownloadItemUiState.Done,
                     suggestedQuestions = listOf(
                         SuggestedQuestion(
                             question = "What should I advise for a PW with Low BP 90/60?",
@@ -221,7 +226,7 @@ private fun ChatSheetPopulatedPreview() {
                 onSendMessage = {},
                 onSendSuggested = {},
                 onRequestDownload = {},
-                onSpeakMessage = {},
+                onSpeakMessage = { _, _ -> },
                 onClose = {},
                 showCloseIcon = true,
             )
@@ -243,7 +248,8 @@ private fun ChatSheetEmptyPreview() {
             ChatScreen(
                 uiState = ChatUiState.Ready(
                     messages = emptyList(),
-                    modelPresent = true,
+                    answerMode = AnswerMode.ON_DEVICE_DIRECT,
+                    modelEligible = true,
                     suggestedQuestions = listOf(
                         SuggestedQuestion(
                             question = "What should I advise for a PW with Low BP 90/60?",
@@ -258,7 +264,7 @@ private fun ChatSheetEmptyPreview() {
                 onSendMessage = {},
                 onSendSuggested = {},
                 onRequestDownload = {},
-                onSpeakMessage = {},
+                onSpeakMessage = { _, _ -> },
                 onClose = {},
                 showCloseIcon = true,
             )
@@ -266,8 +272,13 @@ private fun ChatSheetEmptyPreview() {
     }
 }
 
+/**
+ * Chat while the optional model is still downloading — usable throughout, with the transfer
+ * reported on the mode bar. Pinned at 360dp because that width is what the old header chip
+ * could not fit.
+ */
 @Preview(
-    name = "Sheet — setup / downloading",
+    name = "Sheet — model downloading, chat usable",
     showBackground = true,
     backgroundColor = 0xFFCCCCCC,
     widthDp = 360,
@@ -278,15 +289,53 @@ private fun ChatSheetDownloadingPreview() {
     MicroCoachingTheme {
         ChatSheetPreviewFrame {
             ChatScreen(
-                uiState = ChatUiState.SetupRequired(
-                    downloadProgress = 42,
-                    isDownloading = true,
+                uiState = ChatUiState.Ready(
+                    messages = emptyList(),
+                    answerMode = AnswerMode.ONLINE,
+                    modelEligible = true,
+                    modelEnabled = true,
+                    modelDownload = DownloadItemUiState.Downloading(
+                        progressPercent = 42,
+                        bytesDownloaded = 128L * 1024 * 1024,
+                        totalBytes = 304L * 1024 * 1024,
+                    ),
+                    modelSizeBytes = 304L * 1024 * 1024,
                 ),
                 onSendMessage = {},
                 onSendSuggested = {},
                 onRequestDownload = {},
-                onSpeakMessage = {},
-                showVoiceCard = true,
+                onSpeakMessage = { _, _ -> },
+                onClose = {},
+                showCloseIcon = true,
+            )
+        }
+    }
+}
+
+/** The dismissible offer, as an eligible device sees it on first connected open. */
+@Preview(
+    name = "Sheet — model offer",
+    showBackground = true,
+    backgroundColor = 0xFFCCCCCC,
+    widthDp = 360,
+    heightDp = 720,
+)
+@Composable
+private fun ChatSheetModelOfferPreview() {
+    MicroCoachingTheme {
+        ChatSheetPreviewFrame {
+            ChatScreen(
+                uiState = ChatUiState.Ready(
+                    messages = emptyList(),
+                    answerMode = AnswerMode.ON_DEVICE_DIRECT,
+                    modelEligible = true,
+                    modelSizeBytes = 304L * 1024 * 1024,
+                    showModelOffer = true,
+                ),
+                onSendMessage = {},
+                onSendSuggested = {},
+                onRequestDownload = {},
+                onSpeakMessage = { _, _ -> },
                 onClose = {},
                 showCloseIcon = true,
             )

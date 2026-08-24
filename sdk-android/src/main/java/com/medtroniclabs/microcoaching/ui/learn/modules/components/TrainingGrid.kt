@@ -10,7 +10,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.ui.learn.LearnModule
-import android.util.Log
 
 /**
  * Responsive grid of training-type modules. Replaces the former horizontal
@@ -83,30 +82,29 @@ fun TrainingGrid(
  * all-wrong attempts. Not linked to backend `chw_module_completion.completedAt`,
  * which still tracks the passing-attempt semantic and feeds [LearnModule.status].
  *
- * Edge cases:
- * - Module with zero quiz questions → fall back to status (`completed` → 1.0, else 0.0).
- * - [LearnModule.attemptedQuestionCount] null (legacy callers / not yet wired) → 0.0.
+ * A module with **no quiz** is measured by reading instead: distinct cards read
+ * over total cards, so it climbs through 40%, 60% … rather than jumping 0% → 100%.
  *
- * Old formula (correct/total — kept here in case product reverts to score-based
- * progress; see DM.txt for the rationale on the switch):
- * ```kotlin
- * // module.quizScorePct ?: if (module.status == "completed") 1f else 0f
- * ```
+ * Edge cases:
+ * - No quiz and no cards either → 0.0; there is nothing to measure.
+ * - [LearnModule.attemptedQuestionCount] / [LearnModule.viewedCardCount] null
+ *   (not applicable to this module) → 0.0.
  */
 internal fun progressFractionFor(module: LearnModule): Float {
-    Log.d("TrainingGrid", "module.title: ${module.title}, module.quizScorePct: ${module.quizScorePct}, module.questionCount: ${module.questionCount}, module.status: ${module.status}, module.attemptedQuestionCount: ${module.attemptedQuestionCount}")
-
-    // Full ring (100%) exactly when the module counts as complete — passed, or
-    // every question attempted. Shared with the reminder count via
+    // Full ring (100%) exactly when the module counts as complete — passed, every
+    // question attempted, or every card read. Shared with the reminder count via
     // [LearnModule.isProgressComplete] so the ring and the "incomplete modules"
-    // reminder can never disagree (MED-1940 Req 2). Behaviour is unchanged from
-    // the previous status=="completed"-then-attempted/total formula: when
-    // status != "completed" but attempted >= total, the old else-branch already
-    // coerced to 1f.
+    // reminder can never disagree.
     if (module.isProgressComplete) return 1f
 
-    val total = module.questionCount
-    if (total == 0) return 0f
-    val attempted = module.attemptedQuestionCount ?: 0
-    return (attempted.toFloat() / total).coerceIn(0f, 1f)
+    val totalQuestions = module.questionCount
+    if (totalQuestions > 0) {
+        val attempted = module.attemptedQuestionCount ?: 0
+        return (attempted.toFloat() / totalQuestions).coerceIn(0f, 1f)
+    }
+
+    val totalCards = module.cardCount
+    if (totalCards == 0) return 0f
+    val read = module.viewedCardCount ?: 0
+    return (read.toFloat() / totalCards).coerceIn(0f, 1f)
 }

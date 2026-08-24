@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import android.os.Build
+import android.text.format.Formatter
 import androidx.annotation.StringRes
 import androidx.core.app.NotificationCompat
 import com.medtroniclabs.microcoaching.MicroCoachingSDK
@@ -25,8 +26,6 @@ import com.medtroniclabs.microcoaching.ui.SdkLocaleHelper
  * process death).
  */
 internal object DownloadNotifications {
-
-    private const val BYTES_PER_MB: Long = 1_048_576L
 
     fun ensureChannel(
         context: Context,
@@ -63,20 +62,21 @@ internal object DownloadNotifications {
         ensureChannel(context, channelId, channelNameRes, channelDescRes)
         val localized = localizedContext(context)
         val safePercent = progress.coerceIn(0, 100)
-        val downloadedMb = (bytesDownloaded / BYTES_PER_MB).coerceAtLeast(0L).toInt()
-        val totalMb = (totalBytes / BYTES_PER_MB).coerceAtLeast(0L).toInt()
+        // Platform-formatted, as the setup card is — dividing by 1 MiB and labelling it
+        // "MB" makes the notification disagree with the card about the same file.
+        val downloaded = Formatter.formatShortFileSize(localized, bytesDownloaded.coerceAtLeast(0L))
         val isIndeterminate = extracting || totalBytes <= 0L
 
         val body = when {
             extracting && extractingBodyRes != null -> localized.getString(extractingBodyRes)
             totalBytes <= 0L -> localized.getString(
                 R.string.notification_model_download_progress_indeterminate,
-                downloadedMb,
+                downloaded,
             )
             else -> localized.getString(
                 R.string.notification_model_download_progress,
-                downloadedMb,
-                totalMb,
+                downloaded,
+                Formatter.formatShortFileSize(localized, totalBytes),
                 safePercent,
             )
         }

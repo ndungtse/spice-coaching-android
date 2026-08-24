@@ -33,8 +33,14 @@ data class TeamActivityResponse(
     @SerialName("from_date") val fromDate: String = "",
     @SerialName("to_date") val toDate: String = "",
     @SerialName("summary") val summary: TeamActivitySummary = TeamActivitySummary(),
-    @SerialName("users") val users: List<TeamMemberActivityDetail> = emptyList(),
+    // The roster field is `members` (one level: the caller's direct reports —
+    // SKs for a PO). Older builds read `users`; the backend renamed it.
+    @SerialName("members") val members: List<TeamMemberActivityDetail> = emptyList(),
+    @SerialName("focus_user_id") val focusUserId: Int? = null,
+    // `total_users` counts SKs under the focus; `total_members` counts the rows in
+    // [members] (equal for a PO, whose members are SKs) and bounds pagination.
     @SerialName("total_users") val totalUsers: Int = 0,
+    @SerialName("total_members") val totalMembers: Int = 0,
     @SerialName("total_pages") val totalPages: Int = 0,
     @SerialName("limit") val limit: Int = 0,
     @SerialName("offset") val offset: Int = 0,
@@ -54,6 +60,9 @@ data class TeamActivitySummary(
 data class TeamMemberActivityDetail(
     @SerialName("user_id") val userId: Int = 0,
     @SerialName("name") val name: String = "",
+    @SerialName("role") val role: String = "",
+    // True for AM/PO rows (a deeper level exists to drill into), false for SK rows.
+    @SerialName("can_drill_down") val canDrillDown: Boolean = false,
     @SerialName("is_active") val isActive: Boolean = false,
     @SerialName("is_chatbot_engaged") val isChatbotEngaged: Boolean = false,
     @SerialName("last_chat_at") val lastChatAt: String? = null,

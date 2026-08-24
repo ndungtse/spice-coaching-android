@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.style.TextOverflow
 import com.medtroniclabs.microcoaching.ui.podashboard.TopQuery
 import com.medtroniclabs.microcoaching.ui.theme.SpiceBlue
 import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueContainer
@@ -66,7 +67,14 @@ fun TopQueryRow(query: TopQuery, onClick: (() -> Unit)? = null, modifier: Modifi
             Text("${query.rank}", color = SpiceBlueDark, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelSmall)
         }
         Spacer(Modifier.width(12.dp))
-        Text(query.text, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+        Text(
+            text = query.text,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyMedium,
+            maxLines = FREE_TEXT_MAX_LINES,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Spacer(Modifier.width(8.dp))
         Text("${query.count}", color = SpiceBlue, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
         if (onClick != null) {
             Spacer(Modifier.width(8.dp))

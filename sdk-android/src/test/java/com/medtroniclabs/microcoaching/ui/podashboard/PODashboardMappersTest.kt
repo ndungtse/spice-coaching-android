@@ -8,13 +8,16 @@ import com.medtroniclabs.microcoaching.network.TeamActivitySummary
 import com.medtroniclabs.microcoaching.network.TeamMemberActivityDetail
 import com.medtroniclabs.microcoaching.network.TeamMemberModuleActivity
 import com.medtroniclabs.microcoaching.network.TeamMemberQuestionItem
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
 import java.time.LocalDate
 import java.time.ZoneOffset
+import java.util.TimeZone
 
 /**
  * Pure-mapping contract for the PO dashboard (DTO → UI models). No network / no SDK
@@ -24,6 +27,17 @@ import java.time.ZoneOffset
 class PODashboardMappersTest {
 
     private val range = DateRange(0L, 0L)
+
+    // Day labels resolve against the device's zone, so pin it — otherwise the
+    // relative-day assertions below flip by a day depending on the machine and
+    // the hour the suite happens to run at.
+    private val systemZone = TimeZone.getDefault()
+
+    @Before
+    fun pinZone() = TimeZone.setDefault(TimeZone.getTimeZone("UTC"))
+
+    @After
+    fun restoreZone() = TimeZone.setDefault(systemZone)
 
     private fun module(id: String, titleBn: String, done: Boolean) =
         TeamMemberModuleActivity(moduleId = id, title = LocalizedText(bn = titleBn), completedInRange = done)
@@ -151,6 +165,15 @@ class PODashboardMappersTest {
     fun `datetime with offset parses to relative label`() {
         val today = LocalDate.now(ZoneOffset.UTC)
         assertEquals("Today", relativeDayLabel(today.toString() + "T09:30:00Z"))
+    }
+
+    @Test
+    fun `zone-less datetime parses as UTC`() {
+        // ClickHouse DateTime64 columns carry no zone, so the API renders these
+        // bare — the shape every document-usage timestamp arrives in.
+        val today = LocalDate.now(ZoneOffset.UTC)
+        assertEquals("Today", relativeDayLabel(today.toString() + "T09:30:00"))
+        assertEquals("Today", relativeDayLabel(today.toString() + "T09:30:00.005"))
     }
 
     @Test

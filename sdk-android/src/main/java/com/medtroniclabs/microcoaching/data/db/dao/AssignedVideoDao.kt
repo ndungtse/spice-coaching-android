@@ -9,6 +9,19 @@ import com.medtroniclabs.microcoaching.data.db.entity.AssignedVideoEntity
 import kotlinx.coroutines.flow.Flow
 
 /**
+ * Percent-watched at or above which a video counts as finished for the home-tile
+ * indicator.
+ *
+ * `completed` is only ever set by the player reaching `STATE_ENDED`, so a CHW who
+ * watches to the last few seconds and backs out keeps a row at `completed = 0`
+ * that nothing can later clear. Treating the tail as finished stops the tile
+ * advertising work that is, in practice, done. Deliberately applied to the
+ * indicator only — `completed` itself still means "played to the end", which is
+ * what watch-progress telemetry reports.
+ */
+const val VIDEO_FINISHED_PERCENT = 95.0
+
+/**
  * Read/reconcile access for the per-CHW assigned-video catalogue that backs the
  * Training sub-tab. The list is server-authoritative for metadata but the
  * progress columns are device-authoritative between syncs, so the mutating
@@ -18,8 +31,12 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface AssignedVideoDao {
 
-    /** Reactive Training-list source for [chwId], ordered by server [rank]. */
-    @Query("SELECT * FROM assigned_video WHERE chw_id = :chwId ORDER BY rank ASC")
+    /**
+     * Reactive Training-list source for [chwId], most-recently-assigned first — so the
+     * newest assignment is the featured hero card. ISO-8601 `assigned_at` sorts
+     * chronologically as text; nulls fall last, with server [rank] as the tiebreaker.
+     */
+    @Query("SELECT * FROM assigned_video WHERE chw_id = :chwId ORDER BY assigned_at DESC, rank ASC")
     fun getForUser(chwId: String): Flow<List<AssignedVideoEntity>>
 
     /** One row (used for the resume anchor / stream resolution at play time). */
@@ -29,8 +46,15 @@ interface AssignedVideoDao {
     @Query("SELECT COUNT(*) FROM assigned_video WHERE chw_id = :chwId")
     suspend fun countForUser(chwId: String): Int
 
-    /** True while [chwId] has at least one assigned video not yet completed. EXISTS avoids loading rows. */
-    @Query("SELECT EXISTS(SELECT 1 FROM assigned_video WHERE chw_id = :chwId AND completed = 0)")
+    /**
+     * True while [chwId] has at least one assigned video still worth watching —
+     * neither played to the end nor watched past [VIDEO_FINISHED_PERCENT].
+     * EXISTS avoids loading rows.
+     */
+    @Query(
+        "SELECT EXISTS(SELECT 1 FROM assigned_video WHERE chw_id = :chwId " +
+            "AND completed = 0 AND percent_watched < $VIDEO_FINISHED_PERCENT)",
+    )
     fun hasIncompleteFlow(chwId: String): Flow<Boolean>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -48,9 +72,28 @@ interface AssignedVideoDao {
     @Query(
         "SELECT video_id AS videoId, last_position_ms AS lastPositionMs, " +
             "percent_watched AS percentWatched, completed AS completed, " +
-            "last_watched_at AS lastWatchedAt FROM assigned_video WHERE chw_id = :chwId",
+            "last_watched_at AS lastWatchedAt, duration_ms AS durationMs " +
+            "FROM assigned_video WHERE chw_id = :chwId",
     )
     suspend fun existingProgress(chwId: String): List<VideoProgressRow>
+
+    /**
+     * Record a video's length, but only while it is still unknown.
+     *
+     * Duration is discovered from several places — the catalogue, the player, a
+     * probe of the media itself — and they all agree, so the first answer wins and
+     * later ones are no-ops. Guarding on the current value also means this can be
+     * called freely without churning the row and waking every observer.
+     */
+    @Query(
+        "UPDATE assigned_video SET duration_ms = :durationMs " +
+            "WHERE video_id = :videoId AND chw_id = :chwId AND duration_ms <= 0 AND :durationMs > 0",
+    )
+    suspend fun updateDurationIfUnknown(videoId: String, chwId: String, durationMs: Long)
+
+    /** Video ids for this CHW whose length is still unknown — the probe's work list. */
+    @Query("SELECT video_id FROM assigned_video WHERE chw_id = :chwId AND duration_ms <= 0")
+    suspend fun idsMissingDuration(chwId: String): List<String>
 
     /**
      * Monotonic local progress write from the player — never regresses. Keeps the
@@ -100,6 +143,7 @@ data class VideoProgressRow(
     val percentWatched: Double,
     val completed: Boolean,
     val lastWatchedAt: String?,
+    val durationMs: Long,
 )
 
 /**
@@ -107,6 +151,10 @@ data class VideoProgressRow(
  * keep the greater `last_position_ms` / `percent_watched`, keep `completed` once
  * either side set it, and prefer the incoming `last_watched_at` (falling back to
  * the previous). Returns [row] unchanged when there is no prior progress.
+ *
+ * Duration is carried the same way. The catalogue reports it as unknown until the
+ * backend has probed the media, so without this a length the device worked out for
+ * itself would be erased by the very next sync.
  *
  * Pure so the merge (the "a lower / delayed sync must not regress progress"
  * guarantee) is unit-testable without a Room harness.
@@ -118,5 +166,6 @@ internal fun mergeVideoProgress(row: AssignedVideoEntity, prev: VideoProgressRow
         percentWatched = maxOf(row.percentWatched, prev.percentWatched),
         completed = row.completed || prev.completed,
         lastWatchedAt = row.lastWatchedAt ?: prev.lastWatchedAt,
+        durationMs = if (row.durationMs > 0) row.durationMs else prev.durationMs,
     )
 }

@@ -8,6 +8,7 @@ package com.medtroniclabs.microcoaching.ui.trainingvideos
  * @param id canonical video id (== `source_document_id`) — resolves the stream,
  *   persists progress, and keys an offline download.
  * @param title display label.
+ * @param description optional blurb from the catalogue, shown under the title.
  * @param category optional grouping label; null for backend-assigned videos
  *   (the meta line then shows only the duration).
  * @param durationMs total length in ms; [durationMin] rounds it up for display.
@@ -21,6 +22,7 @@ package com.medtroniclabs.microcoaching.ui.trainingvideos
 data class TrainingVideo(
     val id: String,
     val title: String,
+    val description: String? = null,
     val category: String? = null,
     val durationMs: Long = 0,
     val thumbnailUrl: String? = null,

@@ -30,71 +30,101 @@ private fun parsePayloadObject(raw: String?): JsonObject? =
  * fields in [TelemetryEventPayload.payloadJson].
  */
 
+/**
+ * Pinned to UTC so it renders whatever epoch it is handed verbatim, with no
+ * second offset applied. Feed it a value already shifted by [toDeviceLocal].
+ */
 private val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
     timeZone = TimeZone.getTimeZone("UTC")
 }
 
-private fun epochToDate(epochMillis: Long): String = dateFormat.format(Date(epochMillis))
+/**
+ * The device's UTC offset at [utcMillis], read per call so a timezone change
+ * mid-process is picked up.
+ */
+private fun localOffsetMs(utcMillis: Long): Long =
+    TimeZone.getDefault().getOffset(utcMillis).toLong()
 
-fun CoachingEventEntity.toPayload(): TelemetryEventPayload = TelemetryEventPayload(
-    id = eventId,
-    eventFamily = eventFamily,
-    eventType = eventType,
-    eventDate = epochToDate(timestampLocal),
-    eventSchemaVersion = eventSchemaVersion,
-    sessionId = sessionId,
-    patientVisitId = patientVisitId,
-    patientTrackId = patientTrackId,
-    patientIdHash = patientIdHash,
-    villageId = villageId,
-    upazilaId = upazilaId,
-    moduleFamilyId = moduleFamilyId,
-    moduleId = moduleId,
-    cardFamilyId = cardFamilyId,
-    quizFamilyId = quizFamilyId,
-    moduleVersion = moduleVersion,
-    quizScorePct = quizScorePct,
-    clinicalDomain = clinicalDomain,
-    cardType = cardType,
-    triggerType = triggerType,
-    inferenceMode = inferenceMode,
-    outcome = outcome,
-    validatorStatus = validatorStatus,
-    fallbackUsed = fallbackUsed,
-    networkState = networkState,
-    payloadJson = buildJsonObject {
-        val structured = parsePayloadObject(payloadJson)
-        when {
-            // Recorders like recordSpiceActionObserved already serialise a flat
-            // object (behavioural_gap_id + correctReferral... + rule_type/evidence)
-            // into the column — emit it directly per Events-Modelling §payload_json.
-            structured != null -> structured.forEach { (k, v) -> put(k, v) }
-            // Events that tag a gap via columns (e.g. module_quiz_attempted) but
-            // carry no structured payload string — echo the non-state fields.
-            behaviouralGapId != null -> {
-                cardType?.let { put("card_type", it) }
-                triggerType?.let { put("trigger_type", it) }
-                inferenceMode?.let { put("inference_mode", it) }
-                put("behavioural_gap_id", behaviouralGapId)
+/**
+ * The CHW's wall clock as an epoch, which is what the backend's
+ * `timestamp_local` column means. Every timestamp column in Room holds
+ * `System.currentTimeMillis()` — a UTC epoch regardless of the field's name —
+ * so the offset has to be added back here, at the wire boundary. Doing it here
+ * and not in the entity is deliberate: local queries order and compare on the
+ * stored value, and they only stay correct while every row shares one clock.
+ */
+private fun toDeviceLocal(utcMillis: Long): Long = utcMillis + localOffsetMs(utcMillis)
+
+/**
+ * `event_date` in the CHW's timezone — the day they actually experienced.
+ * Deriving it in UTC files everything before the offset (06:00 in Bangladesh)
+ * under the previous day on every daily rollup.
+ */
+private fun epochToLocalDate(utcMillis: Long): String =
+    dateFormat.format(Date(toDeviceLocal(utcMillis)))
+
+fun CoachingEventEntity.toPayload(): TelemetryEventPayload {
+    // `timestamp_local` is a UTC epoch (see [toDeviceLocal]); `timestamp_utc` is
+    // only set when an NTP-corrected value was available, so it wins when present.
+    val utcMillis = timestampUtc ?: timestampLocal
+    return TelemetryEventPayload(
+        id = eventId,
+        eventFamily = eventFamily,
+        eventType = eventType,
+        eventDate = epochToLocalDate(utcMillis),
+        eventSchemaVersion = eventSchemaVersion,
+        sessionId = sessionId,
+        patientVisitId = patientVisitId,
+        patientTrackId = patientTrackId,
+        patientIdHash = patientIdHash,
+        villageId = villageId,
+        upazilaId = upazilaId,
+        moduleFamilyId = moduleFamilyId,
+        moduleId = moduleId,
+        cardFamilyId = cardFamilyId,
+        quizFamilyId = quizFamilyId,
+        moduleVersion = moduleVersion,
+        quizScorePct = quizScorePct,
+        clinicalDomain = clinicalDomain,
+        cardType = cardType,
+        triggerType = triggerType,
+        inferenceMode = inferenceMode,
+        outcome = outcome,
+        validatorStatus = validatorStatus,
+        fallbackUsed = fallbackUsed,
+        networkState = networkState,
+        payloadJson = buildJsonObject {
+            val structured = parsePayloadObject(payloadJson)
+            when {
+                // Recorders like recordSpiceActionObserved already serialise a flat
+                // object (behavioural_gap_id + correctReferral... + rule_type/evidence)
+                // into the column — emit it directly per Events-Modelling §payload_json.
+                structured != null -> structured.forEach { (k, v) -> put(k, v) }
+                // Events that tag a gap via columns (e.g. module_quiz_attempted) but
+                // carry no structured payload string — echo the non-state fields.
+                behaviouralGapId != null -> {
+                    cardType?.let { put("card_type", it) }
+                    triggerType?.let { put("trigger_type", it) }
+                    inferenceMode?.let { put("inference_mode", it) }
+                    put("behavioural_gap_id", behaviouralGapId)
+                }
+                // Genuinely non-JSON legacy string → last-resort raw wrapper.
+                payloadJson != null -> put("raw", payloadJson)
             }
-            // Genuinely non-JSON legacy string → last-resort raw wrapper.
-            payloadJson != null -> put("raw", payloadJson)
-        }
-    },
-    // `timestamp_utc` must always be present — the backend `coaching_events`
-    // insert rejects null (the API schema marks it nullable, but the ClickHouse
-    // column is not). EventRecorder doesn't capture a separate UTC value, and
-    // `timestampLocal` is `System.currentTimeMillis()` which is already UTC epoch,
-    // so fall back to it. This also fixes already-queued rows at sync time.
-    timestampUtc = timestampUtc ?: timestampLocal,
-    timestampLocal = timestampLocal,
-)
+        },
+        // `timestamp_utc` must always be present — the backend `coaching_events`
+        // insert rejects null (the API schema marks it nullable, but the ClickHouse
+        // column is not).
+        timestampUtc = utcMillis,
+        timestampLocal = toDeviceLocal(utcMillis),
+    )
+}
 
 fun LlmTraceEntity.toPayload(): TelemetryEventPayload = TelemetryEventPayload(
     id = id,
     eventFamily = "system",
     eventType = "llm_inference",
-    eventDate = epochToDate(timestampLocal),
+    eventDate = epochToLocalDate(timestampLocal),
     eventSchemaVersion = eventSchemaVersion,
     payloadJson = buildJsonObject {
         put("coaching_event_id", coachingEventId)
@@ -109,14 +139,14 @@ fun LlmTraceEntity.toPayload(): TelemetryEventPayload = TelemetryEventPayload(
         outputTokens?.let { put("output_tokens", it) }
     },
     timestampUtc = timestampLocal,
-    timestampLocal = timestampLocal,
+    timestampLocal = toDeviceLocal(timestampLocal),
 )
 
 fun DigitalProficiencyEventEntity.toPayload(): TelemetryEventPayload = TelemetryEventPayload(
     id = id,
     eventFamily = "digital",
     eventType = eventType,
-    eventDate = epochToDate(timestampLocal),
+    eventDate = epochToLocalDate(timestampLocal),
     eventSchemaVersion = eventSchemaVersion,
     sessionId = sessionId,
     payloadJson = buildJsonObject {
@@ -125,5 +155,5 @@ fun DigitalProficiencyEventEntity.toPayload(): TelemetryEventPayload = Telemetry
     },
     networkState = networkState,
     timestampUtc = timestampLocal,
-    timestampLocal = timestampLocal,
+    timestampLocal = toDeviceLocal(timestampLocal),
 )

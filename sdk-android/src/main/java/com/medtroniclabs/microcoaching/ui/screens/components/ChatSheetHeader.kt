@@ -65,9 +65,6 @@ fun ChatSheetHeader(
     onClearHistory: () -> Unit,
     showVoiceModelDownloadAction: Boolean = false,
     onDownloadVoiceModel: () -> Unit = {},
-    networkAvailable: Boolean = true,
-    preferOnline: Boolean = false,
-    onSetOnlineMode: (Boolean) -> Unit = {},
 ) {
     // Two local toggles power the overflow flow:
     //   - `showOverflow`: anchors the kebab dropdown to the kebab IconButton
@@ -101,23 +98,15 @@ fun ChatSheetHeader(
                 )
             }
         }
-        Column(
+        Text(
+            text = stringResource(R.string.chat_header_title),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onBackground,
             modifier = Modifier
                 .padding(start = 12.dp)
                 .weight(1f),
-        ) {
-            Text(
-                text = stringResource(R.string.chat_header_title),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onBackground,
-            )
-            ChatModeChip(
-                preferOnline = preferOnline,
-                networkAvailable = networkAvailable,
-                onSetOnlineMode = onSetOnlineMode,
-            )
-        }
+        )
         if (showCloseIcon) {
             // Overflow kebab + dropdown anchored to it. The dropdown only
             // surfaces destructive actions (Clear chat) — split here from the
@@ -191,98 +180,5 @@ fun ChatSheetHeader(
                 }
             },
         )
-    }
-}
-
-/**
- * Interactive on-device / online mode control in the chat header. Replaces the
- * old passive connectivity dot.
- *
- * The chat defaults to on-device; the user opts into online here and one tap
- * flips the persisted preference. Online is only reachable while the device is
- * connected — offline **blocks** the online option: the chip becomes
- * non-interactive and shows the effective on-device mode, with a "No internet"
- * hint when the user's stored choice was online (so they know why it isn't
- * active). The stored preference is retained, so Online resumes automatically
- * once connectivity returns.
- */
-@Composable
-private fun ChatModeChip(
-    preferOnline: Boolean,
-    networkAvailable: Boolean,
-    onSetOnlineMode: (Boolean) -> Unit,
-) {
-    // Effective online only when the user opted in AND there is connectivity.
-    val onlineActive = preferOnline && networkAvailable
-    // Explains a stored-online choice that connectivity currently blocks.
-    val blockedByConnectivity = preferOnline && !networkAvailable
-
-    val accent = if (onlineActive) SpiceGreen else MutedText
-    val container = if (onlineActive) {
-        SpiceGreenContainer
-    } else {
-        MaterialTheme.colorScheme.surfaceVariant
-    }
-    val icon = when {
-        onlineActive -> Icons.Filled.Cloud
-        blockedByConnectivity -> Icons.Filled.CloudOff
-        else -> Icons.Filled.Smartphone
-    }
-    val label = if (onlineActive) {
-        stringResource(R.string.chat_mode_online)
-    } else {
-        stringResource(R.string.chat_mode_on_device)
-    }
-    val actionDescription = if (onlineActive) {
-        stringResource(R.string.chat_mode_switch_to_on_device)
-    } else {
-        stringResource(R.string.chat_mode_switch_to_online)
-    }
-
-    Surface(
-        shape = RoundedCornerShape(50),
-        color = container,
-        // Always interactive: the mode is a user *preference*, switchable at any
-        // time regardless of connectivity. Offline, flipping to online simply
-        // stores the choice — routing resumes online automatically once a network
-        // returns (see ChatModePrefs / ChatViewModel.sendMessage). Gating the tap
-        // on connectivity is what made the toggle feel "stuck" (MED chat ticket).
-        modifier = Modifier.clickable(
-            role = Role.Button,
-            onClickLabel = actionDescription,
-        ) { onSetOnlineMode(!preferOnline) },
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = accent,
-                modifier = Modifier.size(14.dp),
-            )
-            Spacer(Modifier.size(width = 6.dp, height = 0.dp))
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelSmall,
-                color = accent,
-            )
-            // Trailing hint: the chip is always tappable, so default to "Tap to
-            // change". When the user's stored choice is online but there's no
-            // connectivity, explain why online isn't active with "No internet"
-            // instead (the choice is retained and resumes when a network returns).
-            val hint = if (blockedByConnectivity) {
-                stringResource(R.string.chat_mode_online_unavailable)
-            } else {
-                stringResource(R.string.chat_mode_tap_to_change)
-            }
-            Spacer(Modifier.size(width = 4.dp, height = 0.dp))
-            Text(
-                text = hint,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f),
-            )
-        }
     }
 }

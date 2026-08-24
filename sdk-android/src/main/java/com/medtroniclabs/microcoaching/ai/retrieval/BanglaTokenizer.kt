@@ -49,6 +49,19 @@ object BanglaTokenizer {
     private val banglaRange = 0x0980..0x09FF
 
     /**
+     * Bengali digits fold to ASCII so a CHW typing "১৪০/৯০" matches a card written
+     * "140/90". Card bodies mix the two scripts freely — the same threshold appears
+     * as both — and without folding the two forms share no token at all.
+     */
+    private val banglaDigits = '\u09E6'..'\u09EF' // ০..৯
+
+    private fun foldBanglaDigits(text: String): String {
+        if (text.none { it in banglaDigits }) return text
+        return text.map { if (it in banglaDigits) ('0' + (it - '\u09E6')) else it }
+            .joinToString("")
+    }
+
+    /**
      * Function words excluded from QUERY tokenisation (never from index documents).
      * English and Bangla sides are maintained together so retrieval behaves the
      * same for both UI languages. Deliberately conservative: clinically meaningful
@@ -137,17 +150,25 @@ object BanglaTokenizer {
      */
     private fun splitSurfaceWords(text: String): List<String> {
         if (text.isBlank()) return emptyList()
-        val normalized = Normalizer.normalize(text, Normalizer.Form.NFC)
-            .filterNot { it in zeroWidthJoiners }
+        val normalized = foldBanglaDigits(
+            Normalizer.normalize(text, Normalizer.Form.NFC).filterNot { it in zeroWidthJoiners },
+        )
         return splitPattern
             .split(normalized)
             .map { it.lowercase() }
-            .filter { it.length >= 2 || it.isBanglaCharacter() }
+            // Single characters are noise EXCEPT digits: "৬ মাস" / "6 months" turn on
+            // that digit, and after folding it is a one-char ASCII token. Bangla
+            // single chars are kept for the character-bigram channel.
+            .filter { it.length >= 2 || it.isBanglaCharacter() || it.isSingleDigit() }
             .filter { it.isNotBlank() }
     }
 
     /**
      * [splitSurfaceWords] plus Porter stem dual-emit for ASCII alphabetic tokens.
+     *
+     * Bangla case-suffix stripping does NOT belong here: the character-bigram channel
+     * already bridges most inflection, so stem tokens only add false matches. It was
+     * measured against the retrieval benchmark and lost on every metric.
      */
     private fun splitWords(text: String): List<String> =
         splitSurfaceWords(text).flatMap { word ->
@@ -176,4 +197,6 @@ object BanglaTokenizer {
 
     private fun String.isBanglaCharacter(): Boolean =
         length == 1 && this[0].code in banglaRange
+
+    private fun String.isSingleDigit(): Boolean = length == 1 && this[0].isDigit()
 }

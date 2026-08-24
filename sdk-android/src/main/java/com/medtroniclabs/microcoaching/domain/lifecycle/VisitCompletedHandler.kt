@@ -2,21 +2,19 @@ package com.medtroniclabs.microcoaching.domain.lifecycle
 
 import android.util.Log
 import com.medtroniclabs.microcoaching.data.db.dao.CoachingEventDao
-import com.medtroniclabs.microcoaching.domain.telemetry.EventRecorder
 import com.medtroniclabs.microcoaching.domain.telemetry.sha256Short
 
 /**
- * TP-7 — `onVisitCompleted`. Runs when SPICE signals the CHW has finished a
- * patient visit. Three jobs:
+ * `onVisitCompleted`. Runs when SPICE signals the CHW has finished a patient
+ * visit. Two jobs:
  *
  *  1. **Backfill `patient_visit_id`** on every still-pending coaching_event
- *     row that this visit produced. `onAssessmentSubmitted` writes events
- *     before SPICE has resolved the final `encounterId` (BUG-5), so events
- *     land with `patient_visit_id IS NULL`; `onVisitCompleted` is the moment
- *     we know the visit ID and can stamp it on retroactively.
- *  2. **Emit `session_end`** — the closing system event for the visit.
- *  3. **Trigger an immediate sync** so the backend sees the visit-closure
- *     row + the now-stamped events within seconds of CHW finishing.
+ *     row that this visit produced. Hook-originated events are written before
+ *     SPICE has resolved the final `encounterId`, so they land with
+ *     `patient_visit_id IS NULL`; this is the moment the visit id is known and
+ *     can be stamped on retroactively.
+ *  2. **Trigger an immediate sync** so the backend sees the now-stamped events
+ *     within seconds of the CHW finishing.
  *
  * Backfill is scoped by `(session_id = "sdk-hook", chw_id, sync_status =
  * 'pending')` — already-synced events are not mutated, and other sessions
@@ -30,7 +28,6 @@ class VisitCompletedHandler(
     suspend fun handle(
         chwId: String,
         encounterId: String,
-        recorder: EventRecorder,
         flush: () -> Unit,
     ) {
         if (encounterId.isBlank()) {
@@ -50,12 +47,6 @@ class VisitCompletedHandler(
             )
         } catch (e: Exception) {
             Log.w(TAG, "Visit-close backfill failed: ${e.message}", e)
-        }
-
-        try {
-            recorder.recordSessionEnd()
-        } catch (e: Exception) {
-            Log.w(TAG, "session_end emission failed: ${e.message}", e)
         }
 
         flush()

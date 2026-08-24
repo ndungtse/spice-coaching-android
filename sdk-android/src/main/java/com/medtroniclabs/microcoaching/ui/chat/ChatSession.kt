@@ -50,6 +50,13 @@ internal enum class PromptMode {
 /**
  * Builds a Gemma 3-formatted prompt using the model's chat template tokens.
  *
+ * **Unused, and not reusable as written:** the bundled engine renders the model's chat
+ * template itself, so the turn markers below would be templated twice and reach the model
+ * as literal characters. [buildContextAnswerPrompt] is the live prompt. This is kept only
+ * because deleting it also means removing [PromptMode], the system prompts and the
+ * `[[REFUSE_*]]` sentinels the L3 validators still look for — a behaviour change, not a
+ * comment cleanup.
+ *
  * Gemma 3 supports a dedicated `<start_of_turn>system` role — use it so coaching
  * instructions are placed in their own slot and are not overridden by user input.
  *
@@ -130,6 +137,49 @@ internal fun ChatSession.buildPrompt(
 }
 
 private const val MAX_PROMPT_CHARS = 3200
+
+/**
+ * The grounded prompt: the card text, the question, two instructions.
+ *
+ * Says nothing about length. A fixed sentence count truncates the answers that need to be
+ * long — a card listing every danger sign — and the caps that actually protect the CHW from
+ * a rambling one live in [com.medtroniclabs.microcoaching.ChatTuning] (`streamCapChars`,
+ * `maxResponseWords`), where they apply to any model rather than relying on it to comply.
+ *
+ * Deliberately spare, and deliberately not [buildPrompt]:
+ *
+ *  - **No turn markers.** The engine wraps this in the model's own chat template, so any
+ *    written here are templated twice and arrive as literal characters.
+ *  - **No labels on the card text.** A small model quotes whatever label it is given, and
+ *    a CHW should not be told "the context mentions…" — the source is already shown as
+ *    an attribution chip beside the answer.
+ *  - **No refusal sentinel.** When the card does not answer the question, the groundedness
+ *    gate and the card fallback in [ChatViewModel] catch it; the model is not asked to
+ *    notice it itself.
+ *
+ * @param context Exactly the card text the retrieval-only path would serve, in English.
+ * @param question The CHW's question, in English.
+ */
+internal fun buildContextAnswerPrompt(context: String, question: String): String =
+    """
+$context
+
+Question: $question
+
+Answer the health worker directly, using only the information above.
+Do not add anything it does not say.
+    """.trimIndent()
+
+/**
+ * Joins the served card texts for [buildContextAnswerPrompt], blank-line separated.
+ *
+ * Takes the text rather than the chunks so the caller passes the same string the
+ * retrieval-only path would serve, uncapped: clipping here made the model reword a card
+ * the CHW would never see the rest of. Length is bounded upstream by `llmContextCards`
+ * and by the session token window.
+ */
+internal fun buildGroundingContext(cards: List<String>): String =
+    cards.filter { it.isNotBlank() }.joinToString("\n\n")
 
 /**
  * Drop refusal exchanges from the model-facing history: every assistant message
@@ -244,7 +294,7 @@ private fun buildReferenceBlock(grounding: List<GroundingChunk>): String {
  * produce. Falls back to the hard cut when no sentence boundary exists in the
  * kept range (one giant unpunctuated body).
  */
-private fun clipReference(text: String, cap: Int): String {
+internal fun clipReference(text: String, cap: Int): String {
     if (text.length <= cap) return text
     val hardCut = text.take(cap)
     val lastEnd = hardCut.lastIndexOfAny(charArrayOf('.', '!', '?', '।'))
@@ -255,7 +305,7 @@ private fun clipReference(text: String, cap: Int): String {
 // three 1000-char bodies crowd out the answer block + current message inside
 // the ~3200-char prompt budget — the source of the verbatim-dump and
 // mid-sentence-truncation failures. 420 still fits a 2–4 sentence card.
-private const val REFERENCE_CHAR_CAP = 420
+internal const val REFERENCE_CHAR_CAP = 420
 
 // A quiz explanation is one or two sentences; 320 chars ≈ 80 tokens is ample.
 private const val ANSWER_CHAR_CAP = 320

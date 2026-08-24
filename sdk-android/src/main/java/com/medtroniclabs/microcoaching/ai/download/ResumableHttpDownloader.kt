@@ -15,6 +15,53 @@ internal sealed class DownloadResult {
 }
 
 /**
+ * How to write this response to disk, and what a complete file will weigh.
+ *
+ * @param startOffset bytes already on disk that this response continues from, and therefore
+ *   the count the progress figures start from.
+ * @param totalBytes what the finished file should weigh, or 0 when the server gave no length.
+ * @param append true to continue the existing file, false to overwrite it from byte zero.
+ */
+internal data class ResumePlan(
+    val startOffset: Long,
+    val totalBytes: Long,
+    val append: Boolean,
+)
+
+/**
+ * Reconciles the partial file on disk with what the server actually sent.
+ *
+ * A `Range` request is a request, not a guarantee: a server or CDN that doesn't honour it
+ * answers `200` with the entire body instead of `206` with the remainder. The three figures
+ * have to move together, because each one describes the same response:
+ *
+ *  - `206` — the body is the tail. Keep the partial, append to it, and the finished file
+ *    weighs the local bytes plus the ones arriving.
+ *  - `200` — the body is the whole file, so the partial is worthless. Overwrite from zero,
+ *    count from zero, and the finished file weighs exactly what the server declared.
+ *
+ * Deriving them separately is what lets them disagree: counting from [existingBytes] while
+ * overwriting inflates the expected total above what the file can ever reach, and the
+ * completeness check then rejects a download that actually finished.
+ *
+ * A [contentLength] of 0 or less means the response was chunked, so no total is knowable and
+ * callers fall back to an indeterminate display.
+ */
+internal fun resumePlan(
+    existingBytes: Long,
+    contentLength: Long,
+    isPartialContent: Boolean,
+): ResumePlan {
+    val resuming = isPartialContent && existingBytes > 0L
+    val alreadyOnDisk = if (resuming) existingBytes else 0L
+    return ResumePlan(
+        startOffset = alreadyOnDisk,
+        totalBytes = if (contentLength > 0L) contentLength + alreadyOnDisk else 0L,
+        append = resuming,
+    )
+}
+
+/**
  * Streams a URL to a file with HTTP `Range` resume, throttled progress, and a size-floor
  * completeness check. Shared by `ModelDownloadWorker` and `SttModelDownloadWorker`.
  *
@@ -32,6 +79,13 @@ internal object ResumableHttpDownloader {
      * Reports progress (0–99) via [onProgress]. Verifies the result against [minValidBytes] and
      * deletes an incomplete/too-small file so the next attempt starts fresh. [logTag] is used for
      * this download's logcat lines; [headers] carries any auth (empty for public URLs).
+     *
+     * @param validate optional structural check on the finished file — null when the bytes are
+     *   usable, else a short reason. Needed because a chunked response leaves no `Content-Length`
+     *   to compare against, and a container whose directory sits at the end of the file clears
+     *   any byte threshold while still being unopenable. A rejected file is deleted here, so
+     *   callers' fallback and retry paths need no extra branches. Null skips the check, as the
+     *   STT `tar.bz2` requires.
      */
     suspend fun download(
         url: String,
@@ -39,6 +93,7 @@ internal object ResumableHttpDownloader {
         minValidBytes: Long,
         headers: Map<String, String> = emptyMap(),
         logTag: String = "ResumableHttpDownloader",
+        validate: ((File) -> String?)? = null,
         onProgress: suspend (percent: Int, bytesDownloaded: Long, totalBytes: Long) -> Unit,
     ): DownloadResult = runCatching {
         val client = OkHttpClient.Builder()
@@ -62,14 +117,21 @@ internal object ResumableHttpDownloader {
             Log.d(logTag, "streamDownload → HTTP ${resp.code} ${resp.message} | url=$url")
 
             if (resp.code == 416) {
-                // Range not satisfiable — server rejected our resume offset.
-                // If the local file is already ≥ the size floor it is almost certainly the
-                // complete download; treat it as success. If smaller, it is a corrupt partial —
-                // delete it so the next attempt starts from zero.
+                // Range not satisfiable — the server rejected our resume offset. A local file
+                // at or above the floor is probably the complete download, but it still has to
+                // pass [validate] to count as one. Below the floor it is a corrupt partial
+                // either way — delete it so the next attempt starts from zero.
                 val localSize = outputFile.length()
                 return@runCatching if (localSize >= minValidBytes) {
-                    Log.i(logTag, "HTTP 416 — local file is ${localSize / 1_048_576} MB, treating as already complete")
-                    DownloadResult.Success
+                    val defect = validate?.invoke(outputFile)
+                    if (defect == null) {
+                        Log.i(logTag, "HTTP 416 — local file is ${localSize / 1_048_576} MB and valid, treating as already complete")
+                        DownloadResult.Success
+                    } else {
+                        outputFile.delete()
+                        Log.w(logTag, "HTTP 416 — local file is ${localSize / 1_048_576} MB but $defect — deleted, retry to start fresh")
+                        DownloadResult.Failure("Existing file rejected: $defect — file deleted, retry required")
+                    }
                 } else {
                     outputFile.delete()
                     Log.w(logTag, "HTTP 416 — partial file deleted (${localSize / 1_048_576} MB), retry to start fresh")
@@ -90,19 +152,29 @@ internal object ResumableHttpDownloader {
             val body = resp.body
                 ?: return@runCatching DownloadResult.Failure("Empty response body")
 
-            val contentLength = body.contentLength()
-            val totalBytes = if (contentLength > 0L) contentLength + existingBytes else 0L
-            val appendToFile = existingBytes > 0L && isPartialContent
+            val plan = resumePlan(existingBytes, body.contentLength(), isPartialContent)
+            val totalBytes = plan.totalBytes
 
             if (existingBytes > 0L) {
-                Log.i(logTag, "Resuming download from byte $existingBytes (${existingBytes / 1_048_576} MB already present)")
+                if (plan.append) {
+                    Log.i(logTag, "Resuming download from byte $existingBytes (${existingBytes / 1_048_576} MB already present)")
+                } else {
+                    // The server answered 200 to a Range request, so the body is the whole
+                    // file and the partial can't be built on. Restarting is the only correct
+                    // read of that response.
+                    Log.w(
+                        logTag,
+                        "Server ignored Range (HTTP ${resp.code}) — discarding " +
+                            "${existingBytes / 1_048_576} MB partial and restarting from zero",
+                    )
+                }
             }
 
             body.byteStream().use { input ->
-                FileOutputStream(outputFile, appendToFile).use { output ->
+                FileOutputStream(outputFile, plan.append).use { output ->
                     val buffer = ByteArray(BUFFER_SIZE)
                     var bytesRead: Int
-                    var totalRead = existingBytes
+                    var totalRead = plan.startOffset
 
                     // Throttle progress emission: every percent change, or every
                     // PROGRESS_EMIT_INTERVAL_MS, whichever comes first. Without throttling
@@ -144,21 +216,42 @@ internal object ResumableHttpDownloader {
                 }
             }
 
-            // Verify the download is complete. HuggingFace often uses chunked transfer
-            // (no Content-Length), so the loop above may exit on a dropped connection with
-            // a partial file. Treat anything below the minimum valid size as a failure
-            // and delete it so the next attempt starts fresh.
+            // Completeness, by three tests in descending order of authority. The ordering
+            // exists so that a locally-configured expected size never rejects a file: such a
+            // constant goes stale as soon as the model is republished.
             val finalSize = outputFile.length()
+
+            // 1. The server's Content-Length. When the server states a length, short is short.
             if (totalBytes > 0L && finalSize < totalBytes) {
                 outputFile.delete()
                 return@runCatching DownloadResult.Failure(
                     "Incomplete download: received $finalSize of $totalBytes bytes — file deleted"
                 )
             }
-            if (totalBytes == 0L && finalSize < minValidBytes) {
+
+            // 2. The file's structure. Carries the decision when the server gave no length
+            //    (HuggingFace often uses chunked transfer): a missing tail makes the archive
+            //    unopenable, while any legitimate size opens fine.
+            val defect = validate?.invoke(outputFile)
+
+            // 3. A size floor, only where neither of the above can help: no Content-Length
+            //    and no validator. Narrow by design — it derives from an expected size, so a
+            //    republished model could turn it into a false rejection.
+            if (totalBytes == 0L && validate == null && finalSize < minValidBytes) {
                 outputFile.delete()
                 return@runCatching DownloadResult.Failure(
-                    "Download too small (${finalSize / 1_048_576} MB < ${minValidBytes / 1_048_576} MB minimum) — file deleted, retry required"
+                    "Download too small ($finalSize bytes < $minValidBytes minimum) — file deleted, retry required"
+                )
+            }
+
+            if (defect != null) {
+                outputFile.delete()
+                Log.e(
+                    logTag,
+                    "Downloaded $finalSize bytes but the file is unusable: $defect — deleted, retry required",
+                )
+                return@runCatching DownloadResult.Failure(
+                    "Downloaded file is unusable: $defect — file deleted, retry required"
                 )
             }
 

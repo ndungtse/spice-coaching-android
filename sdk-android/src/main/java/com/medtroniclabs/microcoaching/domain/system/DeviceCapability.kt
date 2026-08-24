@@ -5,19 +5,23 @@ import android.content.Context
 import android.util.Log
 
 /**
- * Device-class probe used to decide whether the SDK can host the on-device
- * Gemma model.
+ * Device-class probe used to decide whether the SDK *may* host the on-device model.
  *
- * The Gemma 3-1B `.task` file is ~1.1 GB on disk and pulls ~600 MB of resident
- * RAM into the MediaPipe GenAI runtime. On Samsung Tab A-class hardware
- * (~2 GB total RAM) the system OOM-kills the host process before inference
- * completes. On those devices the chat runs in retrieval-only mode — BM25
- * lookup over `ModuleKnowledgeIndex` + `serveFallback(...)` of the clinician-
- * authored card body — with no LLM round-trip.
+ * Eligibility, not a decision: hosting the model also requires the user to have opted in
+ * (see [com.medtroniclabs.microcoaching.MicroCoachingSDK.localModelEnabled]). Devices that
+ * fail this probe never see the offer, and answer from retrieval alone — BM25 over
+ * `ModuleKnowledgeIndex`, serving the clinician-authored card body.
  *
- * The 3 GB threshold mirrors [com.medtroniclabs.microcoaching.domain.decision.ModeSelector]
- * `EDGE_MIN_RAM_MB = 3_000L`, the existing cut-off used by EDGE vs CACHED
- * mode selection.
+ * The threshold guards against the host process being OOM-killed mid-inference: loading a
+ * model maps its weights and the inference runtime holds them resident alongside
+ * SPICE's own footprint, which on ~2 GB Samsung Tab A-class hardware is enough to lose the
+ * process.
+ *
+ * The 3 GB figure mirrors [com.medtroniclabs.microcoaching.domain.decision.ModeSelector]'s
+ * `EDGE_MIN_RAM_MB`, and was chosen against a model several times larger than the one now
+ * shipped by default. It is therefore conservative rather than measured: raising it costs
+ * eligible devices, and lowering it risks the OOM it exists to prevent, so it should move
+ * only on the strength of memory measurements on the smallest supported hardware.
  */
 object DeviceCapability {
 

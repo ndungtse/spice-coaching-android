@@ -25,30 +25,20 @@ private val EVIDENCE_JSON = com.medtroniclabs.microcoaching.util.LenientJson
  * the deployed `CoachingEventType` / `DigitalEventType` / `EventFamily` enums
  * exactly so the backend ingestion path can deserialise into typed enums for
  * aggregation rather than falling back to `string`.
+ *
+ * Both halves of each pair are the backend's rollup keys — renaming one
+ * silently empties the dashboard that counts it.
  */
 fun eventFamilyFor(eventType: String): String = when (eventType) {
-    // Coaching surface events. `module_quiz_attempted` lives here per the v3
-    // `module_requested` (Events-Modelling 1.5) is the CHW's request for a
-    // module to be added to their quota — recorded, then synced like any event.
-    // `video_progress_updated` (see docs/_events/video.md) reports CHW watch
-    // progress for an assigned training video — recorded, then synced like any event.
-    // `module_quiz_viewed` (Events-Modelling 1.7) is the "CHW opened a quiz"
-    // event — the canonical name for what was formerly `quiz_started`.
-    // `module_card_viewed` moved here from `learning` per 1.7, which lists it
-    // under the `coaching` family.
-    // `document_viewed` fires when a knowledge source document is opened. The
-    // backend's rollup keys off this exact string — renaming it empties the
-    // document-usage dashboard silently.
-    "card_shown", "card_skipped", "card_accepted", "counselling_used",
+    "card_skipped", "card_accepted", "counselling_used",
     "audio_played", "module_quiz_viewed", "module_quiz_attempted", "module_requested",
     "module_card_viewed", "video_progress_updated", "document_viewed" -> "coaching"
-    "module_delivered", "module_completed" -> "learning"
-    "risk_flag_observed", "spice_action_observed",
-    "equipment_anomaly_observed" -> "clinical_observed"
-    "sync_attempt", "sync_started", "sync_completed",
+    "module_delivered" -> "learning"
+    "spice_action_observed", "equipment_anomaly_observed" -> "clinical_observed"
+    "sync_started", "sync_completed",
     "form_submit", "login_attempt", "digital_help_used",
     "chat_feedback_positive", "chat_feedback_negative" -> "digital"
-    else -> "system"  // session_start, session_end, llm_inference, unknown
+    else -> "system"
 }
 
 /**
@@ -93,20 +83,6 @@ class EventRecorder(
      */
     private val appVersionName: String? = null,
 ) {
-
-    suspend fun recordSessionStart() {
-        dao.insert(build(eventType = "session_start"))
-        if (BuildConfig.DEBUG) {
-            Log.d(TAG, "[$sessionId] session_start saved — chw=${chwId.sha256Short()}")
-        }
-    }
-
-    suspend fun recordSessionEnd() {
-        dao.insert(build(eventType = "session_end"))
-        if (BuildConfig.DEBUG) {
-            Log.d(TAG, "[$sessionId] session_end saved — chw=${chwId.sha256Short()}")
-        }
-    }
 
     suspend fun recordCardViewed(
         moduleFamilyId: String,
@@ -359,24 +335,9 @@ class EventRecorder(
         Log.d(TAG, "[$sessionId] module_delivered saved — module=$moduleFamilyId")
     }
 
-    suspend fun recordModuleCompleted(
-        moduleFamilyId: String,
-        clinicalDomain: String,
-    ) {
-        dao.insert(
-            build(
-                eventType = "module_completed",
-                moduleFamilyId = moduleFamilyId,
-                clinicalDomain = clinicalDomain,
-            )
-        )
-        Log.d(TAG, "[$sessionId] module_completed saved — module=$moduleFamilyId")
-    }
-
     /**
-     * Distinct from [recordModuleCompleted]: emitted when the CHW finishes the
-     * quiz portion of a module regardless of whether the module is fully
-     * completed. Carries the score so the backend can update
+     * Emitted when the CHW finishes the quiz portion of a module, whether or not
+     * the module is fully completed. Carries the score so the backend can update
      * `chw_module_completion`.
      */
     suspend fun recordQuizCompleted(
@@ -592,104 +553,14 @@ class EventRecorder(
     }
 
     /**
-     * Records the `risk_flag_observed` event fired when SPICE surfaces a
-     * high-risk threshold (BP crisis, etc.). Backend family: `clinical_observed`.
-     *
-     * Emitted both from the post-assessment path (when `risk_level` lands as
-     * HIGH/EMERGENCY) and from the mid-visit hook
-     * ([com.medtroniclabs.microcoaching.MicroCoachingSDK.onRiskFlagObserved]).
-     */
-    suspend fun recordRiskFlagObserved(
-        riskLevel: String,
-        patientIdHash: String? = null,
-        patientVisitId: String? = null,
-        patientTrackId: String? = null,
-        villageId: String? = null,
-        upazilaId: String? = null,
-        behaviouralGapId: String? = null,
-        networkState: String? = null,
-    ) {
-        val payload = buildJsonObject {
-            put("risk_level", riskLevel)
-            if (behaviouralGapId != null) put("behavioural_gap_id", behaviouralGapId)
-        }.toString()
-        dao.insert(
-            build(
-                eventType = "risk_flag_observed",
-                triggerType = "workflow_event",
-                networkState = networkState,
-                payloadJson = payload,
-                behaviouralGapId = behaviouralGapId,
-                patientIdHash = patientIdHash,
-                patientVisitId = patientVisitId,
-                patientTrackId = patientTrackId,
-                villageId = villageId,
-                upazilaId = upazilaId,
-            ),
-        )
-        Log.d(TAG, "[$sessionId] risk_flag_observed saved — risk=$riskLevel gap=$behaviouralGapId")
-    }
-
-    /**
-     * Records the `card_shown` event when a coaching surface fires on the CHW's
-     * device. Backend family: `coaching`. Emitted from the post-assessment hook
-     * ([com.medtroniclabs.microcoaching.sdk.hooks.AssessmentSubmittedHandler]),
-     * which carries the patient context the surface was triggered from.
-     *
-     * Distinct from `module_card_viewed`, which reports a lesson card being
-     * paged through inside a module.
-     */
-    suspend fun recordCardShown(
-        cardType: String,
-        triggerType: String,
-        inferenceMode: String? = null,
-        moduleFamilyId: String? = null,
-        moduleId: String? = null,
-        clinicalDomain: String? = null,
-        patientIdHash: String? = null,
-        patientVisitId: String? = null,
-        patientTrackId: String? = null,
-        villageId: String? = null,
-        upazilaId: String? = null,
-        behaviouralGapId: String? = null,
-        networkState: String? = null,
-    ) {
-        dao.insert(
-            build(
-                eventType = "card_shown",
-                clinicalDomain = clinicalDomain,
-                cardType = cardType,
-                triggerType = triggerType,
-                inferenceMode = inferenceMode,
-                moduleFamilyId = moduleFamilyId,
-                moduleId = moduleId,
-                networkState = networkState,
-                behaviouralGapId = behaviouralGapId,
-                patientIdHash = patientIdHash,
-                patientVisitId = patientVisitId,
-                patientTrackId = patientTrackId,
-                villageId = villageId,
-                upazilaId = upazilaId,
-            ),
-        )
-        Log.d(
-            TAG,
-            "[$sessionId] card_shown saved — cardType=$cardType trigger=$triggerType mode=$inferenceMode",
-        )
-    }
-
-    /**
      * Generic coaching/learning event write — the single path the learn flow
-     * (module delivery, lesson cards, quiz attempts) records through. Mirrors
-     * the parameter surface, outcome derivation, and network-state fallback of
-     * the former `LearnViewModel.recordEvent`, so rows are byte-identical.
+     * (module delivery, lesson cards, quiz attempts) records through.
      *
      * `outcomeOverride` wins; otherwise a `module_quiz_attempted` row with a
-     * known [isCorrect] derives `"correct"`/`"wrong"` (per-question rows stay in
-     * sync with the aggregate finishQuiz path). When [networkState] is null it
-     * defaults to the SDK's ConnectivityManager snapshot so every event family
-     * shares one vocabulary. Wrapped in try/catch — a telemetry failure must
-     * never break the learn flow.
+     * known [isCorrect] derives `"correct"`/`"wrong"`. When [networkState] is
+     * null it defaults to the SDK's ConnectivityManager snapshot so every event
+     * family shares one vocabulary. Wrapped in try/catch — a telemetry failure
+     * must never break the learn flow.
      */
     suspend fun recordCoachingEvent(
         eventType: String,

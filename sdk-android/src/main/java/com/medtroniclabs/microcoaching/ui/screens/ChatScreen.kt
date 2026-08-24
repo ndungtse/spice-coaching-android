@@ -27,7 +27,6 @@ import com.medtroniclabs.microcoaching.ui.chat.SuggestedQuestion
 import com.medtroniclabs.microcoaching.ai.voice.stt.SttModelState
 import com.medtroniclabs.microcoaching.ai.voice.ChatVoiceInputController
 import com.medtroniclabs.microcoaching.ui.screens.components.DownloadItemUiState
-import com.medtroniclabs.microcoaching.ui.screens.components.CoachingSetupContent
 import com.medtroniclabs.microcoaching.ui.common.FullScreenLoader
 import com.medtroniclabs.microcoaching.ui.common.ChatInputState
 import com.medtroniclabs.microcoaching.ui.common.rememberChatInputState
@@ -39,7 +38,9 @@ fun ChatScreen(
     onSendMessage: (String) -> Unit,
     onSendSuggested: (SuggestedQuestion) -> Unit,
     onRequestDownload: () -> Unit,
-    onSpeakMessage: (String) -> Unit,
+    onSpeakMessage: (Long, String) -> Unit,
+    /** Message currently being read aloud, so its speaker button offers Stop. */
+    speakingMessageId: Long? = null,
     onMicTap: (() -> Unit)? = null,
     onClose: () -> Unit = {},
     showCloseIcon: Boolean = false,
@@ -53,15 +54,14 @@ fun ChatScreen(
     sttDownloadState: SttModelState? = null,
     onRetrySttDownload: () -> Unit = {},
     onCancelSttDownload: () -> Unit = {},
-    voiceModelItemState: DownloadItemUiState = DownloadItemUiState.Idle,
-    onRequestVoiceDownload: () -> Unit = {},
-    onCancelVoiceDownload: () -> Unit = {},
-    // Setup screen: whether to render the voice card (BANGLA) and TTS install
-    // card (pack missing), plus their actions and the manual "Go to chat" entry.
-    showVoiceCard: Boolean = false,
+    // The on-device model is optional, so its controls live in the answering sheet the
+    // mode bar opens rather than behind a pre-chat gate.
     showTtsInstall: Boolean = false,
     onInstallTts: () -> Unit = {},
-    onGoToChat: () -> Unit = {},
+    onEnableLocalModel: () -> Unit = {},
+    onDisableLocalModel: (deleteFile: Boolean) -> Unit = {},
+    onDeleteLocalModel: () -> Unit = {},
+    onDismissModelOffer: () -> Unit = {},
     voiceBackend: ChatVoiceInputController.Backend? = null,
     showVoiceModelDownloadAction: Boolean = false,
     onDownloadVoiceModel: () -> Unit = {},
@@ -98,28 +98,13 @@ fun ChatScreen(
         ) {
             when (uiState) {
                 is ChatUiState.Loading -> FullScreenLoader()
-                is ChatUiState.SetupRequired -> CoachingSetupContent(
-                    uiState = uiState,
-                    voiceModelState = voiceModelItemState,
-                    showVoiceCard = showVoiceCard,
-                    showTtsInstall = showTtsInstall,
-                    onRequestAiDownload = onRequestDownload,
-                    onPauseAiDownload = onPauseDownload,
-                    onResumeAiDownload = onResumeDownload,
-                    onCancelAiDownload = onCancelDownload,
-                    onRequestVoiceDownload = onRequestVoiceDownload,
-                    onCancelVoiceDownload = onCancelVoiceDownload,
-                    onInstallTts = onInstallTts,
-                    onGoToChat = onGoToChat,
-                    onClose = onClose,
-                    showCloseIcon = showCloseIcon,
-                )
 
                 is ChatUiState.Ready -> ReadyChatContent(
                     uiState = uiState,
                     onSendMessage = onSendMessage,
                     onSendSuggested = onSendSuggested,
                     onSpeakMessage = onSpeakMessage,
+                    speakingMessageId = speakingMessageId,
                     onMicTap = onMicTap,
                     inputState = inputState,
                     isRecording = isRecording,
@@ -139,6 +124,16 @@ fun ChatScreen(
                     onSourceDocTap = onSourceDocTap,
                     onFeedback = onFeedback,
                     onFeedbackNote = onFeedbackNote,
+                    onRequestDownload = onRequestDownload,
+                    onPauseDownload = onPauseDownload,
+                    onResumeDownload = onResumeDownload,
+                    onCancelDownload = onCancelDownload,
+                    showTtsInstall = showTtsInstall,
+                    onInstallTts = onInstallTts,
+                    onEnableLocalModel = onEnableLocalModel,
+                    onDisableLocalModel = onDisableLocalModel,
+                    onDeleteLocalModel = onDeleteLocalModel,
+                    onDismissModelOffer = onDismissModelOffer,
                 )
 
                 is ChatUiState.Error -> ErrorContent(message = uiState.message)

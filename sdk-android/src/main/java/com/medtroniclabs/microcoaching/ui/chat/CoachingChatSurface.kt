@@ -31,7 +31,6 @@ import com.medtroniclabs.microcoaching.ui.SdkLocaleHelper
 import com.medtroniclabs.microcoaching.ui.common.ChatInputState
 import com.medtroniclabs.microcoaching.ui.common.rememberChatInputState
 import com.medtroniclabs.microcoaching.ui.screens.ChatScreen
-import com.medtroniclabs.microcoaching.ui.screens.components.toVoiceDownloadItemState
 
 /**
  * Compose surface for the AI Coaching chat — shared between the standalone
@@ -195,7 +194,7 @@ fun CoachingChatSurface(
 
     // Bengali sherpa STT model download lifecycle. The same state powers
     // three surfaces: the inline banner above the chat input (only when the
-    // chat is already Ready, mid-flight), the voice card on the CoachingSetupContent
+    // chat is already Ready, mid-flight), the in-chat SttDownloadBanner
     // screen, and visibility of the "Download voice model" overflow menu item.
     //
     // The download is auto-started by ChatViewModel.autoStartOnDevicePacks() on
@@ -206,13 +205,11 @@ fun CoachingChatSurface(
         is SttModelState.Idle, is SttModelState.Ready -> null
         else -> sttDownloadState
     }
-    val voiceModelItemState = sttDownloadState.toVoiceDownloadItemState()
-
-    // Setup screen gating: the voice card only makes sense in BANGLA (sherpa STT
-    // is Bengali-only); the TTS "Install" card only when the read-aloud pack is
-    // actually missing (Android can't download it in-app with progress).
-    val showVoiceCard = sdk.language == Language.BANGLA
     val ttsState by viewModel.tts.state.collectAsState()
+    val speakingId by viewModel.speakingMessageId.collectAsState()
+    // The id alone can outlive its utterance, so gate it on the engine still
+    // speaking — that way the button reverts on completion and on failure.
+    val speakingMessageId = speakingId?.takeIf { ttsState is TtsState.Speaking }
     val showTtsInstall = ttsState is TtsState.LanguageMissing
 
     // Overflow item is visible only when the SDK is in BN mode and the model
@@ -264,23 +261,22 @@ fun CoachingChatSurface(
             onResumeDownload = viewModel::resumeModelDownload,
             onCancelDownload = viewModel::cancelModelDownload,
             onClearHistory = viewModel::clearChatHistory,
-            onSpeakMessage = viewModel::speakText,
+            onSpeakMessage = viewModel::toggleSpeak,
+            speakingMessageId = speakingMessageId,
             onMicTap = onMicTap,
             inputState = inputState,
             isRecording = isRecording,
             sttDownloadState = bannerState,
             onRetrySttDownload = { sdk.sttModelManager.triggerBengaliDownload() },
             onCancelSttDownload = { sdk.sttModelManager.cancelBengaliDownload() },
-            voiceModelItemState = voiceModelItemState,
-            onRequestVoiceDownload = { sdk.sttModelManager.triggerBengaliDownload() },
-            onCancelVoiceDownload = { sdk.sttModelManager.cancelBengaliDownload() },
-            // Setup screen wiring: voice card visibility (BANGLA), TTS install
-            // card (pack missing) + its system-installer action, and the manual
-            // "Go to chat" entry (the both-ready auto-enter is driven by the VM).
-            showVoiceCard = showVoiceCard,
+            // TTS install: only when the read-aloud pack is missing. Its action opens the
+            // system installer, since Android offers no in-app download for it.
             showTtsInstall = showTtsInstall,
             onInstallTts = viewModel::installTtsData,
-            onGoToChat = viewModel::enterChat,
+            onEnableLocalModel = viewModel::enableLocalModel,
+            onDisableLocalModel = viewModel::disableLocalModel,
+            onDeleteLocalModel = viewModel::deleteLocalModel,
+            onDismissModelOffer = viewModel::dismissModelOffer,
             voiceBackend = voiceBackend.takeIf { it != ChatVoiceInputController.Backend.Unknown },
             showVoiceModelDownloadAction = showVoiceModelDownloadAction,
             onDownloadVoiceModel = { sdk.sttModelManager.triggerBengaliDownload() },

@@ -24,23 +24,16 @@
 -keep class * extends androidx.room.RoomDatabase
 -dontwarn androidx.room.**
 
-# ── MediaPipe GenAI (on-device Gemma inference) ──────────────────────────────
-# The .task model is loaded via MediaPipe's LlmInference, whose options are built
-# with protobuf-lite. These rules MUST live here (consumer-rules), not in
-# proguard-rules.pro: the SDK itself is not minified, so proguard-rules.pro never
-# runs — only these consumer rules reach the host app's release (R8) build.
--keep class com.google.mediapipe.** { *; }
--dontwarn com.google.mediapipe.**
+# ── LiteRT-LM (on-device inference) ──────────────────────────────────────────
+# These rules MUST live here (consumer-rules), not in proguard-rules.pro: the SDK
+# itself is not minified, so proguard-rules.pro never runs — only these consumer
+# rules reach the host app's release (R8) build.
+#
+# The engine crosses into its native layer through JNI callbacks, which R8 cannot
+# trace, so renaming or removing anything here breaks inference at runtime.
 -keep class com.google.ai.edge.** { *; }
 -dontwarn com.google.ai.edge.**
 
-# protobuf-lite resolves generated-message fields by their ORIGINAL names via
-# reflection. R8 renaming them in the host's release build breaks model loading
-# at runtime with e.g. "Field modelPath_ for yh.a not found". Keep the generated
-# message classes and — critically — their field names.
--keep class com.google.protobuf.** { *; }
--dontwarn com.google.protobuf.**
--keep class * extends com.google.protobuf.GeneratedMessageLite { *; }
--keepclassmembers class * extends com.google.protobuf.GeneratedMessageLite {
-    <fields>;
-}
+# Every message is serialised to JSON on its way to JNI, by field name.
+-keep class com.google.gson.** { *; }
+-dontwarn com.google.gson.**

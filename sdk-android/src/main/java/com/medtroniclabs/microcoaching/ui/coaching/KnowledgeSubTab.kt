@@ -23,8 +23,8 @@ import com.medtroniclabs.microcoaching.ui.learn.modules.components.KnowledgeDocG
  * existing download/preview flow via [onDocSelect].
  *
  * [state] carries the `PUBLISHED_DOCS` sync outcome, so an empty grid distinguishes "the
- * refresh failed" (error + retry) from "nothing has been published" (a calm empty state), and
- * a failed refresh never hides documents already cached on the device.
+ * refresh failed" (error + retry) from "nothing is assigned to this CHW" (a calm empty
+ * state), and a failed refresh never hides documents already cached on the device.
  *
  * Every branch is its own scroll host — `KnowledgeDocGrid` is a `LazyVerticalGrid` (which
  * scrolls itself and must NOT be nested in a scrolling Column), the text states use a

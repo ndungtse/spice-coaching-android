@@ -58,18 +58,18 @@ import java.io.File
  *
  * Resolves the document to a local file via the durable
  * [com.medtroniclabs.microcoaching.data.asset.AssetCache] (cache hit → works
- * offline; miss → download using the presigned URL the last sync stored, then
- * store under `filesDir`), then routes by format ([detectFormat], extension hint
- * + magic bytes):
+ * offline; miss → download, then store under `filesDir`), then routes by format
+ * ([detectFormat], extension hint + magic bytes):
  *  - **PDF** → [PdfPagerScreen] — scrolls to [EXTRA_START_PAGE], per-page pinch-zoom.
  *  - **Image** → [ImageZoomScreen] — Coil + pinch-zoom.
  *  - **External** (Office, unknown) → `Intent.ACTION_VIEW` to the device
  *    browser (online only), then `finish()`.
  *
  * The cached file is keyed on the stable `sourceDocumentId`, so a once-opened
- * document opens again **offline**. The presigned URL is short-lived and can only
- * be refreshed by another sync, so an uncached document whose URL has lapsed
- * reports unavailable until then.
+ * document opens again **offline**. On a miss the download URL comes from
+ * [fetchPresignedUrl], which prefers the synced catalogues and falls back to what
+ * the caller passed — the chat citation path is the only source for a document the
+ * device has never synced.
  */
 class DocumentPreviewActivity : ComponentActivity() {
 
@@ -102,8 +102,10 @@ class DocumentPreviewActivity : ComponentActivity() {
     @Volatile private var lastUrl: String? = null
 
     /**
-     * Format-detection hint. The catalogue supplies no storage path, so this stays
-     * null and [detectFormat] falls back to the original filename and magic bytes.
+     * Storage path for the document, when the caller knew one. Doubles as a
+     * format-detection hint and as the re-sign source for a document held in
+     * neither local catalogue. Null for callers that only pass an id, leaving
+     * [detectFormat] on the original filename and magic bytes.
      */
     @Volatile private var lastStoragePath: String? = null
 
@@ -128,6 +130,9 @@ class DocumentPreviewActivity : ComponentActivity() {
         val startPage = intent.getIntExtra(EXTRA_START_PAGE, -1).takeIf { it > 0 }
         val selectedPage = intent.getIntExtra(EXTRA_SELECTED_PAGE, -1).takeIf { it > 0 }
         val originalFilename = intent.getStringExtra(EXTRA_ORIGINAL_FILENAME)
+        // Seeded before any resolve so format detection and the re-sign fallback
+        // can use them even on the first attempt.
+        lastStoragePath = intent.getStringExtra(EXTRA_STORAGE_PATH)?.takeIf { it.isNotBlank() }
 
         if (sourceDocumentId.isBlank()) {
             Log.w(TAG, "DocumentPreviewActivity launched with blank documentId — finishing")
@@ -231,7 +236,11 @@ class DocumentPreviewActivity : ComponentActivity() {
                 // Durable, offline-capable: cache hit returns the local file (no
                 // network); online miss fetches a presigned URL, downloads & stores
                 // it under filesDir. Offline miss → null → "unavailable".
-                sdk.assetCache.localFile(sourceDocumentId, AssetKind.DOCUMENT) {
+                sdk.assetCache.localFile(
+                    key = sourceDocumentId,
+                    kind = AssetKind.DOCUMENT,
+                    renewUrl = { SourceDocumentUrlStore.renew(sourceDocumentId, lastStoragePath) },
+                ) {
                     fetchPresignedUrl(sourceDocumentId)
                 }
             } catch (e: InsufficientStorageException) {
@@ -294,23 +303,35 @@ class DocumentPreviewActivity : ComponentActivity() {
     }
 
     /**
-     * The presigned GET URL the catalogue sync stored for [sourceDocumentId], also
-     * stashed in [lastUrl] for the "open externally" fallback. Returns null when
-     * none is still valid, which
+     * A presigned GET URL for [sourceDocumentId], also stashed in [lastUrl] for the
+     * "open externally" fallback. Returns null when none can be had, which
      * [com.medtroniclabs.microcoaching.data.asset.AssetCache] treats as a cache
      * miss and the media branch reports as unavailable.
      *
-     * The catalogue carries no storage path, so [lastStoragePath] stays null here
-     * and format detection falls back to the original filename.
+     * Order matters. The catalogue copy is refreshed by every sync, so it is tried
+     * first; [EXTRA_PRESIGNED_URL] then covers a document held in neither
+     * catalogue, which the store can never resolve. A re-sign from
+     * [lastStoragePath] is last: it costs a request, and it is the only route left
+     * once a URL carried on a citation has aged out.
      */
     private suspend fun fetchPresignedUrl(sourceDocumentId: String): String? {
-        val url = SourceDocumentUrlStore.presignedUrlFor(sourceDocumentId)
-        if (url == null) {
-            Log.w(TAG, "No cached presigned URL for $sourceDocumentId")
+        SourceDocumentUrlStore.presignedUrlFor(sourceDocumentId)?.let {
+            lastUrl = it
+            return it
+        }
+        intent.getStringExtra(EXTRA_PRESIGNED_URL)?.takeIf { it.isNotBlank() }?.let {
+            Log.i(TAG, "Using caller-supplied presigned URL for $sourceDocumentId")
+            lastUrl = it
+            return it
+        }
+        val resigned = SourceDocumentUrlStore.renew(sourceDocumentId, lastStoragePath)
+        if (resigned == null) {
+            Log.w(TAG, "No presigned URL available for $sourceDocumentId")
             return null
         }
-        lastUrl = url
-        return url
+        Log.i(TAG, "Re-signed $sourceDocumentId from its storage path")
+        lastUrl = resigned
+        return resigned
     }
 
     /**
@@ -389,6 +410,8 @@ class DocumentPreviewActivity : ComponentActivity() {
         private const val EXTRA_SELECTED_PAGE = "extra_selected_page"
         private const val EXTRA_ORIGINAL_FILENAME = "extra_original_filename"
         private const val EXTRA_RECORD_VIEW = "extra_record_view"
+        private const val EXTRA_PRESIGNED_URL = "extra_presigned_url"
+        private const val EXTRA_STORAGE_PATH = "extra_storage_path"
         private const val STATE_VIEW_RECORDED = "state_view_recorded"
 
         /**
@@ -397,15 +420,26 @@ class DocumentPreviewActivity : ComponentActivity() {
          * @param title Chip label the user just tapped — surfaced in the
          *   toolbar while the presigned URL resolves so the screen isn't
          *   empty during the fetch.
-         * @param startPage 1-indexed PDF page to land on. Ignored for image
+         * @param startPage 1-indexed PDF page to land on — the full document is shown
+         *   and scrolled to it. This is what chat citation chips use, since a cited
+         *   page is a starting point rather than the whole answer. Ignored for image
          *   and external formats. Null falls back to page 1.
          * @param selectedPage 1-indexed PDF page to show in isolation. When set,
          *   ONLY that page is rendered — no scroll to or nav toward the rest of the
-         *   document — and [startPage] is ignored. Null = normal full-document view.
+         *   document — and [startPage] is ignored. Reserved for Knowledge-section
+         *   entry points that mean to excerpt a single page; no caller passes it
+         *   today. Null = normal full-document view.
          * @param recordView Emit a document-view telemetry event once the document
          *   resolves. True only for the Knowledge library, whose opens are what the
          *   document-usage analytics measure; chat citation chips reach the same
          *   screen but are not library usage.
+         * @param presignedUrl A URL the caller already holds, used when the local
+         *   catalogues have none for this id. Chat citations carry one, which is the
+         *   only way to open a document the device has never synced.
+         * @param storagePath The document's object-storage path, used to re-sign
+         *   once [presignedUrl] lapses and as a format hint. Pass it whenever the
+         *   caller has it — without it a stale [presignedUrl] is unrecoverable for a
+         *   document in neither catalogue.
          */
         fun start(
             context: Context,
@@ -415,6 +449,8 @@ class DocumentPreviewActivity : ComponentActivity() {
             originalFilename: String? = null,
             selectedPage: Int? = null,
             recordView: Boolean = false,
+            presignedUrl: String? = null,
+            storagePath: String? = null,
         ) {
             val intent = Intent(context, DocumentPreviewActivity::class.java).apply {
                 putExtra(EXTRA_DOCUMENT_ID, sourceDocumentId)
@@ -423,6 +459,8 @@ class DocumentPreviewActivity : ComponentActivity() {
                 if (startPage != null && startPage > 0) putExtra(EXTRA_START_PAGE, startPage)
                 if (selectedPage != null && selectedPage > 0) putExtra(EXTRA_SELECTED_PAGE, selectedPage)
                 if (!originalFilename.isNullOrBlank()) putExtra(EXTRA_ORIGINAL_FILENAME, originalFilename)
+                if (!presignedUrl.isNullOrBlank()) putExtra(EXTRA_PRESIGNED_URL, presignedUrl)
+                if (!storagePath.isNullOrBlank()) putExtra(EXTRA_STORAGE_PATH, storagePath)
                 if (context !is android.app.Activity) addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             context.startActivity(intent)

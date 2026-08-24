@@ -30,24 +30,13 @@ import com.medtroniclabs.microcoaching.ui.learn.LearnViewModel
 import com.medtroniclabs.microcoaching.ui.learn.modules.QuickLearnViewModel
 
 /**
- * Bottom sheet for the morning refresher experience.
+ * Bottom sheet for the refresher experience. Which phases run — cards, quiz, or both — is
+ * decided by the refresher's own kind inside [RefresherContent], not by the caller.
  *
- * Supports two entry modes controlled by [EntryMode]:
- *
- * - [EntryMode.CARDS_FIRST] (default): **every** refresher entry point — the home
- *   `MorningCard`, the modules-screen `QuizRefresherCard` banner, and the
- *   `RefresherList`. Lesson cards → quiz questions → Done (the list/banner flows
- *   then offer "Next Refresher"; the home card does not).
- *
- * - [EntryMode.QUESTION_FIRST] (quiz-first): retained as an explicit opt-in for a
- *   future quiz-first flow; no caller uses it today.
- *
- * The [fromHomeScreen] flag (true only for the home `MorningCard`) suppresses the
- * "Next Refresher" CTA and drives the morning-card dismiss on completion.
+ * The `fromHomeScreen` flag suppresses the "Next Refresher" CTA and drives the morning-card
+ * dismiss on completion.
  */
 class RefresherBottomSheet : BottomSheetDialogFragment() {
-
-    enum class EntryMode { QUESTION_FIRST, CARDS_FIRST }
 
     override fun getTheme(): Int =
         com.google.android.material.R.style.Theme_Material3_Light_BottomSheetDialog
@@ -74,8 +63,6 @@ class RefresherBottomSheet : BottomSheetDialogFragment() {
     ): View {
         val chwId = arguments?.getString(ARG_CHW_ID) ?: CoachingFlowActivity.FALLBACK_CHW_ID
         val fromHomeScreen = arguments?.getBoolean(ARG_FROM_HOME_SCREEN, false) ?: false
-        val entryModeName = arguments?.getString(ARG_ENTRY_MODE) ?: EntryMode.CARDS_FIRST.name
-        val entryMode = EntryMode.valueOf(entryModeName)
         val targetModuleFamilyId = arguments?.getString(ARG_TARGET_MODULE_FAMILY_ID)
         val queueFamilyIds = arguments?.getStringArrayList(ARG_QUEUE_FAMILY_IDS).orEmpty()
 
@@ -107,7 +94,6 @@ class RefresherBottomSheet : BottomSheetDialogFragment() {
                         RefresherContent(
                             viewModel = viewModel,
                             fromHomeScreen = fromHomeScreen,
-                            entryMode = entryMode,
                             targetModuleFamilyId = targetModuleFamilyId,
                             onDismiss = { dismissAllowingStateLoss() },
                             modifier = Modifier.fillMaxSize(),
@@ -159,7 +145,6 @@ class RefresherBottomSheet : BottomSheetDialogFragment() {
         const val TAG = "RefresherBottomSheet"
         private const val ARG_CHW_ID = "chw_id"
         private const val ARG_FROM_HOME_SCREEN = "from_home_screen"
-        private const val ARG_ENTRY_MODE = "entry_mode"
         private const val ARG_TARGET_MODULE_FAMILY_ID = "target_module_family_id"
         private const val ARG_QUEUE_FAMILY_IDS = "queue_family_ids"
 
@@ -173,7 +158,6 @@ class RefresherBottomSheet : BottomSheetDialogFragment() {
             fm: FragmentManager,
             chwId: String = MicroCoachingSDK.getInstance().currentCHWId ?: "",
             fromHomeScreen: Boolean = false,
-            entryMode: EntryMode = EntryMode.CARDS_FIRST,
             targetModuleFamilyId: String? = null,
             queueFamilyIds: List<String> = emptyList(),
         ): String {
@@ -181,7 +165,6 @@ class RefresherBottomSheet : BottomSheetDialogFragment() {
                 arguments = Bundle().apply {
                     putString(ARG_CHW_ID, chwId)
                     putBoolean(ARG_FROM_HOME_SCREEN, fromHomeScreen)
-                    putString(ARG_ENTRY_MODE, entryMode.name)
                     targetModuleFamilyId?.let { putString(ARG_TARGET_MODULE_FAMILY_ID, it) }
                     if (queueFamilyIds.isNotEmpty()) {
                         putStringArrayList(ARG_QUEUE_FAMILY_IDS, ArrayList(queueFamilyIds))

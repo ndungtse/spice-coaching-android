@@ -1,5 +1,6 @@
 package com.medtroniclabs.microcoaching.ui.learn.modules.components
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -31,13 +32,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.medtroniclabs.microcoaching.R
+import com.medtroniclabs.microcoaching.domain.refresher.RefresherKind
 import com.medtroniclabs.microcoaching.ui.learn.LearnModule
 import com.medtroniclabs.microcoaching.ui.theme.SpiceNavy
 
 /**
- * Soft background tints cycled across the Practice Zone row (blue / peach / green), matching
- * the module design mock. Callers pick by position:
- * `PracticeZonePalette[index % PracticeZonePalette.size]`.
+ * Soft background tints cycled across the Practice Zone row (blue / peach / green). Callers
+ * pick by position: `PracticeZonePalette[index % PracticeZonePalette.size]`.
  */
 val PracticeZonePalette = listOf(
     Color(0xFFE7F0FB), // soft blue
@@ -46,13 +47,22 @@ val PracticeZonePalette = listOf(
 )
 
 /**
+ * Display label for a [RefresherKind]. Shared by both refresher tiles so the Practice Zone
+ * row and the see-all list can never name the same module differently. A null kind can only
+ * reach a tile mid-recomposition, before the classifier has run; "Quiz" is the safe default
+ * because every kind but LEARNING drills.
+ */
+@StringRes
+internal fun refresherKindLabel(kind: RefresherKind?): Int = when (kind) {
+    RefresherKind.MICROCOACHING -> R.string.refresher_type_microcoaching
+    RefresherKind.LEARNING -> R.string.refresher_type_learning_card
+    RefresherKind.QUIZ, null -> R.string.refresher_type_quiz
+}
+
+/**
  * Square practice/refresher tile for the horizontal "Practice Zone" row of
- * [com.medtroniclabs.microcoaching.ui.coaching.RefresherSubTab], matching the design mock:
- * a soft [containerColor] fill with a white type pill top-start, the title, and a circular
- * arrow pinned bottom-end. Severity is optional — [CriticalBadge] (when
- * [LearnModule.clinicalDomain] is "emergency", same gate as [RefresherList]) and
- * [SeverityChip] sit at bottom-start opposite the arrow, and the row is just the arrow when
- * neither applies.
+ * [com.medtroniclabs.microcoaching.ui.coaching.RefresherSubTab]: a soft [containerColor] fill
+ * with a white type pill top-start, the title, and a circular arrow pinned bottom-end.
  *
  * @param module The refresher/practice module to present.
  * @param onClick Invoked when the whole card is tapped.
@@ -65,8 +75,6 @@ fun PracticeZoneCard(
     modifier: Modifier = Modifier,
     containerColor: Color = PracticeZonePalette[0],
 ) {
-    val isCritical = module.clinicalDomain.equals("emergency", ignoreCase = true)
-
     Card(
         onClick = onClick,
         // Square (1:1) tile for the horizontal Practice Zone row.
@@ -85,9 +93,8 @@ fun PracticeZoneCard(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    // A quiz-targeted morning card is always a Quiz, even before the
-                    // quiz blob is hydrated (questionCount is 0 on the slim list model).
-                    TypeTag(isQuiz = module.targetQuizId != null || module.questionCount > 0)
+                     // hide the type tag for now
+                    // TypeTag(module.refresherKind)
                     ContentDomainTag(module.contentDomain)
                 }
                 Text(
@@ -103,14 +110,6 @@ fun PracticeZoneCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                // Severity/critical is optional — this row may be just the arrow.
-                // Row(
-                //     horizontalArrangement = Arrangement.spacedBy(6.dp),
-                //     verticalAlignment = Alignment.CenterVertically,
-                // ) {
-                //     if (isCritical) CriticalBadge()
-                //     SeverityChip(module.severity)
-                // }
                 Box(
                     modifier = Modifier.size(38.dp).background(Color.White, CircleShape),
                     contentAlignment = Alignment.Center,
@@ -127,9 +126,9 @@ fun PracticeZoneCard(
     }
 }
 
-/** White pill showing the refresher type — "Quiz" when the module has questions, else "Learning". */
+/** White pill naming what the refresher will ask of the CHW. */
 @Composable
-private fun TypeTag(isQuiz: Boolean, modifier: Modifier = Modifier) {
+private fun TypeTag(kind: RefresherKind?, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(50))
@@ -137,9 +136,7 @@ private fun TypeTag(isQuiz: Boolean, modifier: Modifier = Modifier) {
             .padding(horizontal = 10.dp, vertical = 4.dp),
     ) {
         Text(
-            text = stringResource(
-                if (isQuiz) R.string.refresher_type_quiz else R.string.practice_zone_tag_learning,
-            ),
+            text = stringResource(refresherKindLabel(kind)),
             color = SpiceNavy,
             style = MaterialTheme.typography.labelMedium.copy(
                 fontWeight = FontWeight.SemiBold,

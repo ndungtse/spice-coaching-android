@@ -5,18 +5,11 @@ import com.medtroniclabs.microcoaching.data.db.MicroCoachingDatabase
 import com.medtroniclabs.microcoaching.data.db.entity.AssignedModuleEntity
 import com.medtroniclabs.microcoaching.data.db.entity.ModuleEntity
 import com.medtroniclabs.microcoaching.data.db.entity.sortedForDisplay
-import com.medtroniclabs.microcoaching.data.localized.readLocalized
-import com.medtroniclabs.microcoaching.data.localized.readLocalizedBody
-import com.medtroniclabs.microcoaching.data.mapper.decodeIncompleteQuizIds
-import com.medtroniclabs.microcoaching.data.repository.GapProfileRepositoryImpl
 import com.medtroniclabs.microcoaching.domain.gaps.ondevice.ActionGapLink
-import com.medtroniclabs.microcoaching.progress.toReinforceQuestionIds
 import com.medtroniclabs.microcoaching.ui.learn.LearnModule
-import com.medtroniclabs.microcoaching.ui.learn.parseInlineQuiz
 import com.medtroniclabs.microcoaching.ui.learn.modules.ModuleCategorizer
 import com.medtroniclabs.microcoaching.ui.learn.modules.ModuleSections
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -29,14 +22,6 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonNull
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonObject
-import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Single, SDK-owned source of truth for the categorised module lists and the
@@ -47,26 +32,20 @@ import java.util.concurrent.ConcurrentHashMap
  * by the SPICE host's Activity, while the modules screen
  * ([com.medtroniclabs.microcoaching.ui.learn.modules.ModulesScreen]) lives in the
  * SDK's `CoachingFlowActivity`. Those are different Android Activities, so the
- * only state both can observe is the process-singleton. Before this store the
- * home card derived its pick from the morning-API subset while the modules
- * screen categorised from the full module list — they could disagree. Now both
- * read [selectedMorningCard] / [refresherModules] from here.
+ * only state both can observe is the process-singleton. Both read
+ * [selectedMorningCard] / [refresherModules] from here, so they cannot disagree.
  *
  * Pipeline (all reactive, all on [scope]):
  *  1. [allModules]    — every active module enriched into a [LearnModule]
  *                       (the former `LearnViewModel.mapModules`), recomputed on
  *                       any module / coaching_event change or [invalidate].
  *  2. [refresherModules] / [trainingModules] — [ModuleCategorizer.categorize]
- *                       partitions. Refresher membership is selector-authoritative
- *                       (every morning-card module surfaces; no mastery/completion
- *                       drop — a mastered card just sorts last).
+ *                       partitions. A refresher is a selector-surfaced module that
+ *                       still has something to ask (see [refresherKindOf]).
  *  3. [selectedMorningCard] — the first non-skipped refresher that carries a
  *                       quiz; advances to the next as the CHW skips, hides only
  *                       when every refresher is skipped.
  *
- * [com.medtroniclabs.microcoaching.MicroCoachingSDK.morningModules] is left
- * untouched (the chat ScopeClassifier still consumes it); this store is purely
- * additive.
  */
 internal class CoachingModuleStore(
     private val database: MicroCoachingDatabase,
@@ -137,7 +116,7 @@ internal class CoachingModuleStore(
             // COUNT(*) re-emits on ANY coaching_event invalidation — including
             // outbound sync's bulk markSynced, which changes neither the count
             // nor the quiz outcomes map() reads. distinctUntilChanged drops
-            // those, so a 500-row sync no longer forces a full recompute.
+            // those, so a bulk sync doesn't force a full recompute.
             database.coachingEventDao().getEventCountFlow().distinctUntilChanged(),
             database.morningCardCacheDao().getAllOrdered().distinctUntilChanged(),
             onDeviceActionGapLinks,
@@ -201,7 +180,7 @@ internal class CoachingModuleStore(
     /**
      * Active "drill this today" queue — shared by the banner and the list.
      *
-     * Ordering (MED-1595): **action-gaps first**, then **most-recently-assigned
+     * Ordering: **action-gaps first**, then **most-recently-assigned
      * first**, then the existing clinical order (severity → active gap → status)
      * as a *stable* tiebreak — so a real-world wrong-referral re-drill still leads,
      * newly-assigned refreshers surface next, and equal-recency modules keep their
@@ -257,7 +236,7 @@ internal class CoachingModuleStore(
                 val assignedFamilyIds = assigned.mapNotNull { it.moduleFamilyId }.toSet()
                 // Assignment-date lookup — feeds LearnModule.assignedAtMs so
                 // QuizRetryGate can measure the reattempt window from the assignment
-                // date (MED-1529 Req 1) AND so the list can order newest-first below.
+                // date AND so the list can order newest-first below.
                 val assignedAtOf = assignedAtLookup(assigned)
                 allMapped
                     .filter {
@@ -265,7 +244,7 @@ internal class CoachingModuleStore(
                             it.moduleType != "content_update"
                     }
                     .map { it.copy(assignedAtMs = assignedAtOf(it)) }
-                    // Most-recently-assigned first (MED-1595); modules with no
+                    // Most-recently-assigned first; modules with no
                     // assignment date sort last. Stable — equal/undated modules keep
                     // the allModules clinical order (severity → gap → status).
                     .sortedWith(compareByDescending { it.assignedAtMs ?: Long.MIN_VALUE })
@@ -282,14 +261,11 @@ internal class CoachingModuleStore(
      * Count of the current user's **assigned modules that are not yet complete**,
      * using the shared [LearnModule.isProgressComplete] definition (passed, OR
      * every quiz question attempted at least once). Drives the incomplete-module
-     * reminder popup (MED-1940 Req 2). Using the same predicate as the All Modules
-     * progress ring guarantees the reminder and the ring agree — a fully-attempted
-     * (even if failed) module is "complete" in both, so it is no longer counted as
-     * incomplete here (it still shows 100% on the ring — the QA mismatch was that the
-     * reminder disagreed with that 100%). Derived from
-     * [trainingModules] so it inherits the same assigned-only, non-`content_update`
-     * scope; pair it with [trainingAssignmentsLoaded] to avoid acting on the initial
-     * empty (not-yet-loaded) emission.
+     * reminder popup. Using the same predicate as the All Modules
+     * progress ring guarantees the reminder and the ring agree: a fully-attempted
+     * module is "complete" in both. Derived from [trainingModules] so it inherits the
+     * same assigned-only, non-`content_update` scope; pair it with
+     * [trainingAssignmentsLoaded] to avoid acting on the initial empty emission.
      */
     val incompleteAssignedCount: StateFlow<Int> =
         trainingModules
@@ -297,11 +273,10 @@ internal class CoachingModuleStore(
             .stateIn(scope, SharingStarted.WhileSubscribed(5_000), 0)
 
     /**
-     * Home-tile module indicator (MED-I629): true while any assigned Training
-     * module is still incomplete (shared [LearnModule.isProgressComplete]
-     * predicate). Kept `Eagerly` so the SPICE home tile never flashes a stale
-     * `false` before a collector attaches — it maps the already-`Eagerly`
-     * [allModules] output (a filter over the slim list, no blob parse).
+     * Home-tile module indicator: true while any assigned Training module is still
+     * incomplete (shared [LearnModule.isProgressComplete] predicate). Kept `Eagerly`
+     * so the SPICE home tile never flashes a stale `false` before a collector
+     * attaches.
      */
     val hasIncompleteTrainingModules: StateFlow<Boolean> =
         trainingModules
@@ -343,7 +318,7 @@ internal class CoachingModuleStore(
 }
 
 /**
- * The refresher-queue ordering rule (MED-1595), extracted as a pure function so
+ * The refresher-queue ordering rule. Pure so
  * it's unit-testable without the store's coroutine/Room harness. Assumes each
  * module's [LearnModule.assignedAtMs] is already populated.
  *
@@ -360,7 +335,7 @@ internal fun orderRefresherQueue(refreshers: List<LearnModule>): List<LearnModul
     )
 
 /**
- * The featured-pick rule, extracted as a pure function so it is unit-testable
+ * The featured-pick rule. Pure so it is unit-testable
  * without constructing the store (the test source set has no coroutine/Room
  * harness). The first refresher the CHW hasn't skipped this session that also
  * carries a quiz — mirrors the former `ModulesScreen.featured`. Skipping a
@@ -371,7 +346,7 @@ internal fun selectFeatured(refreshers: List<LearnModule>, skipped: Set<String>)
 
 /**
  * Whether a module should be treated as a live action/compliance gap (and thus
- * bypass the mastery/completed drops), extracted as a pure function so the
+ * bypass the mastery drop). Pure so the
  * re-drill gate is unit-testable without a DB.
  *
  * Semantics:

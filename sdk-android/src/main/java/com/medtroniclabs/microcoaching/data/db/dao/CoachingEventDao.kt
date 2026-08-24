@@ -188,6 +188,9 @@ interface CoachingEventDao {
      *    ingests quiz attempts and folds them into the `/sync/gaps` baseline, so a
      *    synced quiz event is already represented there; replaying it again would
      *    double-count. Once it syncs it drops out and the delta collapses.
+     *    This arm assumes exactly **one row per question answered** — an
+     *    attempt-level roll-up written alongside them would be folded as an extra
+     *    observation and shift `failedAttemptsCount` by one per quiz.
      *  - **`spice_action_observed`** — **all** of them, synced included. The backend
      *    has **no referral-gap calculation yet**, so these never reach the baseline.
      *    Keeping the local ones (even after they sync) is the only way a wrong
@@ -255,6 +258,28 @@ interface CoachingEventDao {
             "WHERE event_type = 'module_requested' AND chw_id = :chwId",
     )
     suspend fun getModuleRequested(chwId: String): List<CoachingEventEntity>
+
+    /**
+     * How many distinct cards of [moduleFamilyId] this CHW has read.
+     *
+     * DISTINCT is the whole point: a CHW who pages back and forth over one card
+     * emits many rows, and counting those would report a module as read when it
+     * hasn't been. Cards recorded without an id are excluded — they can't be told
+     * apart, so counting them would reintroduce exactly that inflation.
+     *
+     * Keyed on `module_family_id` so reading history survives a version bump, the
+     * same way quiz mastery does.
+     */
+    @Query(
+        """
+        SELECT COUNT(DISTINCT card_family_id) FROM coaching_event
+        WHERE chw_id = :chwId
+          AND module_family_id = :moduleFamilyId
+          AND event_type = 'module_card_viewed'
+          AND card_family_id IS NOT NULL
+        """,
+    )
+    suspend fun countDistinctCardsViewed(chwId: String, moduleFamilyId: String): Int
 
     /** Delete all events that have been successfully synced (30-day retention cleanup). */
     @Query("DELETE FROM coaching_event WHERE sync_status = 'synced'")

@@ -22,9 +22,6 @@ import kotlinx.coroutines.sync.withLock
  * On `SyncErrorKind.HTTP_CLIENT` (4xx) or `SyncErrorKind.UNEXPECTED`: returns
  * [Result.failure()] — no retry, as the failure won't fix itself.
  *
- * Always records a `sync_attempt` [DigitalProficiencyEventEntity] row via [SyncApi]
- * regardless of outcome, enabling digital proficiency signal capture (SDK-032).
- *
  * Scheduled by [SyncCoordinator]:
  *   - Periodic: every 15 minutes when network is available
  *   - One-shot: immediately on connectivity restore

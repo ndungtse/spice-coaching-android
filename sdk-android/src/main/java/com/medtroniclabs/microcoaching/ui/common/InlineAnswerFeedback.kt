@@ -35,21 +35,21 @@ import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.ui.theme.SpiceBlue
 
 /**
- * Inline answer-feedback block shown directly below the answer cards once
- * the CHW has picked an option. Replaces the pinned-bottom
- * [AnswerFeedbackOverlay] for the main module quiz and the refresher quiz —
- * the option-card state already signals correct/wrong via colour, so the
- * dedicated "Correct / Incorrect" headline is dropped and only the
- * "Why this matters" callout + a "Next Question" CTA remain.
+ * Inline answer-feedback block shown directly below the answer cards once the CHW
+ * has picked an option: the "Why this matters" callout plus the forward CTA. The
+ * option cards already signal correct/wrong through colour, so there is no
+ * "Correct / Incorrect" headline.
  *
  * Reveal is animated: vertical expand + fade. `visible` should be driven by
  * whether the current question has been answered.
  *
- * @param footerOverride When non-null, renders in place of the default
- *   "Next Question" button (the explanation box above is unchanged). The
- *   refresher sheet uses this to surface the "Next refresher / Done" actions on
- *   the last question; [onNext] is then ignored. Default null preserves the
- *   standard button everywhere else.
+ * @param isLastQuestion Drives the CTA wording — "Finish" on the final question,
+ *   "Next Question" otherwise — so the button never promises a question that
+ *   isn't coming. Ignored when [footerOverride] is set.
+ * @param footerOverride When non-null, renders in place of the default button
+ *   (the explanation box above is unchanged). The refresher sheet uses this to
+ *   surface its "Next refresher / Done" actions on the last question; [onNext] is
+ *   then ignored. Default null preserves the standard button everywhere else.
  */
 @Composable
 fun InlineAnswerFeedback(
@@ -57,6 +57,7 @@ fun InlineAnswerFeedback(
     explanation: String,
     onNext: () -> Unit,
     modifier: Modifier = Modifier,
+    isLastQuestion: Boolean = false,
     footerOverride: (@Composable () -> Unit)? = null,
 ) {
     AnimatedVisibility(
@@ -83,7 +84,10 @@ fun InlineAnswerFeedback(
                     colors = ButtonDefaults.buttonColors(containerColor = SpiceBlue),
                 ) {
                     Text(
-                        text = stringResource(R.string.quiz_next_question),
+                        text = stringResource(
+                            if (isLastQuestion) R.string.quiz_finish
+                            else R.string.quiz_next_question,
+                        ),
                         fontWeight = FontWeight.SemiBold,
                     )
                 }

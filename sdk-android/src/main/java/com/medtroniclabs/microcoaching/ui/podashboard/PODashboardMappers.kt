@@ -26,6 +26,7 @@ internal fun mapDashboard(
     existing: List<DigitalHelpModuleUsageItem>,
     suggested: List<ModuleCreationSuggestionListItem>,
     spineError: String? = null,
+    spineErrorIsAuth: Boolean = false,
     existingTotal: Int = existing.size,
     suggestedTotal: Int = suggested.size,
     documentUsage: DocumentUsageResponse? = null,
@@ -50,6 +51,7 @@ internal fun mapDashboard(
         .coerceAtLeast(documentUsage?.documents?.size ?: 0),
     documentUsageSummary = documentUsage?.toDocumentUsageSummary(),
     spineError = spineError,
+    spineErrorIsAuth = spineErrorIsAuth,
 )
 
 // ── Document usage ──────────────────────────────────────────────────────────
@@ -72,19 +74,80 @@ internal fun DocumentUsageDocumentRow.toDocumentUsageRow() = DocumentUsageRow(
 )
 
 internal fun DocumentUsageEventRow.toDocumentViewEventItem() = DocumentViewEventItem(
+    userId = userId,
     userName = userName?.takeIf { it.isNotBlank() } ?: userId.toString(),
     userRole = userRole?.takeIf { it.isNotBlank() },
     // Both are resolved server-side; prefer the finer-grained upazila.
     geography = upazilaId?.takeIf { it.isNotBlank() } ?: district?.takeIf { it.isNotBlank() },
-    viewedAtLabel = relativeDayLabel(viewedAt),
+    viewedAtLabel = relativeDateTimeLabel(viewedAt),
+    viewedAtMillis = parseApiInstant(viewedAt)?.toEpochMilli(),
 )
+
+/**
+ * Pivot raw opens into one row per reader, carrying how many times they opened
+ * the document and their latest open. Grouped by user id, not display name, so
+ * two readers sharing a name stay separate. Ordered by opens descending, then by
+ * the most recent open. Role and geography are filled from whichever of a
+ * reader's opens carries them — the wire leaves either null per event.
+ */
+internal fun List<DocumentViewEventItem>.toDocumentReaders(): List<DocumentReaderItem> {
+    class Acc(val name: String, var role: String?, var geography: String?) {
+        var opens = 0
+        var lastMillis: Long? = null
+        var lastLabel = ""
+    }
+    val byUser = LinkedHashMap<Int, Acc>()
+    forEach { event ->
+        val acc = byUser.getOrPut(event.userId) {
+            Acc(event.userName, event.userRole, event.geography)
+        }
+        acc.opens++
+        if (acc.role == null) acc.role = event.userRole
+        if (acc.geography == null) acc.geography = event.geography
+        val millis = event.viewedAtMillis
+        val known = acc.lastMillis
+        when {
+            millis != null && (known == null || millis > known) -> {
+                acc.lastMillis = millis
+                acc.lastLabel = event.viewedAtLabel
+            }
+            // No timestamp anywhere yet — keep the first non-blank label so an
+            // unparseable instant still shows something.
+            known == null && acc.lastLabel.isBlank() -> acc.lastLabel = event.viewedAtLabel
+        }
+    }
+    return byUser.entries
+        .sortedWith(
+            compareByDescending<Map.Entry<Int, Acc>> { it.value.opens }
+                .thenByDescending { it.value.lastMillis ?: Long.MIN_VALUE },
+        )
+        .map { (id, acc) ->
+            DocumentReaderItem(
+                userId = id,
+                userName = acc.name,
+                userRole = acc.role,
+                geography = acc.geography,
+                opens = acc.opens,
+                lastViewedAtLabel = acc.lastLabel,
+            )
+        }
+}
 
 /**
  * Detail for one document. The response is already narrowed by `document_id`, so
  * its KPIs describe that document alone; [documentId] is passed in because an
  * empty result carries no row to read it from.
+ *
+ * [allEvents] defaults to this response's own page. The data source overrides it
+ * with the opens accumulated across every page, because readers are pivoted from
+ * that list and a partial one would under-count them; [truncated] says the
+ * accumulation stopped at its ceiling.
  */
-internal fun DocumentUsageResponse.toDocumentUsageDetail(documentId: String): DocumentUsageDetail {
+internal fun DocumentUsageResponse.toDocumentUsageDetail(
+    documentId: String,
+    allEvents: List<DocumentViewEventItem> = events.map { it.toDocumentViewEventItem() },
+    truncated: Boolean = false,
+): DocumentUsageDetail {
     val row = documents.firstOrNull { it.documentId == documentId } ?: documents.firstOrNull()
     return DocumentUsageDetail(
         documentId = documentId,
@@ -93,8 +156,10 @@ internal fun DocumentUsageResponse.toDocumentUsageDetail(documentId: String): Do
             ?: documentId,
         totalViews = row?.totalViews ?: totalViews,
         uniqueUsers = row?.uniqueUsers ?: uniqueUsers,
-        events = events.map { it.toDocumentViewEventItem() },
-        totalEvents = totalEvents.coerceAtLeast(events.size),
+        events = allEvents,
+        totalEvents = totalEvents.coerceAtLeast(allEvents.size),
+        readers = allEvents.toDocumentReaders(),
+        eventsTruncated = truncated,
     )
 }
 

@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.style.TextOverflow
 import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.ui.common.AvatarCircle
 import com.medtroniclabs.microcoaching.ui.podashboard.SkSummary
@@ -35,7 +36,14 @@ fun RefresherCompletionRow(sk: SkSummary, modifier: Modifier = Modifier) {
     ) {
         AvatarCircle(sk.name, size = 40.dp, containerColor = RefresherPurpleBg, contentColor = RefresherPurple)
         Spacer(Modifier.width(12.dp))
-        Text(sk.name, modifier = Modifier.weight(1f), fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium)
+        Text(
+            text = sk.name,
+            modifier = Modifier.weight(1f),
+            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.bodyMedium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
         Text(
             text = stringResource(R.string.po_fraction, sk.refreshersDone, sk.refreshersTotal),
             color = RefresherPurple,

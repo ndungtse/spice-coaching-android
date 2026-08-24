@@ -10,16 +10,18 @@ import kotlinx.coroutines.sync.withLock
  *
  * Media nodes arrive in one of two shapes:
  *  - a direct `url` (used as-is), or
- *  - an `object_name` (e.g. `media/<uuid>_<file>.png`) that must be exchanged for a
- *    short-lived presigned GET URL via [CoachingApiService.getMediaPresignedUrl].
+ *  - an `object_name` (e.g. `media/<uuid>_<file>.png`) exchanged for a short-lived
+ *    presigned GET URL via [CoachingApiService.getPresignedUrls].
+ *
+ * That endpoint expects a bucket-prefixed storage path while a card carries only
+ * the bucket-relative object name, so these currently come back declined. It is
+ * still the right route to be on: the admin-gated alternative 403s for every SK
+ * and PO, which is what broke card images in the field.
  *
  * Presigned URLs are cached in-memory by object name until shortly before they
- * expire so a card with the same media repeated (or revisited cards) doesn't
- * re-hit the backend each frame. The cache is process-scoped and intentionally
- * not persisted — presigned URLs are deliberately ephemeral.
- *
- * Mirrors the presigned flow already used by
- * [com.medtroniclabs.microcoaching.ui.document.DocumentPreviewActivity].
+ * expire so repeated or revisited cards don't re-hit the backend each frame. The
+ * cache is process-scoped and deliberately not persisted, since the URLs are
+ * ephemeral; pass `forceFresh` to bypass it when a download has already failed.
  */
 object MediaUrlResolver {
 
@@ -38,7 +40,7 @@ object MediaUrlResolver {
      * (no source, no network, or backend miss). Safe to call from the main thread —
      * the network round-trip is suspending.
      */
-    suspend fun resolve(src: String?, objectName: String?): String? {
+    suspend fun resolve(src: String?, objectName: String?, forceFresh: Boolean = false): String? {
         if (!src.isNullOrBlank()) {
             Log.d(TAG, "resolve: using direct src=$src")
             return src
@@ -49,12 +51,14 @@ object MediaUrlResolver {
             return null
         }
 
-        mutex.withLock { cache[key] }
-            ?.takeIf { it.expiresAtEpochSec > nowEpochSec() }
-            ?.let {
-                Log.d(TAG, "resolve: cache hit object_name=$key → ${it.url}")
-                return it.url
-            }
+        if (!forceFresh) {
+            mutex.withLock { cache[key] }
+                ?.takeIf { it.expiresAtEpochSec > nowEpochSec() }
+                ?.let {
+                    Log.d(TAG, "resolve: cache hit object_name=$key → ${it.url}")
+                    return it.url
+                }
+        }
 
         val sdk = runCatching { MicroCoachingSDK.getInstance() }.getOrNull()
         if (sdk == null) {
@@ -66,36 +70,34 @@ object MediaUrlResolver {
             return null
         }
 
-        Log.d(TAG, "resolve: requesting presigned URL → GET admin/files/presigned-url?object_name=$key")
         val resolved = runCatching {
-            val response = sdk.apiService.getMediaPresignedUrl(objectName = key)
+            val response = sdk.apiService.getPresignedUrls(StoragePathsPresignRequest(listOf(key)))
             if (!response.isSuccessful) {
                 Log.w(
                     TAG,
-                    "Media presigned fetch failed: code=${response.code()} " +
-                        "body=${response.errorBody()?.string()}",
+                    "Media presign failed: code=${response.code()} body=${response.errorBody()?.string()}",
                 )
                 return@runCatching null
             }
-            val entry = response.body()
-            Log.d(
-                TAG,
-                "resolve: presigned response code=${response.code()} url=${entry?.url} " +
-                    "bucket=${entry?.bucketName} expires=${entry?.expiresSeconds}",
-            )
-            if (entry == null || entry.url.isBlank()) {
-                Log.w(TAG, "Media presigned URL missing in response: $key")
+            val body = response.body()
+            val entry = body?.urls?.firstOrNull { it.storagePath == key }
+            if (entry == null || entry.presignedUrl.isBlank()) {
+                // A declined path, not a transport fault. Card media carries a
+                // bucket-relative `object_name` while the endpoint wants a
+                // bucket-prefixed storage path, so these land here until the
+                // backend either accepts one or ships the other.
+                Log.w(TAG, "Media presign declined object_name=$key (missing_paths=${body?.missingPaths})")
                 return@runCatching null
             }
             CachedUrl(
-                url = entry.url,
+                url = entry.presignedUrl,
                 expiresAtEpochSec = nowEpochSec() + (entry.expiresSeconds - EXPIRY_SAFETY_MARGIN_SEC).coerceAtLeast(0),
             )
-        }.onFailure { Log.w(TAG, "Media presigned fetch error for $key: ${it.message}", it) }.getOrNull()
+        }.onFailure { Log.w(TAG, "Media presign error for $key: ${it.message}", it) }.getOrNull()
             ?: return null
 
         mutex.withLock { cache[key] = resolved }
-        Log.d(TAG, "resolve: resolved object_name=$key → ${resolved.url}")
+        Log.d(TAG, "resolve: resolved object_name=$key")
         return resolved.url
     }
 

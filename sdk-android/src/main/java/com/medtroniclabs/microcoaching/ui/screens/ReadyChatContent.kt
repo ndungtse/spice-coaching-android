@@ -17,12 +17,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
-import androidx.compose.material.icons.filled.ThumbDown
-import androidx.compose.material.icons.filled.ThumbUp
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -51,8 +46,15 @@ import com.medtroniclabs.microcoaching.ai.voice.stt.SttModelState
 import com.medtroniclabs.microcoaching.ui.common.ChatInputBar
 import com.medtroniclabs.microcoaching.ai.voice.ChatVoiceInputController
 import com.medtroniclabs.microcoaching.ui.screens.components.RecordingBadge
+import com.medtroniclabs.microcoaching.domain.decision.AnswerMode
+import com.medtroniclabs.microcoaching.ui.screens.components.AnsweringModeSheet
+import com.medtroniclabs.microcoaching.ui.screens.components.ChatModeBar
+import com.medtroniclabs.microcoaching.ui.screens.components.LocalModelOfferCard
 import com.medtroniclabs.microcoaching.ui.screens.components.SttDownloadBanner
+import com.medtroniclabs.microcoaching.ui.screens.components.isModelTransferInFlight
 import com.medtroniclabs.microcoaching.ui.common.MessageBubble
+import com.medtroniclabs.microcoaching.ui.common.rememberCopyToClipboard
+import com.medtroniclabs.microcoaching.ui.screens.components.AssistantMessageActions
 import com.medtroniclabs.microcoaching.ui.common.StreamingBubble
 import com.medtroniclabs.microcoaching.ui.components.TranslationModelStateChip
 import com.medtroniclabs.microcoaching.ui.common.ChatInputState
@@ -65,7 +67,8 @@ internal fun ReadyChatContent(
     uiState: ChatUiState.Ready,
     onSendMessage: (String) -> Unit,
     onSendSuggested: (SuggestedQuestion) -> Unit,
-    onSpeakMessage: (String) -> Unit,
+    onSpeakMessage: (Long, String) -> Unit,
+    speakingMessageId: Long?,
     onMicTap: (() -> Unit)?,
     inputState: ChatInputState,
     isRecording: Boolean,
@@ -85,13 +88,28 @@ internal fun ReadyChatContent(
     onSourceDocTap: (String, String, Int?) -> Unit,
     onFeedback: (Long, Boolean) -> Unit,
     onFeedbackNote: (Long, String) -> Unit,
+    onRequestDownload: () -> Unit = {},
+    onPauseDownload: () -> Unit = {},
+    onResumeDownload: () -> Unit = {},
+    onCancelDownload: () -> Unit = {},
+    showTtsInstall: Boolean = false,
+    onInstallTts: () -> Unit = {},
+    onEnableLocalModel: () -> Unit = {},
+    onDisableLocalModel: (deleteFile: Boolean) -> Unit = {},
+    onDeleteLocalModel: () -> Unit = {},
+    onDismissModelOffer: () -> Unit = {},
 ) {
     val listState = rememberLazyListState()
+
+    // The answering sheet is UI-local: it presents choices the ViewModel already owns and
+    // holds no state of its own beyond being open.
+    var showAnsweringSheet by remember { mutableStateOf(false) }
 
     // Which assistant message (by id) currently has the thumbs-down detail sheet
     // open, or null. UI-local: the sheet is supplementary to the already-recorded
     // negative event.
     var feedbackSheetFor by remember { mutableStateOf<Long?>(null) }
+    val copyToClipboard = rememberCopyToClipboard()
 
     // Auto-scroll to the latest item. The +1 accounts for the streaming bubble
     // when generation is in flight. We do NOT include the welcome bubble in this
@@ -112,9 +130,18 @@ internal fun ReadyChatContent(
             onClearHistory = onClearHistory,
             showVoiceModelDownloadAction = showVoiceModelDownloadAction,
             onDownloadVoiceModel = onDownloadVoiceModel,
+        )
+        // Full-width, directly under the header: the mode label and a download progress row
+        // do not fit beside the header's avatar and icon buttons, least of all in Bengali.
+        ChatModeBar(
+            answerMode = uiState.answerMode,
             networkAvailable = networkAvailable,
             preferOnline = preferOnline,
-            onSetOnlineMode = onSetOnlineMode,
+            modelDownload = uiState.modelDownload,
+            onOpenSheet = { showAnsweringSheet = true },
+            onPauseDownload = onPauseDownload,
+            onResumeDownload = onResumeDownload,
+            onCancelDownload = onCancelDownload,
         )
         HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
 
@@ -123,6 +150,17 @@ internal fun ReadyChatContent(
         TranslationModelStateChip(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
         )
+
+        // Only ever present on eligible hardware, while connected, and before the user has
+        // decided — the ViewModel owns that predicate.
+        if (uiState.showModelOffer) {
+            LocalModelOfferCard(
+                sizeBytes = uiState.modelSizeBytes,
+                onSetUp = onEnableLocalModel,
+                onDismiss = onDismissModelOffer,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+            )
+        }
 
         LazyColumn(
             state = listState,
@@ -190,61 +228,19 @@ internal fun ReadyChatContent(
                                     modifier = Modifier.padding(start = 56.dp, end = 12.dp),
                                 )
                             }
-                            Row(
+                            AssistantMessageActions(
+                                onCopy = { copyToClipboard(message.text) },
+                                onSpeak = { onSpeakMessage(message.id, message.text) },
+                                isSpeaking = speakingMessageId == message.id,
+                                vote = uiState.feedback[message.id],
+                                onFeedback = { helpful ->
+                                    onFeedback(message.id, helpful)
+                                    // Thumbs-down opens the detail sheet on the same tap; the
+                                    // row disables both thumbs afterwards, so this fires once.
+                                    if (!helpful) feedbackSheetFor = message.id
+                                },
                                 modifier = Modifier.padding(start = 56.dp, bottom = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                IconButton(
-                                    onClick = { onSpeakMessage(message.text) },
-                                    modifier = Modifier.size(28.dp),
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.AutoMirrored.Filled.VolumeUp,
-                                        contentDescription = stringResource(R.string.chat_speak),
-                                        modifier = Modifier.size(16.dp),
-                                        tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.45f),
-                                    )
-                                }
-                                // Response feedback (Phase 1) — thumbs up/down emit a
-                                // chat_feedback_* telemetry event. A rating is a
-                                // one-shot action: once given it locks (both buttons
-                                // disable); the chosen thumb stays tinted (primary for
-                                // up, error for down).
-                                val vote = uiState.feedback[message.id]
-                                val rated = vote != null
-                                val inactiveTint =
-                                    MaterialTheme.colorScheme.onBackground.copy(alpha = 0.45f)
-                                IconButton(
-                                    onClick = { onFeedback(message.id, true) },
-                                    enabled = !rated,
-                                    modifier = Modifier.size(28.dp),
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.ThumbUp,
-                                        contentDescription = stringResource(R.string.chat_feedback_helpful),
-                                        modifier = Modifier.size(16.dp),
-                                        tint = if (vote == true) MaterialTheme.colorScheme.primary else inactiveTint,
-                                    )
-                                }
-                                IconButton(
-                                    onClick = {
-                                        // One-shot: first tap records thumbs-down and opens
-                                        // the detail sheet. (Button is disabled once rated,
-                                        // so this only fires on the first tap.)
-                                        onFeedback(message.id, false)
-                                        feedbackSheetFor = message.id
-                                    },
-                                    enabled = !rated,
-                                    modifier = Modifier.size(28.dp),
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.ThumbDown,
-                                        contentDescription = stringResource(R.string.chat_feedback_not_helpful),
-                                        modifier = Modifier.size(16.dp),
-                                        tint = if (vote == false) MaterialTheme.colorScheme.error else inactiveTint,
-                                    )
-                                }
-                            }
+                            )
                         }
                     }
 
@@ -320,6 +316,33 @@ internal fun ReadyChatContent(
                 onFeedbackNote(sheetMsgId, note)
                 feedbackSheetFor = null
             },
+        )
+    }
+
+    if (showAnsweringSheet) {
+        AnsweringModeSheet(
+            answerMode = uiState.answerMode,
+            preferOnline = preferOnline,
+            networkAvailable = networkAvailable,
+            // Eligibility is inferred from the state the ViewModel already publishes: a device
+            // that can never host the model is never offered it and never has a file for it.
+            modelEligible = uiState.modelEligible,
+            modelEnabled = uiState.answerMode == AnswerMode.ON_DEVICE_ASSISTED ||
+                uiState.modelDownload.isModelTransferInFlight(),
+            modelDownload = uiState.modelDownload,
+            modelSizeBytes = uiState.modelSizeBytes,
+            modelOnDiskBytes = uiState.modelOnDiskBytes,
+            showTtsInstall = showTtsInstall,
+            onSetOnlineMode = onSetOnlineMode,
+            onEnableLocalModel = onEnableLocalModel,
+            onDisableLocalModel = onDisableLocalModel,
+            onDeleteLocalModel = onDeleteLocalModel,
+            onRequestDownload = onRequestDownload,
+            onPauseDownload = onPauseDownload,
+            onResumeDownload = onResumeDownload,
+            onCancelDownload = onCancelDownload,
+            onInstallTts = onInstallTts,
+            onDismiss = { showAnsweringSheet = false },
         )
     }
 }

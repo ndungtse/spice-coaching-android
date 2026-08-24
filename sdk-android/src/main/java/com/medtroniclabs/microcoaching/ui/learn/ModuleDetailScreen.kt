@@ -48,8 +48,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.medtroniclabs.microcoaching.Language
-import com.medtroniclabs.microcoaching.MicroCoachingSDK
 import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.ui.common.SdkScreenHeader
 import com.medtroniclabs.microcoaching.ui.common.translatedText
@@ -57,13 +55,13 @@ import com.medtroniclabs.microcoaching.ui.theme.SpiceBlue
 import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueContainer
 
 /**
- * Module detail screen — redesigned for W4. Flat single-scroll layout matching
- * `docs/v3/designs/module_ready_details.png`:
+ * Module detail screen — flat single-scroll layout:
  *
- * - Back arrow + title + domain/type subtitle
+ * - Back arrow + title, content-domain tag, assignment date
  * - Stats row: Cards | Questions | Duration
  * - Curriculum section: "Learning cards" list + optional "Quiz" entry
- * - "Listen in Bangla" disabled stub
+ * - "Listen" toggle, which arms auto-speak for the lesson player rather than
+ *   speaking here
  * - "Start Course →" (primary) + "Do a Quiz →" (outlined) CTAs
  *
  * @param uiState Must be [LearnUiState.LessonContent].
@@ -148,7 +146,7 @@ fun ModuleDetailScreen(
                 color = TitleColor,
             )
 
-            // Content-domain tag (Med-I617): Clinical / Digital / Operational.
+            // Content-domain tag: Clinical / Digital / Operational.
             Spacer(Modifier.height(8.dp))
             com.medtroniclabs.microcoaching.ui.learn.modules.components.ContentDomainTag(
                 contentDomain = module.contentDomain,
@@ -200,7 +198,6 @@ fun ModuleDetailScreen(
                     CurriculumRow(
                         number = index + 1,
                         title = translatedText(bn = card.titleBn, en = card.titleEn),
-                        minuteLabel = stringResource(R.string.module_detail_min, 1),
                     )
                     if (index < cards.size - 1) {
                         HorizontalDivider(color = DividerColor, thickness = 0.5.dp)
@@ -219,7 +216,7 @@ fun ModuleDetailScreen(
                 CurriculumRow(
                     number = cards.size + 1,
                     title = stringResource(R.string.module_detail_knowledge_check),
-                    minuteLabel = stringResource(R.string.module_detail_questions_stat) + " · $questionCount",
+                    subtitle = stringResource(R.string.module_detail_questions_stat) + " · $questionCount",
                     isQuiz = true,
                 )
             }
@@ -227,11 +224,9 @@ fun ModuleDetailScreen(
             Spacer(Modifier.height(20.dp))
 
             // ── Listen toggle ───────────────────────────────────────────────
-            val isEnglish = MicroCoachingSDK.getInstance().config.language == Language.ENGLISH
-            val listenLabel = stringResource(
-                if (isEnglish) R.string.module_detail_listen_english
-                else R.string.module_detail_listen_bangla,
-            )
+            // Language-neutral: the voice follows the script of each card as it plays
+            // (see LearnViewModel.speakAloud), so naming a language here would be a
+            // guess the playback doesn't honour.
             OutlinedButton(
                 onClick = onToggleAutoSpeak,
                 shape = RoundedCornerShape(20.dp),
@@ -245,7 +240,7 @@ fun ModuleDetailScreen(
                 )
                 Spacer(Modifier.width(6.dp))
                 Text(
-                    text = listenLabel,
+                    text = stringResource(R.string.module_detail_listen),
                     style = MaterialTheme.typography.labelLarge,
                 )
             }
@@ -348,11 +343,19 @@ private fun StatItem(
     }
 }
 
+/**
+ * One numbered entry in the module curriculum — a content card, or the closing
+ * knowledge check.
+ *
+ * [subtitle] is whatever detail that entry can offer beneath its title, and is
+ * omitted when there is none: the quiz knows its question count, while a card has
+ * no per-card metadata on the wire to show.
+ */
 @Composable
 private fun CurriculumRow(
     number: Int,
     title: String,
-    minuteLabel: String,
+    subtitle: String? = null,
     isQuiz: Boolean = false,
 ) {
     Row(
@@ -384,11 +387,13 @@ private fun CurriculumRow(
                 style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
                 color = TitleColor,
             )
-            Text(
-                text = minuteLabel,
-                style = MaterialTheme.typography.labelSmall,
-                color = MetadataColor,
-            )
+            subtitle?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MetadataColor,
+                )
+            }
         }
         Icon(
             imageVector = Icons.AutoMirrored.Filled.ArrowForward,

@@ -8,17 +8,12 @@ import androidx.activity.compose.setContent
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalContext
 import androidx.fragment.app.FragmentActivity
-import androidx.lifecycle.lifecycleScope
 import androidx.navigation.compose.rememberNavController
 import com.medtroniclabs.microcoaching.MicroCoachingSDK
-import com.medtroniclabs.microcoaching.domain.telemetry.EventRecorder
 import com.medtroniclabs.microcoaching.ui.SdkLocaleHelper
 import com.medtroniclabs.microcoaching.ui.common.applyCoachingStatusBar
 import com.medtroniclabs.microcoaching.ui.onboarding.OnboardingPrefs
 import com.medtroniclabs.microcoaching.ui.theme.MicroCoachingTheme
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import java.util.UUID
 
 /**
  * SDK-owned `Activity` that hosts the full coaching flow.
@@ -39,8 +34,6 @@ import java.util.UUID
  * ```
  */
 class CoachingFlowActivity : FragmentActivity() {
-
-    private lateinit var eventRecorder: EventRecorder
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -64,14 +57,6 @@ class CoachingFlowActivity : FragmentActivity() {
         val chwId = intent.getStringExtra(EXTRA_CHW_ID)
             ?: MicroCoachingSDK.getInstance().currentCHWId
             ?: FALLBACK_CHW_ID
-
-        val db = MicroCoachingSDK.getInstance().database
-        eventRecorder = EventRecorder(
-            dao = db.coachingEventDao(),
-            sessionId = UUID.randomUUID().toString(),
-            chwId = chwId,
-        )
-        lifecycleScope.launch(Dispatchers.IO) { eventRecorder.recordSessionStart() }
 
         setContent {
             // MicroCoachingTheme always renders the SDK light scheme; the
@@ -102,11 +87,6 @@ class CoachingFlowActivity : FragmentActivity() {
                 }
             }
         }
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        lifecycleScope.launch(Dispatchers.IO) { eventRecorder.recordSessionEnd() }
     }
 
     private fun resolveStartRoute(): String {

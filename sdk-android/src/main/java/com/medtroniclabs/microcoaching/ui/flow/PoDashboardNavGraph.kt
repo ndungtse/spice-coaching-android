@@ -47,6 +47,7 @@ import com.medtroniclabs.microcoaching.ui.learn.LearnUiState
 import com.medtroniclabs.microcoaching.ui.coaching.CoachingHomeHost
 import com.medtroniclabs.microcoaching.ui.podashboard.DateRange
 import com.medtroniclabs.microcoaching.ui.podashboard.PoDashboardSection
+import com.medtroniclabs.microcoaching.ui.podashboard.SkStatus
 import com.medtroniclabs.microcoaching.ui.podashboard.drilldown.ActiveSksScreen
 import com.medtroniclabs.microcoaching.ui.podashboard.drilldown.ChatbotUsageScreen
 import com.medtroniclabs.microcoaching.ui.podashboard.drilldown.ModulesCompletedScreen
@@ -81,59 +82,129 @@ internal fun NavGraphBuilder.poDashboardGraph(
     onFinish: () -> Unit,
 ) {
     // ── PO dashboard drill-downs ───────────────────────────────────────────
-    composable(CoachingRoute.ActiveSks.route) {
+    // Each range-scoped drill-down reads {from}/{to} off its route and hands them to
+    // its view model, which otherwise falls back to the default last-7-days window.
+    composable(
+        route = CoachingRoute.ActiveSks.route,
+        arguments = listOf(
+            navArgument(CoachingRoute.ActiveSks.ARG_STATUS) { type = NavType.StringType },
+            navArgument(CoachingRoute.ActiveSks.ARG_FROM) { type = NavType.LongType },
+            navArgument(CoachingRoute.ActiveSks.ARG_TO) { type = NavType.LongType },
+        ),
+    ) { backStack ->
+        val args = backStack.arguments
+        val status = runCatching {
+            SkStatus.valueOf(args?.getString(CoachingRoute.ActiveSks.ARG_STATUS).orEmpty())
+        }.getOrDefault(SkStatus.ACTIVE)
+        val range = DateRange(
+            args?.getLong(CoachingRoute.ActiveSks.ARG_FROM) ?: 0L,
+            args?.getLong(CoachingRoute.ActiveSks.ARG_TO) ?: 0L,
+        )
         ActiveSksScreen(
             chwId = chwId,
+            status = status,
+            range = range,
             onBack = { navController.whenSettled { navController.popOrFinish(onFinish) } },
             onHome = onFinish,
+            // Keep the SK on the same window this list was counted over.
             onOpenSkDetail = { skId ->
-                navController.whenSettled { navController.navigate(CoachingRoute.SkDetail.routeFor(skId)) }
+                navController.whenSettled {
+                    navController.navigate(
+                        CoachingRoute.SkDetail.routeFor(skId, range.fromMillis, range.toMillis),
+                    )
+                }
             },
         )
     }
-    composable(CoachingRoute.ChatbotUsage.route) {
+    composable(
+        route = CoachingRoute.ChatbotUsage.route,
+        arguments = listOf(
+            navArgument(CoachingRoute.ChatbotUsage.ARG_FROM) { type = NavType.LongType },
+            navArgument(CoachingRoute.ChatbotUsage.ARG_TO) { type = NavType.LongType },
+        ),
+    ) { backStack ->
+        val args = backStack.arguments
         ChatbotUsageScreen(
             chwId = chwId,
+            range = DateRange(
+                args?.getLong(CoachingRoute.ChatbotUsage.ARG_FROM) ?: 0L,
+                args?.getLong(CoachingRoute.ChatbotUsage.ARG_TO) ?: 0L,
+            ),
             onBack = { navController.whenSettled { navController.popOrFinish(onFinish) } },
             onHome = onFinish,
         )
     }
-    composable(CoachingRoute.ModulesCompleted.route) {
+    composable(
+        route = CoachingRoute.ModulesCompleted.route,
+        arguments = listOf(
+            navArgument(CoachingRoute.ModulesCompleted.ARG_FROM) { type = NavType.LongType },
+            navArgument(CoachingRoute.ModulesCompleted.ARG_TO) { type = NavType.LongType },
+        ),
+    ) { backStack ->
+        val args = backStack.arguments
         ModulesCompletedScreen(
             chwId = chwId,
+            range = DateRange(
+                args?.getLong(CoachingRoute.ModulesCompleted.ARG_FROM) ?: 0L,
+                args?.getLong(CoachingRoute.ModulesCompleted.ARG_TO) ?: 0L,
+            ),
             onBack = { navController.whenSettled { navController.popOrFinish(onFinish) } },
             onHome = onFinish,
         )
     }
     composable(
         route = CoachingRoute.SkDetail.route,
-        arguments = listOf(navArgument(CoachingRoute.SkDetail.ARG_SK_ID) { type = NavType.StringType }),
+        arguments = listOf(
+            navArgument(CoachingRoute.SkDetail.ARG_SK_ID) { type = NavType.StringType },
+            navArgument(CoachingRoute.SkDetail.ARG_FROM) { type = NavType.LongType },
+            navArgument(CoachingRoute.SkDetail.ARG_TO) { type = NavType.LongType },
+        ),
     ) { backStack ->
-        val skId = backStack.arguments?.getString(CoachingRoute.SkDetail.ARG_SK_ID).orEmpty()
+        val args = backStack.arguments
         SkDetailScreen(
-            skId = skId,
+            skId = args?.getString(CoachingRoute.SkDetail.ARG_SK_ID).orEmpty(),
+            range = DateRange(
+                args?.getLong(CoachingRoute.SkDetail.ARG_FROM) ?: 0L,
+                args?.getLong(CoachingRoute.SkDetail.ARG_TO) ?: 0L,
+            ),
             onBack = { navController.whenSettled { navController.popOrFinish(onFinish) } },
             onHome = onFinish,
         )
     }
     composable(
         route = CoachingRoute.SearchedModuleDetail.route,
-        arguments = listOf(navArgument(CoachingRoute.SearchedModuleDetail.ARG_MODULE_ID) { type = NavType.StringType }),
+        arguments = listOf(
+            navArgument(CoachingRoute.SearchedModuleDetail.ARG_MODULE_ID) { type = NavType.StringType },
+            navArgument(CoachingRoute.SearchedModuleDetail.ARG_FROM) { type = NavType.LongType },
+            navArgument(CoachingRoute.SearchedModuleDetail.ARG_TO) { type = NavType.LongType },
+        ),
     ) { backStack ->
-        val moduleId = backStack.arguments?.getString(CoachingRoute.SearchedModuleDetail.ARG_MODULE_ID).orEmpty()
+        val args = backStack.arguments
         SearchedModuleDetailScreen(
-            moduleId = moduleId,
+            moduleId = args?.getString(CoachingRoute.SearchedModuleDetail.ARG_MODULE_ID).orEmpty(),
+            range = DateRange(
+                args?.getLong(CoachingRoute.SearchedModuleDetail.ARG_FROM) ?: 0L,
+                args?.getLong(CoachingRoute.SearchedModuleDetail.ARG_TO) ?: 0L,
+            ),
             onBack = { navController.whenSettled { navController.popOrFinish(onFinish) } },
             onHome = onFinish,
         )
     }
     composable(
         route = CoachingRoute.DocumentUsageDetail.route,
-        arguments = listOf(navArgument(CoachingRoute.DocumentUsageDetail.ARG_DOCUMENT_ID) { type = NavType.StringType }),
+        arguments = listOf(
+            navArgument(CoachingRoute.DocumentUsageDetail.ARG_DOCUMENT_ID) { type = NavType.StringType },
+            navArgument(CoachingRoute.DocumentUsageDetail.ARG_FROM) { type = NavType.LongType },
+            navArgument(CoachingRoute.DocumentUsageDetail.ARG_TO) { type = NavType.LongType },
+        ),
     ) { backStack ->
-        val documentId = backStack.arguments?.getString(CoachingRoute.DocumentUsageDetail.ARG_DOCUMENT_ID).orEmpty()
+        val args = backStack.arguments
         DocumentUsageDetailScreen(
-            documentId = documentId,
+            documentId = args?.getString(CoachingRoute.DocumentUsageDetail.ARG_DOCUMENT_ID).orEmpty(),
+            range = DateRange(
+                args?.getLong(CoachingRoute.DocumentUsageDetail.ARG_FROM) ?: 0L,
+                args?.getLong(CoachingRoute.DocumentUsageDetail.ARG_TO) ?: 0L,
+            ),
             onBack = { navController.whenSettled { navController.popOrFinish(onFinish) } },
             onHome = onFinish,
         )
@@ -171,17 +242,31 @@ internal fun NavGraphBuilder.poDashboardGraph(
             chwId = chwId,
             onBack = { navController.whenSettled { navController.popOrFinish(onFinish) } },
             onHome = onFinish,
+            // This screen already carries the tab's window; forward it so the detail
+            // pages opened from here stay on the same period too.
             onOpenSkDetail = { skId ->
-                navController.whenSettled { navController.navigate(CoachingRoute.SkDetail.routeFor(skId)) }
+                navController.whenSettled {
+                    navController.navigate(
+                        CoachingRoute.SkDetail.routeFor(skId, range.fromMillis, range.toMillis),
+                    )
+                }
             },
             onOpenSearchedModule = { moduleId ->
-                navController.whenSettled { navController.navigate(CoachingRoute.SearchedModuleDetail.routeFor(moduleId)) }
+                navController.whenSettled {
+                    navController.navigate(
+                        CoachingRoute.SearchedModuleDetail.routeFor(moduleId, range.fromMillis, range.toMillis),
+                    )
+                }
             },
             onOpenSuggestion = { suggestionId ->
                 navController.whenSettled { navController.navigate(CoachingRoute.SuggestionDetail.routeFor(suggestionId)) }
             },
             onOpenDocument = { documentId ->
-                navController.whenSettled { navController.navigate(CoachingRoute.DocumentUsageDetail.routeFor(documentId)) }
+                navController.whenSettled {
+                    navController.navigate(
+                        CoachingRoute.DocumentUsageDetail.routeFor(documentId, range.fromMillis, range.toMillis),
+                    )
+                }
             },
         )
     }

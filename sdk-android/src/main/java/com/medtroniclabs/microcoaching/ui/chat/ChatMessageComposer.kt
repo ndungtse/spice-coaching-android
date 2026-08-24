@@ -43,12 +43,12 @@ import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-// Canned-response composition for ChatViewModel (refusal / grounding-fallback / L4 fallback)
-// — extracted verbatim as extensions (behaviour-preserving). Same package; call sites unchanged.
+// Canned-response composition for ChatViewModel (refusal / grounding-fallback / L4
+// fallback), as extensions in the same package.
 /**
- * Serve a canned refusal message (chat_plan.md §B4 L1/L2/L4 paths). Persists an
+ * Serve a canned refusal message (the L1/L2/L4 refusal paths). Persists an
  * assistant ChatMessage with the refusal copy, stamps `meta.outcome` so the
- * downstream TTS layer (Phase 6) can choose a distinctive voice, and emits one
+ * downstream TTS layer can choose a distinctive voice, and emits one
  * IT-help telemetry row with the refusal detail in `payload_json`.
  */
 internal suspend fun ChatViewModel.serveRefusal(
@@ -137,17 +137,29 @@ internal suspend fun ChatViewModel.serveGroundingFallbackOrRefuse(
         clinicalTerms = clinicalTerms,
         minScore = config.chatTuning.minFallbackServeScore,
     )
-    if (fallbackHit == null) {
+    // The model's own answer has already been rejected, so the card is all that is left
+    // to serve — and nothing upstream has checked that the card is about the QUESTION.
+    // Groundedness and the L4 validator both compare the answer to the references, so a
+    // faithful summary of the wrong card passes them; retrieval score cannot help either
+    // (measured: wrong cards score higher than right ones). Require the card to share at
+    // least one topical word with the question — anything beyond "both mention pregnant
+    // women" — and refuse honestly when it does not.
+    val topicallyRelated = fallbackHit != null &&
+        OffTopicGuard.sharesTopicalTerm(queryForSafety, fallbackHit)
+    if (fallbackHit == null || !topicallyRelated) {
+        val why = if (fallbackHit == null) "weak/irrelevant grounding" else "top card is topically unrelated"
         Log.i(
             ChatViewModel.TRACE_TAG,
-            "fallback-refusal: refusing instead of serving weak/irrelevant grounding " +
-                "topScore=${grounding.firstOrNull()?.score} reason=${validatorReason ?: "∅"}",
+            "fallback-refusal: refusing instead of serving — $why " +
+                "topScore=${grounding.firstOrNull()?.score} " +
+                "card=${fallbackHit?.chunkId ?: "∅"} reason=${validatorReason ?: "∅"}",
         )
         serveRefusal(
             ChatRefusal.NoGround,
             groundedFrom = grounding.map { it.chunkId },
             topScore = grounding.firstOrNull()?.score,
-            validatorReason = validatorReason,
+            validatorReason = if (fallbackHit == null) validatorReason
+            else listOfNotNull(validatorReason, "topical_miss").joinToString(";"),
         )
         return
     }

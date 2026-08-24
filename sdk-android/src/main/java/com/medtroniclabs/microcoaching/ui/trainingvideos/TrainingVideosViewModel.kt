@@ -11,6 +11,7 @@ import com.medtroniclabs.microcoaching.data.asset.InsufficientStorageException
 import com.medtroniclabs.microcoaching.data.db.dao.AssignedVideoDao
 import com.medtroniclabs.microcoaching.data.db.entity.AssignedVideoEntity
 import com.medtroniclabs.microcoaching.network.MediaUrlResolver
+import com.medtroniclabs.microcoaching.network.SourceDocumentUrlStore
 import com.medtroniclabs.microcoaching.sync.SyncDomain
 import com.medtroniclabs.microcoaching.ui.common.SectionState
 import com.medtroniclabs.microcoaching.ui.common.sectionStateFor
@@ -39,6 +40,19 @@ class TrainingVideosViewModel(
 
     private val sdk = MicroCoachingSDK.getInstance()
 
+    /**
+     * Measure any assigned video whose length the backend hasn't supplied.
+     *
+     * Driven by the list contents rather than by rows appearing: every row composes
+     * at once inside the tab's scroll container, so keying off appearance made this
+     * look scroll-dependent while really just racing the sync that supplies the
+     * media URL. Re-running whenever the list changes also picks up videos whose URL
+     * only arrived on a later sync. A no-op once every length is known.
+     */
+    fun onVideosShown() {
+        viewModelScope.launch { VideoDurationProbe.probeMissing(chwId) }
+    }
+
     /** Video ids currently downloading → percent (null while size unknown). */
     private val downloading = MutableStateFlow<Map<String, Int?>>(emptyMap())
 
@@ -56,12 +70,14 @@ class TrainingVideosViewModel(
             downloading,
             downloadedIds,
             sdk.syncStatus.outcomeFor(SyncDomain.ASSIGNED_VIDEOS),
-            sdk.networkAvailable,
-        ) { entities, downloadingMap, downloaded, outcome, online ->
+            // network + in-flight folded into one flow (combine's typed arity caps at 5).
+            combine(sdk.networkAvailable, sdk.syncStatus.isSyncing) { online, syncing -> online to syncing },
+        ) { entities, downloadingMap, downloaded, outcome, (online, syncing) ->
             sectionStateFor(
                 rows = entities.map { it.toUiModel(downloadingMap, downloaded) },
                 outcome = outcome,
                 offline = !online,
+                syncing = syncing,
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SectionState.Loading)
 
@@ -118,6 +134,7 @@ class TrainingVideosViewModel(
                                 val pct = if (total > 0L) ((downloaded * 100L) / total).toInt().coerceIn(0, 100) else null
                                 downloading.update { it + (id to pct) }
                             },
+                            renewUrl = { SourceDocumentUrlStore.renew(id) },
                         ) { MediaUrlResolver.resolveSourceDocument(id) }
                     }
                 } catch (e: InsufficientStorageException) {
@@ -147,6 +164,7 @@ class TrainingVideosViewModel(
         return TrainingVideo(
             id = videoId,
             title = title.orEmpty(),
+            description = description,
             category = null,
             durationMs = durationMs,
             thumbnailUrl = thumbnailUrl,

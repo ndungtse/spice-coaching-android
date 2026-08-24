@@ -10,8 +10,8 @@ import com.medtroniclabs.microcoaching.MicroCoachingConfig
  * [com.medtroniclabs.microcoaching.ui.chat.CoachingChatFragment] plus the
  * [com.medtroniclabs.microcoaching.ui.chat.CoachingChatBottomSheet] — each with
  * its own `ChatViewModel`. With per-ViewModel routers that meant two engines
- * loading the same `.task`, which doubles model memory and crashes MediaPipe's
- * native engine. Ref-counting keeps exactly one router (and one loaded model)
+ * loading the same model file, which doubles model memory and crashes the native
+ * engine. Ref-counting keeps exactly one router (and one loaded model)
  * alive while ANY chat surface is open, and unloads it when the last one closes.
  *
  * The bottom sheet's tag-based dedup still prevents sheet-vs-sheet duplicates;
@@ -50,6 +50,30 @@ internal object SharedInferenceRouter {
         refCount++
         Log.d(TAG, "acquire — refCount=$refCount")
         return r
+    }
+
+    /**
+     * Unloads the engine immediately, whatever the reference count, while keeping the router
+     * itself alive for its holders.
+     *
+     * [release] cannot do this job. It only unloads on the last reference, and the paths that
+     * need the memory back — opting out of the model, deleting its file — run from inside an
+     * open chat surface that is itself holding a reference. Going through [release] there
+     * would decrement a count it never acquired and free nothing.
+     *
+     * Holders keep a valid router and may reload through
+     * [InferenceRouter.initializeIfModelPresent]; nothing here prevents that, so the caller is
+     * responsible for the state that stops a reload — for the opt-out path, the stored consent
+     * that [com.medtroniclabs.microcoaching.domain.decision.resolveAnswerMode] reads.
+     *
+     * Deleting the model file requires this first: the engine holds the file mapped, and
+     * unlinking it underneath a live mapping is a native crash.
+     */
+    @Synchronized
+    fun forceUnload() {
+        val current = router ?: return
+        Log.i(TAG, "forceUnload — unloading engine with refCount=$refCount holders still attached")
+        current.release()
     }
 
     /** Drops one reference; unloads the engine when the last holder releases. */

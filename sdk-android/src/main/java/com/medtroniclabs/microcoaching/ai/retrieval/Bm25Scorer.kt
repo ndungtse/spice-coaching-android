@@ -8,8 +8,9 @@ import kotlin.math.ln
  * Builds an inverted index once at construction, then exposes O(|query|) scoring
  * per document and an O(N log K) top-K helper. Pure-Kotlin, no Lucene dependency.
  *
- * Tuning knobs match the chat_plan.md B2 spec: `k1 = 1.5`, `b = 0.75`. These are
- * Okapi defaults and sane for the ≤ 200-chunk pilot corpus.
+ * `k1 = 1.5` and `b = 0.75` are the Okapi defaults, and sane for a corpus of a few
+ * hundred chunks. Note `b` controls length normalisation: a shorter field scores higher
+ * for the same term frequency, which systematically favours brief cards.
  */
 class Bm25Scorer(
     documents: List<List<String>>,
@@ -17,10 +18,9 @@ class Bm25Scorer(
     private val b: Float = 0.75f,
 ) {
 
-    // Only the count and per-doc lengths are needed after construction — the
-    // raw token lists otherwise duplicate every term already stored as
-    // inverted-index keys, roughly doubling each scorer's retained heap
-    // (×8 scorers per ModuleKnowledgeIndex: 4 fields × 2 languages).
+    // Only the count and per-doc lengths are kept: the raw token lists would duplicate
+    // every term already held as an inverted-index key, and ModuleKnowledgeIndex builds
+    // one scorer per field per language.
     private val docCount: Int = documents.size
     private val docLengths: IntArray = IntArray(documents.size) { documents[it].size }
     private val avgDocLen: Float = if (documents.isEmpty()) 0f else docLengths.average().toFloat()
@@ -96,6 +96,9 @@ class Bm25Scorer(
      * down-weighted).
      */
     fun documentFrequency(term: String): Int = invertedIndex[term]?.size ?: 0
+
+    /** Indexed token count of [docId] — BM25 divides by this, so shorter fields score higher. */
+    fun documentLength(docId: Int): Int = docLengths[docId]
 
     /** Top-K most relevant documents, sorted by descending score. */
     fun topK(queryTokens: List<String>, k: Int): List<ScoredDoc> =

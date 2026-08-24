@@ -103,7 +103,17 @@ fun TrainingVideoRow(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
-                val meta = video.rowMetaLabel()
+                video.description?.takeIf { it.isNotBlank() }?.let { description ->
+                    Text(
+                        text = description,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontSize = 12.sp,
+                        color = Color(0xFF6B7280),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                val meta = video.metaLabel()
                 if (meta.isNotBlank()) {
                     Text(
                         text = meta,
@@ -118,14 +128,11 @@ fun TrainingVideoRow(
 }
 
 /**
- * Row meta: the category when present, else empty — the duration lives on the
- * thumbnail's [DurationChip], so the meta line never duplicates it.
- */
-private fun TrainingVideo.rowMetaLabel(): String = category?.takeIf { it.isNotBlank() }.orEmpty()
-
-/**
- * Full "category · N min" / "N min" meta used by the featured hero card, which has
- * no duration pill of its own.
+ * Meta line under the title: "category · N min", or whichever half is known.
+ *
+ * Empty when neither is — a backend-assigned video has no category, and its
+ * duration is absent until the media has been probed, so the line disappears
+ * rather than rendering a stray separator.
  */
 @Composable
 internal fun TrainingVideo.metaLabel(): String {

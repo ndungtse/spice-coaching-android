@@ -212,7 +212,6 @@ internal class OnDeviceMorningGenerator(
         // one canonical module per family, so the family id is the stable key (the
         // exact module version may differ). When offline the backend rows are stale or
         // absent, so backend=0 here just means "no live fetch this run", not a mismatch.
-        // (backendCards / backendFamilies were read above, before selection.)
         val onDeviceFamilies = cards.map { it.moduleFamilyId }.toSet()
         val onlyBackend = backendFamilies - onDeviceFamilies
         val onlyOnDevice = onDeviceFamilies - backendFamilies
@@ -230,9 +229,8 @@ internal class OnDeviceMorningGenerator(
         // Drop any family the backend already surfaced (no duplicates / PK churn),
         // then replace ONLY the on-device rows (`on_device = 1`). The backend's
         // `replaceBackend` and this `replaceOnDevice` each own their own rows, so the
-        // two writers no longer wipe each other (the cause of the card flapping
-        // between a backend pick and the referral card). replaceOnDevice with an
-        // empty list still clears stale on-device rows (e.g. a resolved gap).
+        // two writers never wipe each other. replaceOnDevice with an empty list still
+        // clears stale on-device rows (e.g. a resolved gap).
         val onDeviceCards = cards.filterNot { it.moduleFamilyId in backendFamilies }
         database.morningCardCacheDao().replaceOnDevice(onDeviceCards)
         return onDeviceCards.size

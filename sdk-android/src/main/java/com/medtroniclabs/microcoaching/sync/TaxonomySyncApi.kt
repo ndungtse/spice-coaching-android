@@ -39,7 +39,6 @@ private const val TAG = "SyncApi"
  */
 suspend fun SyncApi.pullGaps(sinceWatermark: String?, chwId: String? = null): GapsResult = safeInbound(
     label = "Gaps",
-    failureStage = "inbound_gaps",
     call = {
         // Watermark survives Room wipes (lives in SharedPreferences), so a stale
         // watermark + freshly-wiped Room returns an empty delta and progress stays
@@ -111,7 +110,6 @@ suspend fun SyncApi.pullGaps(sinceWatermark: String?, chwId: String? = null): Ga
  */
 suspend fun SyncApi.pullTriggers(sinceWatermark: String?): TriggersResult = safeInbound(
     label = "Triggers",
-    failureStage = "inbound_triggers",
     call = {
         val localCount = db.triggerDefinitionDao().countActive()
         val effectiveSince = when {
@@ -176,7 +174,6 @@ suspend fun SyncApi.pullTriggers(sinceWatermark: String?): TriggersResult = safe
  */
 suspend fun SyncApi.pullConfig(): ConfigResult = safeInbound(
     label = "Config",
-    failureStage = "inbound_config",
     call = { apiService.pullConfig() },
     onSuccess = { bundle ->
         val now = System.currentTimeMillis()
@@ -206,7 +203,6 @@ suspend fun SyncApi.pullConfig(): ConfigResult = safeInbound(
  */
 suspend fun SyncApi.pullChatFaqs(sinceWatermark: String?, tenantId: String? = null): ChatFaqsResult = safeInbound(
     label = "Chat FAQs",
-    failureStage = "inbound_chat_faqs",
     call = {
         val cacheEmpty = db.chatFaqDao().count() == 0
         val effectiveSince = when {

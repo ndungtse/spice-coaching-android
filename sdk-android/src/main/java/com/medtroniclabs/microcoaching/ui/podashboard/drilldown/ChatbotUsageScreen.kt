@@ -24,11 +24,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.ui.common.AvatarCircle
 import com.medtroniclabs.microcoaching.ui.common.CenterProgress
 import com.medtroniclabs.microcoaching.ui.common.SdkScreenHeader
+import com.medtroniclabs.microcoaching.ui.podashboard.DateRange
 import com.medtroniclabs.microcoaching.ui.podashboard.PODashboardUiState
 import com.medtroniclabs.microcoaching.ui.podashboard.PODashboardViewModel
 import com.medtroniclabs.microcoaching.ui.podashboard.SkSummary
@@ -41,10 +43,13 @@ import com.medtroniclabs.microcoaching.ui.theme.SurfaceMuted
 
 private val DividerColor = Color(0xFFEFEFF3)
 
-/** "Chatbot Usage" — SKs grouped into Using / Not using, with query counts. */
+/**
+ * "Chatbot Usage" — SKs grouped into Using / Not using, with query counts, over the
+ * [range] the KPI card was counted for (see [ActiveSksScreen] for why it is passed in).
+ */
 @Composable
-fun ChatbotUsageScreen(chwId: String, onBack: () -> Unit, onHome: () -> Unit) {
-    val vm: PODashboardViewModel = viewModel(factory = PODashboardViewModel.factory(chwId))
+fun ChatbotUsageScreen(chwId: String, range: DateRange, onBack: () -> Unit, onHome: () -> Unit) {
+    val vm: PODashboardViewModel = viewModel(factory = PODashboardViewModel.factory(chwId, range))
     val state by vm.uiState.collectAsState()
     val networkAvailable by vm.networkAvailable.collectAsState()
 
@@ -53,7 +58,7 @@ fun ChatbotUsageScreen(chwId: String, onBack: () -> Unit, onHome: () -> Unit) {
         when (val s = state) {
             is PODashboardUiState.Loading -> CenterProgress()
             is PODashboardUiState.Error ->
-                DashboardErrorState(offline = !networkAvailable, message = s.message, onRetry = vm::retry)
+                DashboardErrorState(offline = !networkAvailable, message = s.message, onRetry = vm::retry, isAuth = s.isAuth)
             is PODashboardUiState.Ready -> {
                 val sks = s.dashboard.sks
                 Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
@@ -87,7 +92,14 @@ private fun UsageGroup(@StringRes titleRes: Int, sks: List<SkSummary>, usesChatb
             ) {
                 AvatarCircle(sk.name, size = 44.dp, containerColor = bg, contentColor = fg)
                 Spacer(Modifier.width(12.dp))
-                Text(sk.name, modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    text = sk.name,
+                    modifier = Modifier.weight(1f),
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
                 Text(
                     text = stringResource(R.string.po_queries_count, sk.queries),
                     color = fg,

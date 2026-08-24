@@ -240,16 +240,13 @@ private suspend fun SyncApi.fetchAndApplyModules(effectiveSince: String): Module
             )
         } else {
             val errorMsg = "HTTP ${response.code()}"
-            recordInboundFailure("inbound_modules", errorMsg)
             Log.w(TAG, "Modules sync server error: $errorMsg")
             ModulesResult(error = errorMsg, errorKind = httpKindFor(response.code()))
         }
     } catch (e: IOException) {
-        recordInboundFailure("inbound_modules", e.javaClass.simpleName, offline = true)
         Log.w(TAG, "Modules sync network error: ${e.message}")
         ModulesResult(error = e.message ?: "network error", errorKind = SyncErrorKind.NETWORK)
     } catch (e: Exception) {
-        recordInboundFailure("inbound_modules", e.javaClass.simpleName)
         Log.w(TAG, "Modules sync unexpected error: ${e.message}", e)
         ModulesResult(error = e.message ?: "unexpected error", errorKind = SyncErrorKind.UNEXPECTED)
     }

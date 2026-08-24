@@ -43,84 +43,39 @@ import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-// Backend RAG answer path for ChatViewModel — extracted verbatim as an extension
-// (behaviour-preserving). Same package, so ChatViewModel call sites are unchanged.
+// Backend RAG answer path for ChatViewModel, kept out of the view model as an
+// extension. Same package, so ChatViewModel call sites need no import.
 /**
  * Backend RAG path — used when the device is online (any device class).
  * Sends [trimmed] to `POST /coaching/rag-query`, maps the response to a
  * [ChatMessage], persists it, and updates [_uiState]. No local scope-gate
  * or LLM; the backend handles retrieval and generation.
  *
- * **Language.** The backend only accepts `response_language = "bn"`. In an
- * English app the question is translated EN→BN before sending and the answer
- * BN→EN before display (on-device ML Kit pack); in Bangla it passes through.
- * If the pack is unavailable in English mode we show
- * [R.string.chat_error_language_pack] and return `true` (handled — no BM25
- * fallback, since the cause is the pack, not connectivity).
+ * **Language.** The backend answers in whichever `response_language` it is asked
+ * for, so the question goes out as typed and the answer comes back ready to
+ * display. Nothing is translated on this path — the on-device EN↔BN pack is only
+ * needed by the offline pipeline now.
  *
  * @return `true` when the turn was **handled** here — a grounded answer was
- *   served, the backend returned a 2xx with a deliberately blank answer (a
- *   content decision: shown as [R.string.chat_error_no_response_available]),
- *   or the EN↔BN pack was unavailable (shown as
- *   [R.string.chat_error_language_pack]). Returns `false` on an
- *   **infrastructure** failure (network error / thrown exception, non-2xx,
- *   empty body) **without** setting an error, so the caller can fall back to
- *   the on-device pipeline — the device can still answer from the offline
- *   BM25 index. Connectivity is never the excuse.
+ *   served, or the backend returned a 2xx with a deliberately blank answer (a
+ *   content decision: shown as [R.string.chat_error_no_response_available]).
+ *   Returns `false` on an **infrastructure** failure (network error / thrown
+ *   exception, non-2xx, empty body) **without** setting an error, so the caller
+ *   can fall back to the on-device pipeline — the device can still answer from
+ *   the offline BM25 index. Connectivity is never the excuse.
  */
 internal suspend fun ChatViewModel.handleBackendRagMessage(trimmed: String): Boolean {
-    val isBangla = sdk.language == Language.BANGLA
-
-    // The backend only accepts response_language = "bn". When the app runs in
-    // English we translate the question EN→BN before sending and translate the
-    // answer BN→EN before display, via the on-device ML Kit pack. In Bangla the
-    // text passes through untouched.
-    val questionForBackend: String = if (isBangla) {
-        trimmed
-    } else {
-        // Ensure the EN↔BN pack is present (downloads if missing). Without it we
-        // can't speak to the bn-only backend, so surface an honest language-pack
-        // error rather than sending English (which the backend rejects). This is
-        // a distinct, accurate cause — not the generic "no response" message.
-        sdk.translator.ensureModelReady()
-        val inResult = sdk.translator.translateEnToBnResult(trimmed)
-        if (!inResult.translated) {
-            Log.w(ChatViewModel.TAG, "backend-rag: EN→BN pack unavailable — cannot query bn-only backend")
-            Log.i(ChatViewModel.TRACE_TAG, "backend-rag ← LANG-PACK FAIL (EN→BN) state=${sdk.translationModelState.value}")
-            eventRecorder.recordDigitalHelpUsed(
-                inferenceMode = "online",
-                validatorStatus = "fail",
-                fallbackUsed = false,
-                networkState = currentNetworkState(),
-                payloadJson = buildRefusalPayload(
-                    outcome = "language_pack_unavailable",
-                    topScore = null,
-                    chunkIds = emptyList(),
-                    validatorReason = "en_to_bn_passthrough",
-                    translationPassthrough = true,
-                ),
-            )
-            _uiState.update {
-                (it as? ChatUiState.Ready)?.copy(
-                    isGenerating = false,
-                    error = localizedString(R.string.chat_error_language_pack),
-                ) ?: it
-            }
-            return true
-        }
-        inResult.text
-    }
+    val responseLanguage = if (sdk.language == Language.BANGLA) "bn" else "en"
 
     Log.i(
         ChatViewModel.TRACE_TAG,
-        "backend-rag → request lang=bn appLang=${if (isBangla) "bn" else "en"} " +
-            "q=\"${tracePreview(questionForBackend)}\"",
+        "backend-rag → request lang=$responseLanguage q=\"${tracePreview(trimmed)}\"",
     )
     try {
         val response = sdk.apiService.ragQuery(
             RagQueryRequest(
-                question = questionForBackend,
-                responseLanguage = "bn",
+                question = trimmed,
+                responseLanguage = responseLanguage,
             ),
         )
         val body = response.body()
@@ -169,38 +124,15 @@ internal suspend fun ChatViewModel.handleBackendRagMessage(trimmed: String): Boo
             )
         }
 
-        // English app: translate the bn answer back to English for display.
-        // If translation fails (bn→en pack unavailable), we must NOT show raw
-        // Bangla to an English user — surface the localized English "try again"
-        // error instead and stop here (final; no on-device fallback, which could
-        // also pass through Bangla). This overrides the older "an answer beats
-        // none" passthrough for the English path.
-        val answerForUser = if (isBangla) {
-            body.answer
-        } else {
-            val outResult = sdk.translator.translateBnToEnResult(body.answer)
-            if (!outResult.translated) {
-                Log.d(
-                    ChatViewModel.TRACE_TAG,
-                    "backend-rag: BN→EN answer translation failed — showing EN error, not Bangla " +
-                        "(answerLen=${body.answer.length})",
-                )
-                _uiState.update {
-                    (it as? ChatUiState.Ready)?.copy(
-                        isGenerating = false,
-                        error = localizedString(R.string.chat_error_no_response_available),
-                    ) ?: it
-                }
-                return true
-            }
-            outResult.text
-        }
-
+        // The URL and path ride along so the citation can open a document that is in
+        // no synced catalogue, which the local URL store has no way to resolve.
         val sourceDocs = body.sourceDocuments.map { doc ->
             SourceDocumentRef(
                 id = doc.sourceDocumentId,
                 title = doc.title,
                 originalFilename = doc.originalFilename,
+                presignedUrl = doc.presignedUrl,
+                storagePath = doc.storagePath,
             )
         }
 
@@ -217,13 +149,12 @@ internal suspend fun ChatViewModel.handleBackendRagMessage(trimmed: String): Boo
         }
 
         // The exact RAG response object, serialized as a JSON string for
-        // payload_json.response (the `answer` inside stays the backend's bn text —
-        // this captures the response as received from the API).
+        // payload_json.response — the response as received from the API.
         val responseJson = serializeChatResponse(body)
         val assistantMsg = ChatMessage(
             sessionId = session.sessionId,
             role = ChatRole.ASSISTANT,
-            text = answerForUser,
+            text = body.answer,
             source = MessageSource.RAG_API,
             meta = ChatMessageMeta(
                 outcome = "served_grounded",
@@ -250,26 +181,14 @@ internal suspend fun ChatViewModel.handleBackendRagMessage(trimmed: String): Boo
         }
 
         // Refresh the suggestion chips with the backend's contextual follow-ups.
-        // The backend always answers in `response_language = "bn"`, so the chips
-        // arrive in Bangla. For the English app we translate each to English and
-        // DROP any that fail — an English user must never see Bengali chip text.
-        // When the backend returns no usable follow-ups (none sent, or all dropped
-        // because translation was unavailable), fall back to the curated hardcoded
-        // suggestions (EN+BN) rather than leaving stale chips on screen.
+        // They arrive in the language we asked for, so both fields carry the same
+        // text: `ChatViewModel.onSuggestionTap` reads whichever matches the app
+        // language and falls back to the other, and either way that is the text the
+        // backend gave us. When no usable follow-ups come back, fall back to the
+        // curated suggestions rather than leaving stale chips on screen.
         val followUps = body.suggestedQuestions
             .mapNotNull { it.trim().takeIf(String::isNotBlank) }
-            .mapNotNull { bn ->
-                if (isBangla) {
-                    SuggestedQuestion(question = bn, banglaQuestion = bn)
-                } else {
-                    val out = runCatching { sdk.translator.translateBnToEnResult(bn) }.getOrNull()
-                    if (out?.translated == true && out.text.isNotBlank()) {
-                        SuggestedQuestion(question = out.text, banglaQuestion = bn)
-                    } else {
-                        null // never surface untranslated Bangla to an English user
-                    }
-                }
-            }
+            .map { SuggestedQuestion(question = it, banglaQuestion = it) }
         val nextSuggestions = followUps.ifEmpty { loadSuggestions() }
         _uiState.update {
             (it as? ChatUiState.Ready)?.copy(suggestedQuestions = nextSuggestions) ?: it
@@ -283,19 +202,16 @@ internal suspend fun ChatViewModel.handleBackendRagMessage(trimmed: String): Boo
             // The module that formed the response is
             // the top cited module version straight from the RAG response.
             moduleId = body.citedModuleIds.firstOrNull(),
-            // Reaching here means the answer was served in the user's language:
-            // bn for the Bangla app, successfully translated for the English app
-            // (a failed BN→EN translation returns early above with an EN error,
-            // never a Bangla passthrough). So there is no passthrough to record.
-            // Events Modelling 1.4/1.5: payload_json.response is the full RAG
-            // response object (JSON string), emitted for both languages.
-            // translation_passthrough stays English-only.
+            // No translation_passthrough on this path: the backend answers in the
+            // requested language, so nothing is translated and there is no pivot to
+            // report. The field stays meaningful for the on-device pipeline, which
+            // still uses the EN↔BN pack. Events Modelling 1.4/1.5:
+            // payload_json.response is the full RAG response object (JSON string).
             payloadJson = buildRefusalPayload(
                 outcome = "served_grounded",
                 topScore = null,
                 chunkIds = body.citedModuleIds,
                 validatorReason = null,
-                translationPassthrough = if (isBangla) null else false,
                 response = responseJson,
             ),
         )

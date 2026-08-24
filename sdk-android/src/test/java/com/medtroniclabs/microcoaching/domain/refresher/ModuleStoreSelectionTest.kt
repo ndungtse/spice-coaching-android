@@ -34,6 +34,8 @@ class ModuleStoreSelectionTest {
         source: String? = "gap",
         status: String = "assigned",
         moduleType: String = "refresher",
+        // Mirrors LearnModuleMapper: a selector card carries a kind unless it is finished.
+        refresherKind: RefresherKind? = if (fromMorningCard) RefresherKind.MICROCOACHING else null,
     ): LearnModule = LearnModule(
         moduleFamilyId = family,
         title = "title-$family",
@@ -47,6 +49,7 @@ class ModuleStoreSelectionTest {
         // model, where inlineQuestions is null) — mirror that here.
         questionCount = if (hasQuiz) quiz.size else 0,
         fromMorningCard = fromMorningCard,
+        refresherKind = refresherKind,
     )
 
     // ── selectFeatured ─────────────────────────────────────────────────────────

@@ -9,7 +9,7 @@ package com.medtroniclabs.microcoaching.ui.podashboard
  */
 interface PODashboardDataSource {
     suspend fun loadDashboard(chwId: String, range: DateRange): PoDashboard
-    suspend fun loadSkDetail(skId: String): SkDetail?
+    suspend fun loadSkDetail(skId: String, range: DateRange): SkDetail?
 
     /** Detail for a tapped "Top Searched Existing" module. */
     suspend fun loadSearchedModuleDetail(moduleId: String, range: DateRange): SearchedModuleDetail?
@@ -132,10 +132,12 @@ class StubPODashboardDataSource : PODashboardDataSource {
         range: DateRange,
     ): DocumentUsageDetail? {
         val row = documentUsageRows.firstOrNull { it.documentId == documentId } ?: return null
+        // A repeat opener first, so the Readers tab shows a count above 1.
         val events = listOf(
-            DocumentViewEventItem("Amina Begum", "SK", "Gazipur Sadar", "Today"),
-            DocumentViewEventItem("Nasrin Akter", "SK", "Gazipur Sadar", "Yesterday"),
-            DocumentViewEventItem("Sumaiya Khan", "SK", "Kaliakair", "3 days ago"),
+            DocumentViewEventItem(1, "Amina Begum", "SK", "Gazipur Sadar", "Today · 09:12", 3L),
+            DocumentViewEventItem(1, "Amina Begum", "SK", "Gazipur Sadar", "Yesterday · 16:40", 2L),
+            DocumentViewEventItem(2, "Nasrin Akter", "SK", "Gazipur Sadar", "Yesterday · 08:05", 1L),
+            DocumentViewEventItem(3, "Sumaiya Khan", "SK", "Kaliakair", "12 Aug · 14:30", 0L),
         )
         return DocumentUsageDetail(
             documentId = row.documentId,
@@ -144,10 +146,11 @@ class StubPODashboardDataSource : PODashboardDataSource {
             uniqueUsers = row.uniqueUsers,
             events = events,
             totalEvents = events.size,
+            readers = events.toDocumentReaders(),
         )
     }
 
-    override suspend fun loadSkDetail(skId: String): SkDetail? {
+    override suspend fun loadSkDetail(skId: String, range: DateRange): SkDetail? {
         val row = roster.firstOrNull { it.id == skId } ?: return null
         return SkDetail(
             id = row.id,

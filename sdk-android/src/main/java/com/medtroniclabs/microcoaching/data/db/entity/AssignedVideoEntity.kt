@@ -67,6 +67,10 @@ data class AssignedVideoEntity(
     @ColumnInfo(name = "assigned_at")
     val assignedAt: String? = null,
 
+    /** Bucket-prefixed object path; lets an expired [presignedUrl] be re-signed. */
+    @ColumnInfo(name = "storage_path")
+    val storagePath: String? = null,
+
     @ColumnInfo(name = "presigned_url")
     val presignedUrl: String? = null,
 

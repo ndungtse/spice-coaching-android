@@ -12,17 +12,21 @@ import kotlinx.coroutines.launch
 /** UI state for the document-usage drill-down. */
 sealed class DocumentUsageDetailUiState {
     object Loading : DocumentUsageDetailUiState()
-    data class Error(val message: String) : DocumentUsageDetailUiState()
+    data class Error(val message: String, val isAuth: Boolean = false) : DocumentUsageDetailUiState()
     data class Ready(val detail: DocumentUsageDetail) : DocumentUsageDetailUiState()
 }
 
 /**
  * Backs the document-usage drill-down for one document, keyed by [documentId].
- * Loads over the same default window as the dashboard tab.
+ *
+ * [range] is the window the PO had selected on the tab, passed down through the route
+ * so this screen's figures cover the same period as the row that was tapped. Falls back
+ * to [defaultRange] only when a caller has none.
  */
 class DocumentUsageDetailViewModel(
     private val documentId: String,
     private val source: PODashboardDataSource,
+    private val range: DateRange = defaultRange(),
     val networkAvailable: StateFlow<Boolean> = MicroCoachingSDK.getInstance().networkAvailable,
 ) : ViewModel() {
 
@@ -37,13 +41,13 @@ class DocumentUsageDetailViewModel(
     private fun load() {
         _uiState.value = DocumentUsageDetailUiState.Loading
         viewModelScope.launch {
-            _uiState.value = runCatching { source.loadDocumentUsageDetail(documentId, defaultRange()) }
+            _uiState.value = runCatching { source.loadDocumentUsageDetail(documentId, range) }
                 .fold(
                     onSuccess = { detail ->
                         if (detail != null) DocumentUsageDetailUiState.Ready(detail)
                         else DocumentUsageDetailUiState.Error("Document not found")
                     },
-                    onFailure = { DocumentUsageDetailUiState.Error(it.message ?: "Failed to load document") },
+                    onFailure = { DocumentUsageDetailUiState.Error(it.message ?: "Failed to load document", it.isDashboardAuthError()) },
                 )
         }
     }
@@ -51,11 +55,12 @@ class DocumentUsageDetailViewModel(
     companion object {
         fun factory(
             documentId: String,
+            range: DateRange = defaultRange(),
             source: PODashboardDataSource = ApiPODashboardDataSource(),
         ): ViewModelProvider.Factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                DocumentUsageDetailViewModel(documentId, source) as T
+                DocumentUsageDetailViewModel(documentId, source, range) as T
         }
     }
 }

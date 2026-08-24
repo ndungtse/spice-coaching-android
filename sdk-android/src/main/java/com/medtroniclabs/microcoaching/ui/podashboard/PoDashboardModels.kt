@@ -121,15 +121,38 @@ data class DocumentUsageRow(
     val lastViewedBy: String?,
 )
 
-/** One document-open event in the per-document drill-down. Display-only; see [DocumentUsageRow]. */
+/**
+ * One document-open event in the per-document drill-down. Display-only; see
+ * [DocumentUsageRow]. [viewedAtMillis] carries the raw instant so the reader
+ * pivot can pick a latest open without re-parsing [viewedAtLabel].
+ */
 data class DocumentViewEventItem(
+    val userId: Int,
     val userName: String,
     val userRole: String?,
     val geography: String?,
     val viewedAtLabel: String,
+    val viewedAtMillis: Long?,
 )
 
-/** Detail for a tapped document: its totals plus who opened it, when. */
+/**
+ * One reader of a document — their opens over the window collapsed into a single
+ * row. Derived from [DocumentViewEventItem]s, not fetched. Display-only.
+ */
+data class DocumentReaderItem(
+    val userId: Int,
+    val userName: String,
+    val userRole: String?,
+    val geography: String?,
+    val opens: Int,
+    val lastViewedAtLabel: String,
+)
+
+/**
+ * Detail for a tapped document: its totals, the distinct [readers], and the
+ * individual [events] behind them. [eventsTruncated] is true when the open list
+ * hit the fetch ceiling, so [readers] counts only the opens that were loaded.
+ */
 data class DocumentUsageDetail(
     val documentId: String,
     val title: String,
@@ -137,6 +160,8 @@ data class DocumentUsageDetail(
     val uniqueUsers: Int,
     val events: List<DocumentViewEventItem>,
     val totalEvents: Int,
+    val readers: List<DocumentReaderItem> = emptyList(),
+    val eventsTruncated: Boolean = false,
 )
 
 /** Everything the dashboard tab + its drill-downs render. */
@@ -164,6 +189,8 @@ data class PoDashboard(
      * sections (KPIs / SKs / completion / refreshers) instead of blanking.
      */
     val spineError: String? = null,
+    /** True when [spineError] is a 401 (expired session) → show "log out and back in", not retry. */
+    val spineErrorIsAuth: Boolean = false,
     /** Epoch millis the server data was fetched. Drives the "Last synced" subtitle (AC3). */
     val fetchedAt: Long = 0L,
     /** True when this snapshot was served from the offline cache rather than a fresh fetch. */

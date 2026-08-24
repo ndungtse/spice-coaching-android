@@ -13,7 +13,7 @@ class CachingPODashboardDataSourceTest {
 
     private val range = DateRange(0L, 0L)
 
-    private fun sample(spineError: String? = null) = PoDashboard(
+    private fun sample(spineError: String? = null, range: DateRange = this.range) = PoDashboard(
         range = range,
         metrics = emptyList(),
         sks = listOf(SkSummary("u1", "A", SkStatus.ACTIVE, 1, 2, "Today", 3, 1, 2)),
@@ -33,8 +33,14 @@ class CachingPODashboardDataSourceTest {
 
     /** Delegate whose loadDashboard behaviour is injected; other methods are unused here. */
     private class StubDelegate(val onLoad: () -> PoDashboard) : PODashboardDataSource {
+        /** Range the last `loadSkDetail` was called with, for the pass-through test. */
+        var skDetailRange: DateRange? = null
+
         override suspend fun loadDashboard(chwId: String, range: DateRange) = onLoad()
-        override suspend fun loadSkDetail(skId: String): SkDetail? = null
+        override suspend fun loadSkDetail(skId: String, range: DateRange): SkDetail? {
+            skDetailRange = range
+            return null
+        }
         override suspend fun loadSearchedModuleDetail(moduleId: String, range: DateRange) = error("n/a")
         override suspend fun loadSuggestionDetail(suggestionId: String) = error("n/a")
         override suspend fun loadAllSearchedExisting(range: DateRange) = emptyList<TopQuery>()
@@ -92,5 +98,39 @@ class CachingPODashboardDataSourceTest {
         val out = src.loadDashboard("chw1", range)
         assertEquals(false, out.fromCache)
         assertNull(dao.row)
+    }
+
+    @Test
+    fun `sk detail carries the caller's window to the delegate`() = runBlocking {
+        // Regression guard: this used to take no range and the API source computed
+        // its own last-7-days window, so the SK screen reported a different period
+        // than the one the PO had selected.
+        val delegate = StubDelegate { sample() }
+        val window = DateRange(1_755_388_800_000L, 1_755_388_800_000L)
+
+        CachingPODashboardDataSource(delegate, FakeDao(), isOnline = { true })
+            .loadSkDetail("sk1", window)
+
+        assertEquals(window, delegate.skDetailRange)
+    }
+
+    @Test
+    fun `cached snapshot reports the window it was fetched for, not the one requested`() = runBlocking {
+        // The cache holds a single row and serves it for any range. The snapshot must
+        // therefore carry its OWN window, which is what PODashboardViewModel reads to
+        // reconcile the picker so the figures and the label agree.
+        val dao = FakeDao()
+        val cachedWindow = DateRange(1_000L, 2_000L)
+        CachingPODashboardDataSource(StubDelegate { sample(range = cachedWindow) }, dao, isOnline = { true })
+            .loadDashboard("chw1", cachedWindow)
+
+        val requested = DateRange(9_000L, 9_999L)
+        val offline = CachingPODashboardDataSource(
+            StubDelegate { error("must not call api") }, dao, isOnline = { false },
+        )
+        val out = offline.loadDashboard("chw1", requested)
+
+        assertTrue(out.fromCache)
+        assertEquals(cachedWindow, out.range)
     }
 }

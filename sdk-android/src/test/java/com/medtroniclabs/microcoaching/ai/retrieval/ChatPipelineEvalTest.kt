@@ -3,6 +3,8 @@ package com.medtroniclabs.microcoaching.ai.retrieval
 import com.medtroniclabs.microcoaching.data.db.entity.moduleEntityFixture
 import com.medtroniclabs.microcoaching.ui.chat.SourceAttributionResolver
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -134,5 +136,38 @@ class ChatPipelineEvalTest {
         assertEquals("false serves", 0, falseServes)
         assertEquals("wrong module", 0, wrongModule)
         assertEquals("attribution misses", 0, attributionMisses)
+    }
+
+    /**
+     * The low-end path must refuse rather than serve a card that matches the question
+     * only on who it is about. Reproduces the August failure shape: a nutrition question
+     * against a corpus whose best lexical match is an anemia card.
+     */
+    @Test
+    fun `low-end topical gate refuses a demographically-matched card`() {
+        val anemiaOnly = listOf(
+            module(
+                familyId = "fam-anemia",
+                titleEn = "High risk pregnant woman",
+                cardsJson = """
+                    [
+                      {"title_bn":"উচ্চ ঝুঁকিপূর্ণ গর্ভবতী মহিলা: রক্তে হিমোগ্লোবিন",
+                       "body_bn":"রক্তে হিমোগ্লোবিন কম হলে রক্তস্বল্পতা বলা হয়। গর্ভবতী মহিলা তখন উচ্চ ঝুঁকিপূর্ণ হিসেবে বিবেচিত হয়।"}
+                    ]
+                """.trimIndent(),
+            ),
+        )
+        val index = ModuleKnowledgeIndex.build(anemiaOnly)
+        val hits = index.search(
+            "গর্ভবতী মহিলা প্রতিদিন কী খাবার খাবেন",
+            k = 3,
+            scoreThreshold = 0f,
+            language = ModuleKnowledgeIndex.Lang.BN,
+        )
+        assertTrue("expected the anemia card to be retrieved at all", hits.isNotEmpty())
+        assertFalse(
+            "a card sharing only গর্ভবতী/মহিলা must not be served",
+            OffTopicGuard.sharesTopicalTerm("গর্ভবতী মহিলা প্রতিদিন কী খাবার খাবেন", hits.first()),
+        )
     }
 }
