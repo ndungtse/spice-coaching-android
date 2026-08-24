@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.ui.common.AvatarCircle
 import com.medtroniclabs.microcoaching.ui.podashboard.SkSummary
+import com.medtroniclabs.microcoaching.ui.theme.trackFor
 
 /** My-SKs list row: status avatar · name · status chip · progress · x/N modules · chevron. */
 @Composable
@@ -56,7 +57,7 @@ fun SkListRow(sk: SkSummary, onClick: () -> Unit, modifier: Modifier = Modifier)
                     progress = { fraction },
                     modifier = Modifier.weight(1f).height(6.dp).clip(RoundedCornerShape(50)),
                     color = statusFg(sk.status),
-                    trackColor = ProgressTrack,
+                    trackColor = trackFor(statusFg(sk.status)),
                 )
                 Spacer(Modifier.width(8.dp))
                 Text(

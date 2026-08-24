@@ -44,7 +44,6 @@ import com.medtroniclabs.microcoaching.ui.podashboard.components.MutedText
 import com.medtroniclabs.microcoaching.ui.podashboard.components.poCard
 import com.medtroniclabs.microcoaching.ui.podashboard.components.FREE_TEXT_MAX_LINES
 
-private val DividerColor = Color(0xFFEFEFF3)
 
 /**
  * "Top Searched Suggested" drill-down: the reason the suggestion was
@@ -120,7 +119,7 @@ private fun EvidenceSection(
     val expanded = remember(keyPrefix) { mutableStateMapOf<Int, Boolean>() }
     Column(modifier = Modifier.fillMaxWidth().poCard()) {
         items.forEachIndexed { i, item ->
-            if (i > 0) HorizontalDivider(color = DividerColor)
+            if (i > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             EvidenceAccordionRow(item, expanded[i] == true) { expanded[i] = !(expanded[i] ?: false) }
         }
     }

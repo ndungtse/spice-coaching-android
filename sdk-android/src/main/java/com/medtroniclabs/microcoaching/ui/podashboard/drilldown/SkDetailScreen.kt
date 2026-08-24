@@ -211,7 +211,7 @@ private fun ModuleStatusRow(m: SkModuleStatus) {
         val (labelRes, fg, bg) = if (m.done) {
             Triple(R.string.po_sk_module_done, StatusGreen, StatusGreenBg)
         } else {
-            Triple(R.string.po_sk_module_pending, MutedText, Color(0xFFEFEFF3))
+            Triple(R.string.po_sk_module_pending, MutedText, MaterialTheme.colorScheme.outlineVariant)
         }
         Text(
             text = stringResource(labelRes),

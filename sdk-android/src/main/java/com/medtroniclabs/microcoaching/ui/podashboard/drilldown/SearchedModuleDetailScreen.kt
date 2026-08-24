@@ -47,7 +47,6 @@ import com.medtroniclabs.microcoaching.ui.podashboard.components.StatusGreen
 import com.medtroniclabs.microcoaching.ui.podashboard.components.poCard
 import com.medtroniclabs.microcoaching.ui.podashboard.components.FREE_TEXT_MAX_LINES
 
-private val DividerColor = Color(0xFFEFEFF3)
 
 /**
  * "Top Searched Existing" drill-down: served/requested split at the top,
@@ -108,7 +107,7 @@ private fun Content(detail: SearchedModuleDetail) {
         } else {
             Column(modifier = Modifier.fillMaxWidth().poCard()) {
                 detail.questions.forEachIndexed { i, q ->
-                    if (i > 0) HorizontalDivider(color = DividerColor)
+                    if (i > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     QueryAccordionRow(q, expanded[i] == true) { expanded[i] = !(expanded[i] ?: false) }
                 }
             }

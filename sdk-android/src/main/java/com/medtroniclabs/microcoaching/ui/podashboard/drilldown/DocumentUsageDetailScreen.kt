@@ -44,7 +44,6 @@ import com.medtroniclabs.microcoaching.ui.podashboard.components.MutedText
 import com.medtroniclabs.microcoaching.ui.podashboard.components.StatusGreen
 import com.medtroniclabs.microcoaching.ui.podashboard.components.poCard
 
-private val DividerColor = Color(0xFFEFEFF3)
 
 private const val TAB_READERS = 0
 private const val TAB_OPENS = 1
@@ -140,7 +139,7 @@ private fun <T> CardList(items: List<T>, empty: String, row: @Composable (T) -> 
     }
     Column(modifier = Modifier.fillMaxWidth().poCard()) {
         items.forEachIndexed { i, item ->
-            if (i > 0) HorizontalDivider(color = DividerColor)
+            if (i > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             row(item)
         }
     }

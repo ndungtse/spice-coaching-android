@@ -31,8 +31,8 @@ import androidx.compose.ui.unit.dp
 import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.ui.common.AvatarCircle
 import com.medtroniclabs.microcoaching.ui.podashboard.ModuleCompletion
+import com.medtroniclabs.microcoaching.ui.theme.trackFor
 
-private val DividerColor = Color(0xFFEFEFF3)
 
 /** Accordion row for one module's completion; expands to per-SK check rows. */
 @Composable
@@ -72,7 +72,7 @@ fun ModuleCompletionRow(
                 progress = { fraction },
                 modifier = Modifier.width(64.dp).height(6.dp).clip(RoundedCornerShape(50)),
                 color = barColor,
-                trackColor = ProgressTrack,
+                trackColor = trackFor(barColor),
             )
             Spacer(Modifier.width(8.dp))
             Icon(
@@ -83,7 +83,7 @@ fun ModuleCompletionRow(
         }
         if (expanded) {
             item.perSk.forEach { check ->
-                HorizontalDivider(color = DividerColor)
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,

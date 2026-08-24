@@ -40,7 +40,6 @@ import com.medtroniclabs.microcoaching.ui.podashboard.components.StatusRed
 import com.medtroniclabs.microcoaching.ui.podashboard.components.StatusRedBg
 import com.medtroniclabs.microcoaching.ui.podashboard.components.poCard
 
-private val DividerColor = Color(0xFFEFEFF3)
 
 /**
  * "Chatbot Usage" — SKs grouped into Using / Not using, with query counts, over the
@@ -84,7 +83,7 @@ private fun UsageGroup(@StringRes titleRes: Int, sks: List<SkSummary>, usesChatb
     )
     Column(modifier = Modifier.fillMaxWidth().poCard()) {
         sks.forEachIndexed { i, sk ->
-            if (i > 0) HorizontalDivider(color = DividerColor)
+            if (i > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
