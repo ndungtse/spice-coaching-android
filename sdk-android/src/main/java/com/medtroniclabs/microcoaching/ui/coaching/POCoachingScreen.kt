@@ -20,7 +20,7 @@ import com.medtroniclabs.microcoaching.ui.learn.KnowledgeDocument
 import com.medtroniclabs.microcoaching.ui.learn.LearnModule
 import com.medtroniclabs.microcoaching.ui.learn.LearnUiState
 import com.medtroniclabs.microcoaching.ui.podashboard.PODashboardTab
-import com.medtroniclabs.microcoaching.ui.theme.SurfaceMuted
+import androidx.compose.material3.MaterialTheme
 
 /** Tab indices for the PO home. */
 private const val TAB_COACHING = 0
@@ -61,7 +61,7 @@ fun POCoachingScreen(
     // Coaching tab (hidden on Dashboard).
     val syncedSubtitle = rememberLastSyncedSubtitle()
 
-    Column(modifier = Modifier.fillMaxSize().background(SurfaceMuted)) { // off-white so cards stand out
+    Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainerLow)) { // off-white so cards stand out
         SdkScreenHeader(
             title = stringResource(R.string.modules_screen_title),
             subtitle = syncedSubtitle.takeIf { selectedTab == TAB_COACHING },

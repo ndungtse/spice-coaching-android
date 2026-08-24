@@ -31,11 +31,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
-import com.medtroniclabs.microcoaching.ui.theme.SpiceGreen
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
+import com.medtroniclabs.microcoaching.ui.theme.CoachingTheme
 
 /**
  * Celebratory "+N XP" burst shown when the CHW answers a quiz question
@@ -112,7 +112,7 @@ fun XpRewardBurst(
             Spacer(Modifier.size(8.dp))
             Text(
                 text = "+$pointValue XP",
-                color = SpiceGreen, // forest green — the shared "correct/complete" accent
+                color = CoachingTheme.colors.success, // forest green — the shared "correct/complete" accent
                 fontWeight = FontWeight.Bold,
                 fontSize = 24.sp,
             )

@@ -10,9 +10,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlue
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueContainer
-import com.medtroniclabs.microcoaching.ui.theme.SpiceNavy
 
 /**
  * Visual configuration for [MarkdownText]. Pull defaults from [MarkdownDefaults.style]
@@ -53,13 +50,13 @@ object MarkdownDefaults {
         h4: TextStyle = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
         h5: TextStyle = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
         h6: TextStyle = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-        headingColor: Color = SpiceNavy,
-        linkColor: Color = SpiceBlue,
+        headingColor: Color = MaterialTheme.colorScheme.onSurface,
+        linkColor: Color = MaterialTheme.colorScheme.primary,
         codeStyle: TextStyle = textStyle.copy(fontFamily = FontFamily.Monospace),
         codeBackground: Color = Color(0xFFF2F4F7),
-        blockQuoteAccent: Color = SpiceBlue,
-        blockQuoteBackground: Color = SpiceBlueContainer.copy(alpha = 0.4f),
-        tableHeaderBackground: Color = SpiceBlueContainer,
+        blockQuoteAccent: Color = MaterialTheme.colorScheme.primary,
+        blockQuoteBackground: Color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
+        tableHeaderBackground: Color = MaterialTheme.colorScheme.primaryContainer,
         tableBorderColor: Color = Color(0xFFD0D5DD),
         tableCellPadding: PaddingValues = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
         listIndent: Dp = 20.dp,

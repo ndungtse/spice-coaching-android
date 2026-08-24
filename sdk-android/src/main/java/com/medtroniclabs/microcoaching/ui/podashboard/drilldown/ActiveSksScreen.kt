@@ -44,7 +44,6 @@ import com.medtroniclabs.microcoaching.ui.podashboard.components.MutedText
 import com.medtroniclabs.microcoaching.ui.podashboard.components.poCard
 import com.medtroniclabs.microcoaching.ui.podashboard.components.statusBg
 import com.medtroniclabs.microcoaching.ui.podashboard.components.statusFg
-import com.medtroniclabs.microcoaching.ui.theme.SurfaceMuted
 
 private val DividerColor = Color(0xFFEFEFF3)
 
@@ -70,7 +69,7 @@ fun ActiveSksScreen(
     val state by vm.uiState.collectAsState()
     val networkAvailable by vm.networkAvailable.collectAsState()
 
-    Column(modifier = Modifier.fillMaxSize().background(SurfaceMuted)) {
+    Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainerLow)) {
         SdkScreenHeader(title = stringResource(headerTitleRes(status)), onBack = onBack, onHome = onHome)
         when (val s = state) {
             is PODashboardUiState.Loading -> CenterProgress()

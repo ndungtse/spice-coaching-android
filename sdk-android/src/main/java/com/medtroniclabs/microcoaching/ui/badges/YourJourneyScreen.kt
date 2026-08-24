@@ -40,11 +40,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.ui.badges.components.BadgeArtwork
-import com.medtroniclabs.microcoaching.ui.theme.MutedText
-import com.medtroniclabs.microcoaching.ui.theme.SpiceGreen
-import com.medtroniclabs.microcoaching.ui.theme.SpiceNavy
-import com.medtroniclabs.microcoaching.ui.theme.SurfaceBackground
-import com.medtroniclabs.microcoaching.ui.theme.SurfaceMuted
+import com.medtroniclabs.microcoaching.ui.theme.CoachingTheme
 
 private val NodeSize = 76.dp
 private val RowHeight = 152.dp
@@ -81,7 +77,7 @@ fun YourJourneyScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier = modifier.fillMaxSize().background(SurfaceBackground)) {
+    Column(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
         JourneyHeader(
             title = stringResource(R.string.badges_journey_title),
             subtitle = stringResource(
@@ -112,7 +108,7 @@ private fun JourneyHeader(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(SurfaceMuted)
+            .background(MaterialTheme.colorScheme.surfaceContainerLow)
             .padding(end = 16.dp, top = 8.dp, bottom = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -120,19 +116,19 @@ private fun JourneyHeader(
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                 contentDescription = stringResource(R.string.common_back),
-                tint = SpiceNavy,
+                tint = MaterialTheme.colorScheme.onSurface,
             )
         }
         Column {
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                color = SpiceNavy,
+                color = MaterialTheme.colorScheme.onSurface,
             )
             Text(
                 text = subtitle,
                 style = MaterialTheme.typography.bodyMedium,
-                color = MutedText,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }
@@ -144,6 +140,8 @@ private fun JourneyHeader(
  */
 @Composable
 private fun JourneyPath(milestones: List<JourneyMilestone>) {
+    // Read outside Canvas: DrawScope is not a composable context.
+    val earnedColor = CoachingTheme.colors.success
     Box(modifier = Modifier.fillMaxWidth()) {
         Canvas(modifier = Modifier.matchParentSize()) {
             val rowPx = RowHeight.toPx()
@@ -170,7 +168,7 @@ private fun JourneyPath(milestones: List<JourneyMilestone>) {
                     lineTo(x1, y1)
                 }
                 val color = when (milestones[i + 1].state) {
-                    BadgeState.EARNED -> SpiceGreen
+                    BadgeState.EARNED -> earnedColor
                     BadgeState.LOCKED -> LockedPath
                 }
                 drawPath(
@@ -257,7 +255,7 @@ private fun NodeCell(milestone: JourneyMilestone, modifier: Modifier = Modifier)
                     .background(Color(0xFFE4E8EF), CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Filled.Lock, null, tint = MutedText, modifier = Modifier.size(13.dp))
+                Icon(Icons.Filled.Lock, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(13.dp))
             }
         }
     }
@@ -284,14 +282,14 @@ private fun MilestoneLabel(
         Text(
             text = milestone.code,
             style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
-            color = if (earned) SpiceGreen else MutedText,
+            color = if (earned) CoachingTheme.colors.success else MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = textAlign,
             modifier = Modifier.fillMaxWidth(),
         )
         Text(
             text = milestone.title,
             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-            color = if (earned) SpiceNavy else MutedText,
+            color = if (earned) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = textAlign,
             modifier = Modifier.fillMaxWidth(),
         )

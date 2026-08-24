@@ -35,8 +35,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.ui.common.SdkScreenHeader
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlue
-import com.medtroniclabs.microcoaching.ui.theme.SurfaceMuted
 
 /**
  * Training-requests hub — the CHW's submitted requests, plus the "New Request"
@@ -54,7 +52,7 @@ fun TrainingRequestsScreen(
     val vm: TrainingRequestsViewModel = viewModel(factory = TrainingRequestsViewModel.factory(chwId))
     val uiState by vm.uiState.collectAsState()
 
-    Column(modifier = Modifier.fillMaxSize().background(SurfaceMuted)) {
+    Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainerLow)) {
         SdkScreenHeader(
             title = stringResource(R.string.training_requests_title),
             onBack = onBack,
@@ -65,7 +63,7 @@ fun TrainingRequestsScreen(
                 modifier = Modifier.fillMaxWidth().weight(1f),
                 contentAlignment = Alignment.Center,
             ) {
-                CircularProgressIndicator(color = SpiceBlue)
+                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
             }
 
             is TrainingRequestsUiState.Error -> Box(
@@ -115,7 +113,7 @@ fun TrainingRequestsScreen(
         Button(
             onClick = onNewRequest,
             shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = SpiceBlue),
+            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp)

@@ -30,8 +30,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.domain.refresher.RefresherKind
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueContainer
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueDark
 
 /**
  * List-row tile for a refresher: leading 56.dp icon block, the kind label, bold title and a
@@ -74,7 +72,7 @@ fun RefresherTile(
             ) {
                 Text(
                     text = stringResource(refresherKindLabel(kind)),
-                    color = SpiceBlueDark,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
                     style = MaterialTheme.typography.labelMedium.copy(
                         fontWeight = FontWeight.SemiBold,
                         letterSpacing = 0.4.sp,
@@ -118,13 +116,13 @@ private fun RefresherIconBlock(kind: RefresherKind?, thumbnailUrl: String? = nul
             Box(
                 modifier = Modifier
                     .matchParentSize()
-                    .background(SpiceBlueContainer),
+                    .background(MaterialTheme.colorScheme.primaryContainer),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    tint = SpiceBlueDark,
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
                 )
             }
         },
@@ -156,7 +154,7 @@ internal fun SeverityChip(severity: String?) {
     val (color, labelRes) = when (severity?.lowercase()) {
         "high" -> Color(0xFFB91C1C) to R.string.severity_high
         "moderate" -> Color(0xFFD97706) to R.string.severity_moderate
-        "low" -> SpiceBlueDark to R.string.severity_low
+        "low" -> MaterialTheme.colorScheme.onPrimaryContainer to R.string.severity_low
         else -> return
     }
     Box(

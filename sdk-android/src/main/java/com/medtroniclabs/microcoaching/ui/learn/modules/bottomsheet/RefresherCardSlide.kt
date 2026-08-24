@@ -40,7 +40,6 @@ import com.medtroniclabs.microcoaching.ui.learn.LessonCard
 import com.medtroniclabs.microcoaching.ui.learn.LessonCardAutoSpeak
 import com.medtroniclabs.microcoaching.ui.markdown.MarkdownDefaults
 import com.medtroniclabs.microcoaching.ui.richtext.RichCardBody
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlue
 
 // ── Cards phase ───────────────────────────────────────────────────────────────
 // Lesson-card rendering + terminal actions for the refresher sheet; RefresherContent
@@ -111,7 +110,7 @@ internal fun RefresherCardSlide(
                         if (autoSpeakEnabled) R.string.lesson_player_auto_speak_on
                         else R.string.lesson_player_auto_speak_off,
                     ),
-                    tint = SpiceBlue,
+                    tint = MaterialTheme.colorScheme.primary,
                 )
             }
         }
@@ -119,7 +118,7 @@ internal fun RefresherCardSlide(
         LinearProgressIndicator(
             progress = { (safeIndex + 1f) / cards.size },
             modifier = Modifier.fillMaxWidth(),
-            color = SpiceBlue,
+            color = MaterialTheme.colorScheme.primary,
             trackColor = Color(0xFFE4E7EC),
         )
         Spacer(Modifier.height(4.dp))
@@ -161,7 +160,7 @@ internal fun RefresherCardSlide(
                 onClick = onNext,
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(28.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = SpiceBlue),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                 contentPadding = buttonContentPadding,
             ) {
                 Text(
@@ -203,7 +202,7 @@ internal fun RefresherTerminalActions(
                 onClick = actions.onNextRefresher,
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(28.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = SpiceBlue),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                 contentPadding = contentPadding,
             ) {
                 Text(
@@ -227,7 +226,7 @@ internal fun RefresherTerminalActions(
                 onClick = actions.onDismiss,
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(28.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = SpiceBlue),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                 contentPadding = contentPadding,
             ) {
                 Text(

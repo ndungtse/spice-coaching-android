@@ -20,7 +20,7 @@ import com.medtroniclabs.microcoaching.ui.learn.finishQuiz
 import com.medtroniclabs.microcoaching.ui.learn.modules.QuickLearnViewModel
 import com.medtroniclabs.microcoaching.ui.learn.parseInlineQuiz
 import com.medtroniclabs.microcoaching.ui.learn.parseLessonCards
-import com.medtroniclabs.microcoaching.ui.theme.QuizOptionSurface
+import com.medtroniclabs.microcoaching.ui.theme.CoachingTheme
 
 /**
  * Full refresher experience inside [RefresherBottomSheet].
@@ -238,7 +238,7 @@ fun RefresherContent(
                     },
                     modifier = modifier,
                     onClose = onDismiss,
-                    optionContainerColor = QuizOptionSurface,
+                    optionContainerColor = CoachingTheme.colors.quizOptionSurface,
                     // The quiz is the last phase, so the completion actions ride on the
                     // last question's feedback rather than a separate screen. Null on the
                     // home-card flow, which has no queue and keeps the plain finish.

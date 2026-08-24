@@ -20,14 +20,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import com.medtroniclabs.microcoaching.ui.theme.SpiceGreen
-import com.medtroniclabs.microcoaching.ui.theme.SpiceGreenDark
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.medtroniclabs.microcoaching.R
+import com.medtroniclabs.microcoaching.ui.theme.CoachingTheme
 
 /**
  * Full-screen coach-mark shown on the very first launch of the Learn & Grow flow.
@@ -39,6 +38,8 @@ import com.medtroniclabs.microcoaching.R
 fun CoachMarkScreen(
     onDismiss: () -> Unit,
 ) {
+    // Read outside Canvas: DrawScope is not a composable context.
+    val iconColor = CoachingTheme.colors.success
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -51,7 +52,7 @@ fun CoachMarkScreen(
                 .align(Alignment.Center)
         ) {
             drawCircle(
-                color = SpiceGreen,
+                color = iconColor,
                 radius = size.minDimension / 2f,
                 center = Offset(size.width / 2f, size.height / 2f),
             )
@@ -86,7 +87,7 @@ fun CoachMarkScreen(
                             fontWeight = FontWeight.Bold,
                         ),
                         textAlign = TextAlign.Center,
-                        color = SpiceGreenDark,
+                        color = CoachingTheme.colors.onSuccessContainer,
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(

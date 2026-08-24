@@ -34,7 +34,6 @@ import androidx.compose.ui.unit.sp
 import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.domain.refresher.RefresherKind
 import com.medtroniclabs.microcoaching.ui.learn.LearnModule
-import com.medtroniclabs.microcoaching.ui.theme.SpiceNavy
 
 /**
  * Soft background tints cycled across the Practice Zone row (blue / peach / green). Callers
@@ -100,7 +99,7 @@ fun PracticeZoneCard(
                 Text(
                     text = module.title,
                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                    color = SpiceNavy,
+                    color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -117,7 +116,7 @@ fun PracticeZoneCard(
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowForward,
                         contentDescription = null,
-                        tint = SpiceNavy,
+                        tint = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.size(18.dp),
                     )
                 }
@@ -137,7 +136,7 @@ private fun TypeTag(kind: RefresherKind?, modifier: Modifier = Modifier) {
     ) {
         Text(
             text = stringResource(refresherKindLabel(kind)),
-            color = SpiceNavy,
+            color = MaterialTheme.colorScheme.onSurface,
             style = MaterialTheme.typography.labelMedium.copy(
                 fontWeight = FontWeight.SemiBold,
                 letterSpacing = 0.3.sp,

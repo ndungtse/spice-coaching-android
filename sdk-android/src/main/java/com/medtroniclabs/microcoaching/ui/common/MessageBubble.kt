@@ -50,7 +50,6 @@ import com.medtroniclabs.microcoaching.ui.markdown.MarkdownText
 import com.medtroniclabs.microcoaching.ui.theme.AssistantBubble
 import com.medtroniclabs.microcoaching.ui.theme.AssistantBubbleText
 import com.medtroniclabs.microcoaching.ui.theme.UserBubble
-import com.medtroniclabs.microcoaching.ui.theme.UserBubbleText
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -75,7 +74,7 @@ fun MessageBubble(
 
     val isUser = message.role == ChatRole.USER
     val bubbleColor = if (isUser) UserBubble else AssistantBubble
-    val textColor = if (isUser) UserBubbleText else AssistantBubbleText
+    val textColor = if (isUser) MaterialTheme.colorScheme.onPrimary else AssistantBubbleText
     val alignment = if (isUser) Arrangement.End else Arrangement.Start
     val shape = if (isUser) {
         RoundedCornerShape(topStart = 16.dp, topEnd = 4.dp, bottomStart = 16.dp, bottomEnd = 16.dp)

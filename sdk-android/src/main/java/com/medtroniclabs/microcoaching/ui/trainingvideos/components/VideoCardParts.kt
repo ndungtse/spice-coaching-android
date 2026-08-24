@@ -35,7 +35,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.medtroniclabs.microcoaching.R
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlue
 import com.medtroniclabs.microcoaching.ui.trainingvideos.VideoDownloadState
 
 /** YouTube-style "watched" progress bar colour (reads on any thumbnail). */
@@ -152,7 +151,7 @@ fun VideoDownloadButton(
     state: VideoDownloadState,
     onToggle: () -> Unit,
     modifier: Modifier = Modifier,
-    tint: Color = SpiceBlue,
+    tint: Color = MaterialTheme.colorScheme.primary,
 ) {
     var confirmRemove by rememberSaveable { mutableStateOf(false) }
     if (confirmRemove) {

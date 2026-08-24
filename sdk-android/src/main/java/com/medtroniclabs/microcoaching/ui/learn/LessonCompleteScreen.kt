@@ -35,9 +35,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.medtroniclabs.microcoaching.R
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlue
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueContainer
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueDark
 
 /**
  * Cards-completion celebration — shown after the CHW reads all learning cards in
@@ -61,7 +58,7 @@ fun LessonCompleteScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(SpiceBlueContainer.copy(alpha = 0.35f))
+            .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f))
             .navigationBarsPadding()
             .padding(horizontal = 20.dp, vertical = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -72,13 +69,13 @@ fun LessonCompleteScreen(
         Box(
             modifier = Modifier
                 .size(120.dp)
-                .background(SpiceBlueContainer, CircleShape),
+                .background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
             contentAlignment = Alignment.Center,
         ) {
             Box(
                 modifier = Modifier
                     .size(84.dp)
-                    .background(SpiceBlue, CircleShape),
+                    .background(MaterialTheme.colorScheme.primary, CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
@@ -96,7 +93,7 @@ fun LessonCompleteScreen(
             text = stringResource(R.string.cards_complete_headline),
             style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
             textAlign = TextAlign.Center,
-            color = SpiceBlueDark,
+            color = MaterialTheme.colorScheme.onPrimaryContainer,
         )
 
         Spacer(Modifier.height(12.dp))
@@ -118,13 +115,13 @@ fun LessonCompleteScreen(
             Box(
                 modifier = Modifier
                     .size(44.dp)
-                    .background(SpiceBlueContainer, CircleShape),
+                    .background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.MenuBook,
                     contentDescription = null,
-                    tint = SpiceBlue,
+                    tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(22.dp),
                 )
             }
@@ -153,7 +150,7 @@ fun LessonCompleteScreen(
                     .fillMaxWidth()
                     .height(52.dp),
                 shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = SpiceBlue),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
             ) {
                 Text(
                     text = stringResource(R.string.cards_complete_continue),
@@ -180,7 +177,7 @@ fun LessonCompleteScreen(
             Icon(
                 imageVector = Icons.Filled.GridView,
                 contentDescription = null,
-                tint = SpiceBlue,
+                tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(18.dp),
             )
             Spacer(Modifier.size(8.dp))
@@ -188,7 +185,7 @@ fun LessonCompleteScreen(
                 text = stringResource(R.string.cards_complete_back_to_modules),
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 16.sp,
-                color = SpiceBlue,
+                color = MaterialTheme.colorScheme.primary,
             )
         }
     }

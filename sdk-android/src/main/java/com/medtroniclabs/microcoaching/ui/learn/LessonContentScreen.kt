@@ -26,8 +26,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.medtroniclabs.microcoaching.R
-import com.medtroniclabs.microcoaching.ui.theme.SpiceGreenDark
-import com.medtroniclabs.microcoaching.ui.theme.SurfaceBackground
+import com.medtroniclabs.microcoaching.ui.theme.CoachingTheme
 
 /**
  * Scrollable lesson reference screen.
@@ -57,14 +56,14 @@ fun LessonContentScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(SurfaceBackground)
+            .background(MaterialTheme.colorScheme.surface)
             .verticalScroll(scrollState)
             .padding(24.dp),
     ) {
         Text(
             text = module.title,
             style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
-            color = SpiceGreenDark,
+            color = CoachingTheme.colors.onSuccessContainer,
         )
 
         Spacer(Modifier.height(4.dp))
@@ -171,7 +170,7 @@ private fun KeyPoint(title: String, body: String) {
         Text(
             text = title,
             style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
-            color = SpiceGreenDark,
+            color = CoachingTheme.colors.onSuccessContainer,
         )
         Spacer(Modifier.height(4.dp))
         Text(

@@ -34,9 +34,6 @@ import androidx.compose.ui.unit.dp
 import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.ui.document.DocumentFileType
 import com.medtroniclabs.microcoaching.ui.theme.MicroCoachingTheme
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueContainer
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueDark
-import com.medtroniclabs.microcoaching.ui.theme.SpiceNavy
 
 /** Which trailing affordance a [ModuleTile] shows. */
 enum class ModuleTileVariant {
@@ -121,7 +118,7 @@ fun ModuleTile(
                         ModuleTileVariant.TRAINING -> Box(
                             modifier = Modifier
                                 .matchParentSize()
-                                .background(SpiceBlueContainer),
+                                .background(MaterialTheme.colorScheme.primaryContainer),
                         )
                     }
                 },
@@ -135,7 +132,7 @@ fun ModuleTile(
                 Text(
                     text = title,
                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                    color = SpiceNavy,
+                    color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -177,7 +174,7 @@ private fun KnowledgeAction(cached: Boolean, onClick: () -> Unit) {
         modifier = Modifier
             .size(40.dp)
             .clip(CircleShape)
-            .background(SpiceBlueContainer)
+            .background(MaterialTheme.colorScheme.primaryContainer)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
@@ -186,7 +183,7 @@ private fun KnowledgeAction(cached: Boolean, onClick: () -> Unit) {
             contentDescription = stringResource(
                 if (cached) R.string.knowledge_view_cd else R.string.modules_download_cd,
             ),
-            tint = SpiceBlueDark,
+            tint = MaterialTheme.colorScheme.onPrimaryContainer,
             modifier = Modifier.size(20.dp),
         )
     }
@@ -202,14 +199,14 @@ private fun CompletionRing(progress: Float) {
         CircularProgressIndicator(
             progress = { progress },
             modifier = Modifier.size(40.dp),
-            color = SpiceBlueDark,
-            trackColor = SpiceBlueContainer,
+            color = MaterialTheme.colorScheme.onPrimaryContainer,
+            trackColor = MaterialTheme.colorScheme.primaryContainer,
             strokeWidth = 3.dp,
         )
         Text(
             text = "${(progress * 100).toInt()}%",
             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-            color = SpiceBlueDark,
+            color = MaterialTheme.colorScheme.onPrimaryContainer,
         )
     }
 }

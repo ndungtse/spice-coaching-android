@@ -28,8 +28,6 @@ import com.medtroniclabs.microcoaching.ui.podashboard.DateRange
 import com.medtroniclabs.microcoaching.ui.podashboard.PODashboardUiState
 import com.medtroniclabs.microcoaching.ui.podashboard.PODashboardViewModel
 import com.medtroniclabs.microcoaching.ui.podashboard.components.ModuleCompletionRow
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlue
-import com.medtroniclabs.microcoaching.ui.theme.SurfaceMuted
 
 /**
  * "Modules Completed" — per-module accordion with per-SK check rows, over the [range] the
@@ -42,7 +40,7 @@ fun ModulesCompletedScreen(chwId: String, range: DateRange, onBack: () -> Unit, 
     val networkAvailable by vm.networkAvailable.collectAsState()
     val expanded = remember { mutableStateMapOf<Int, Boolean>() }
 
-    Column(modifier = Modifier.fillMaxSize().background(SurfaceMuted)) {
+    Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainerLow)) {
         SdkScreenHeader(title = stringResource(R.string.po_drilldown_modules), onBack = onBack, onHome = onHome)
         when (val s = state) {
             is PODashboardUiState.Loading -> CenterProgress()
@@ -53,7 +51,7 @@ fun ModulesCompletedScreen(chwId: String, range: DateRange, onBack: () -> Unit, 
                 Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
                     Text(
                         text = stringResource(R.string.po_modules_subtitle, modules.size, s.dashboard.sks.size),
-                        color = SpiceBlue,
+                        color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.Bold,
                         style = MaterialTheme.typography.labelMedium,
                         modifier = Modifier.padding(vertical = 8.dp),

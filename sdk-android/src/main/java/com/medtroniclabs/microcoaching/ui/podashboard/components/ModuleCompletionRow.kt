@@ -31,7 +31,6 @@ import androidx.compose.ui.unit.dp
 import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.ui.common.AvatarCircle
 import com.medtroniclabs.microcoaching.ui.podashboard.ModuleCompletion
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlue
 
 private val DividerColor = Color(0xFFEFEFF3)
 
@@ -46,7 +45,7 @@ fun ModuleCompletionRow(
     val fraction = if (item.total > 0) item.done.toFloat() / item.total else 0f
     val barColor = when {
         item.done >= item.total -> StatusGreen
-        fraction > 0.5f -> SpiceBlue
+        fraction > 0.5f -> MaterialTheme.colorScheme.primary
         else -> StatusOrange
     }
     Column(modifier = modifier.fillMaxWidth().poCard()) {

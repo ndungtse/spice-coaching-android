@@ -56,10 +56,6 @@ import com.medtroniclabs.microcoaching.ui.podashboard.components.MutedText
 import com.medtroniclabs.microcoaching.ui.podashboard.components.StatusGreen
 import com.medtroniclabs.microcoaching.ui.podashboard.components.StatusGreenBg
 import com.medtroniclabs.microcoaching.ui.podashboard.components.poCard
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlue
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueContainer
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueDark
-import com.medtroniclabs.microcoaching.ui.theme.SurfaceMuted
 
 private val HeaderGradientStart = Color(0xFF1E40AF)
 private val HeaderGradientEnd = Color(0xFF2563EB)
@@ -71,7 +67,7 @@ fun SkDetailScreen(skId: String, range: DateRange, onBack: () -> Unit, onHome: (
     val state by vm.uiState.collectAsState()
     val networkAvailable by vm.networkAvailable.collectAsState()
 
-    Column(modifier = Modifier.fillMaxSize().background(SurfaceMuted)) {
+    Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainerLow)) {
         when (val s = state) {
             is SkDetailUiState.Ready -> SkDetailHeader(s.detail, onBack, onHome)
             else -> SdkScreenHeader(title = stringResource(R.string.po_drilldown_sk), onBack = onBack, onHome = onHome)
@@ -179,7 +175,7 @@ private fun SummaryCard(value: String, label: String, modifier: Modifier = Modif
         modifier = modifier.poCard().padding(vertical = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = SpiceBlue)
+        Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
         Spacer(Modifier.height(4.dp))
         Text(label, style = MaterialTheme.typography.labelSmall, color = MutedText)
     }
@@ -279,10 +275,10 @@ private fun TopQueryRow(q: TopQuery) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
-            modifier = Modifier.width(24.dp).height(24.dp).clip(RoundedCornerShape(percent = 50)).background(SpiceBlueContainer),
+            modifier = Modifier.width(24.dp).height(24.dp).clip(RoundedCornerShape(percent = 50)).background(MaterialTheme.colorScheme.primaryContainer),
             contentAlignment = Alignment.Center,
         ) {
-            Text("${q.rank}", color = SpiceBlueDark, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelSmall)
+            Text("${q.rank}", color = MaterialTheme.colorScheme.onPrimaryContainer, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelSmall)
         }
         Spacer(Modifier.width(12.dp))
         Text(
@@ -293,7 +289,7 @@ private fun TopQueryRow(q: TopQuery) {
             overflow = TextOverflow.Ellipsis,
         )
         Spacer(Modifier.width(8.dp))
-        Text("${q.count}", color = SpiceBlue, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+        Text("${q.count}", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
     }
 }
 

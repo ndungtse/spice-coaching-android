@@ -40,7 +40,6 @@ import com.medtroniclabs.microcoaching.ui.common.rememberManualInboundSyncState
 import com.medtroniclabs.microcoaching.ui.learn.modules.ModulesScreen
 import com.medtroniclabs.microcoaching.ui.learn.modules.components.ModuleCard
 import com.medtroniclabs.microcoaching.ui.theme.MicroCoachingTheme
-import com.medtroniclabs.microcoaching.ui.theme.SurfaceBackground
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -94,7 +93,7 @@ fun ModuleReadyScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(SurfaceBackground),
+            .background(MaterialTheme.colorScheme.surface),
     ) {
         // Keep the header rendered across Loading → ModuleList so the only
         // visible change when modules arrive is the body content filling in —

@@ -12,6 +12,7 @@ import androidx.navigation.compose.rememberNavController
 import com.medtroniclabs.microcoaching.MicroCoachingSDK
 import com.medtroniclabs.microcoaching.ui.SdkLocaleHelper
 import com.medtroniclabs.microcoaching.ui.common.applyCoachingStatusBar
+import com.medtroniclabs.microcoaching.ui.theme.resolveConfiguredColors
 import com.medtroniclabs.microcoaching.ui.onboarding.OnboardingPrefs
 import com.medtroniclabs.microcoaching.ui.theme.MicroCoachingTheme
 
@@ -51,7 +52,7 @@ class CoachingFlowActivity : FragmentActivity() {
 
         // Blue status bar to match the SdkScreenHeader across the whole coaching
         // flow (scoped to this SDK-owned window; the host keeps its own styling).
-        window.applyCoachingStatusBar()
+        window.applyCoachingStatusBar(resolveConfiguredColors().primary)
 
         val startRoute = resolveStartRoute()
         val chwId = intent.getStringExtra(EXTRA_CHW_ID)

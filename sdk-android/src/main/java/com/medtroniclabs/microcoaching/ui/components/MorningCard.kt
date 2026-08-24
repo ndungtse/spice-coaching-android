@@ -31,10 +31,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.ui.SdkLocalizedTheme
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlue
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueContainer
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueDark
-import com.medtroniclabs.microcoaching.ui.theme.SpiceNavy
 
 /**
  * Home-screen morning refresher banner — a **minimal** list-style tile (leading
@@ -78,13 +74,13 @@ fun MorningCard(
                     modifier = Modifier
                         .size(48.dp)
                         .clip(RoundedCornerShape(12.dp))
-                        .background(SpiceBlueContainer),
+                        .background(MaterialTheme.colorScheme.primaryContainer),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.Groups,
                         contentDescription = null,
-                        tint = SpiceBlueDark,
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
                         modifier = Modifier.size(24.dp),
                     )
                 }
@@ -104,12 +100,12 @@ fun MorningCard(
                             fontWeight = FontWeight.SemiBold,
                             letterSpacing = 0.4.sp,
                         ),
-                        color = SpiceBlueDark,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
                     )
                     Text(
                         text = moduleTitle,
                         style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                        color = SpiceNavy,
+                        color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -124,7 +120,7 @@ fun MorningCard(
                 Button(
                     onClick = onStart,
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = SpiceBlue,
+                        containerColor = MaterialTheme.colorScheme.primary,
                         contentColor = Color.White,
                     ),
                     shape = RoundedCornerShape(24.dp),

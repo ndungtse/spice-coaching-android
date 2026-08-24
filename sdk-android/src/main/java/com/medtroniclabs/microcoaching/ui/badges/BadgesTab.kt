@@ -34,9 +34,6 @@ import com.medtroniclabs.microcoaching.ui.common.rememberManualInboundSyncState
 import com.medtroniclabs.microcoaching.ui.badges.components.BadgeMedallion
 import com.medtroniclabs.microcoaching.ui.badges.components.YourJourneyBanner
 import com.medtroniclabs.microcoaching.ui.learn.modules.components.ModuleGrid
-import com.medtroniclabs.microcoaching.ui.theme.MutedText
-import com.medtroniclabs.microcoaching.ui.theme.SpiceNavy
-import com.medtroniclabs.microcoaching.ui.theme.SurfaceMuted
 
 /** Height reserved for the first-load spinner, which has no content to size against. */
 private val LOADING_HEIGHT = 240.dp
@@ -129,14 +126,14 @@ private fun BadgesGrid(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(SurfaceMuted)
+                .background(MaterialTheme.colorScheme.surfaceContainerLow)
                 .padding(horizontal = 20.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             Text(
                 text = stringResource(R.string.coaching_tab_badges),
                 style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
-                color = SpiceNavy,
+                color = MaterialTheme.colorScheme.onSurface,
             )
             Text(
                 text = stringResource(
@@ -145,7 +142,7 @@ private fun BadgesGrid(
                     snapshot.totalCount,
                 ),
                 style = MaterialTheme.typography.bodyMedium,
-                color = MutedText,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
 

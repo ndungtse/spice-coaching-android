@@ -25,8 +25,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlue
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueContainer
 import com.medtroniclabs.microcoaching.ui.trainingvideos.TrainingVideo
 
 /**
@@ -68,7 +66,7 @@ fun FeaturedVideoCard(
                                 .matchParentSize()
                                 .background(
                                     Brush.linearGradient(
-                                        colors = listOf(SpiceBlueContainer, SpiceBlue.copy(alpha = 0.3f)),
+                                        colors = listOf(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)),
                                     ),
                                 ),
                             contentAlignment = Alignment.Center,

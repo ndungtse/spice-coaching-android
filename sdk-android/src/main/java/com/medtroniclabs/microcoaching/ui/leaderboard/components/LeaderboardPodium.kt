@@ -28,7 +28,6 @@ import com.medtroniclabs.microcoaching.ui.common.AvatarCircle
 import com.medtroniclabs.microcoaching.ui.common.StreakChip
 import com.medtroniclabs.microcoaching.ui.leaderboard.LeaderboardEntry
 
-private val PodiumXpMuted = com.medtroniclabs.microcoaching.ui.theme.MutedText
 
 /** Top-3 podium laid out 2 · 1 · 3, bottom-aligned so the leader's card rises above the others. */
 @Composable
@@ -78,7 +77,7 @@ private fun RowScope.PodiumColumn(
                 Text(
                     text = stringResource(R.string.leaderboard_xp_value, "%,d".format(entry.xp)),
                     style = MaterialTheme.typography.labelSmall,
-                    color = PodiumXpMuted,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(4.dp))
                 StreakChip(entry.streakDays)

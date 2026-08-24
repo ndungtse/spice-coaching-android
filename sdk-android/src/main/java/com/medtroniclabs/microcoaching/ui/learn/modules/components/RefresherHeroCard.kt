@@ -31,8 +31,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.ui.learn.LearnModule
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlue
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueContainer
 
 /** Hero card aspect ratio — a wide banner matching the module design mock. */
 private const val HeroAspectRatio = 1.85f
@@ -43,7 +41,7 @@ private const val HeroAspectRatio = 1.85f
  * matching the module design mock (SDK colours). Used at the top of
  * [com.medtroniclabs.microcoaching.ui.coaching.RefresherSubTab].
  *
- * The thumbnail falls back to a [SpiceBlue] gradient when [LearnModule.thumbnailUrl] is null
+ * The thumbnail falls back to a `primary` gradient when [LearnModule.thumbnailUrl] is null
  * (same idiom as [TrainingCard]); a soft bottom scrim keeps the overlays legible over any
  * artwork.
  *
@@ -77,7 +75,7 @@ fun RefresherHeroCard(
                             .matchParentSize()
                             .background(
                                 Brush.linearGradient(
-                                    colors = listOf(SpiceBlueContainer, SpiceBlue.copy(alpha = 0.3f)),
+                                    colors = listOf(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)),
                                 ),
                             ),
                     )
@@ -89,7 +87,7 @@ fun RefresherHeroCard(
                     .matchParentSize()
                     .background(
                         Brush.verticalGradient(
-                            colors = listOf(Color.Transparent, SpiceBlue.copy(alpha = 0.28f)),
+                            colors = listOf(Color.Transparent, MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)),
                         ),
                     ),
             )
@@ -114,7 +112,7 @@ private fun StartModuleButton(onClick: () -> Unit, modifier: Modifier = Modifier
     Row(
         modifier = modifier
             .clip(RoundedCornerShape(50))
-            .background(SpiceBlue)
+            .background(MaterialTheme.colorScheme.primary)
             .clickable(onClick = onClick)
             .padding(start = 20.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -134,7 +132,7 @@ private fun StartModuleButton(onClick: () -> Unit, modifier: Modifier = Modifier
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.ArrowForward,
                 contentDescription = null,
-                tint = SpiceBlue,
+                tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(16.dp),
             )
         }

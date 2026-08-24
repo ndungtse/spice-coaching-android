@@ -35,7 +35,6 @@ import androidx.compose.ui.unit.dp
 import com.medtroniclabs.microcoaching.MicroCoachingSDK
 import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.ui.SdkLocalizedTheme
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlue
 import kotlinx.coroutines.flow.MutableStateFlow
 
 /** Bell indicator colour (matches the host's alert red). */
@@ -89,7 +88,7 @@ fun CoachingGridTile(
                         Icon(
                             imageVector = Icons.Outlined.School,
                             contentDescription = null,
-                            tint = SpiceBlue,
+                            tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(72.dp),
                         )
                         Spacer(Modifier.height(20.dp))
@@ -97,7 +96,7 @@ fun CoachingGridTile(
                             text = label.uppercase(),
                             style = MaterialTheme.typography.titleMedium
                                 .copy(fontWeight = FontWeight.Bold),
-                            color = SpiceBlue,
+                            color = MaterialTheme.colorScheme.primary,
                             textAlign = TextAlign.Center,
                         )
                     }
@@ -137,7 +136,7 @@ private fun AssignmentIndicators(
             Icon(
                 imageVector = Icons.Outlined.SmartDisplay,
                 contentDescription = stringResource(R.string.coaching_tile_new_videos),
-                tint = SpiceBlue,
+                tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(18.dp),
             )
         }

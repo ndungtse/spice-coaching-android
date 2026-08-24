@@ -49,7 +49,6 @@ import com.medtroniclabs.microcoaching.MicroCoachingSDK
 import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.ui.common.SdkScreenHeader
 import com.medtroniclabs.microcoaching.ui.common.translatedText
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlue
 
 /**
  * Card-by-card lesson player. Renders each [LessonCard] in sequence with a
@@ -267,7 +266,7 @@ fun LessonPlayerScreen(
                 },
                 modifier = Modifier.weight(1f),
                 shape = RoundedCornerShape(28.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = SpiceBlue),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
             ) {
                 Text(
                     text = if (isLast) {

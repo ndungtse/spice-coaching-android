@@ -35,8 +35,6 @@ import androidx.compose.ui.unit.sp
 import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.ui.SdkLocalizedTheme
 import com.medtroniclabs.microcoaching.ui.theme.MicroCoachingTheme
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlue
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueDark
 
 /**
  * Embeddable coaching card for the SPICE home screen — replaces the Learn FAB.
@@ -77,7 +75,7 @@ fun LearnCard(
     languageLabel: String = stringResource(R.string.banner_meta_language_bn),
 ) {
     SdkLocalizedTheme {
-        val gradient = Brush.linearGradient(listOf(SpiceBlue, SpiceBlueDark))
+        val gradient = Brush.linearGradient(listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.onPrimaryContainer))
 
         Column(
             modifier = modifier
@@ -137,7 +135,7 @@ fun LearnCard(
                     onClick = onStart,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Color.White,
-                        contentColor = SpiceBlue,
+                        contentColor = MaterialTheme.colorScheme.primary,
                     ),
                     shape = RoundedCornerShape(24.dp),
                 ) {

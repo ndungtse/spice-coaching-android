@@ -18,7 +18,6 @@ import androidx.compose.ui.unit.dp
 private val Gold = Color(0xFFFFC107)
 private val Silver = Color(0xFFB0BEC5)
 private val Bronze = Color(0xFFCD7F32)
-private val RankMuted = com.medtroniclabs.microcoaching.ui.theme.MutedText
 
 /** Top-3 ranks show a coloured medal; the rest show a plain number. */
 @Composable
@@ -39,7 +38,7 @@ fun RankBadge(rank: Int, modifier: Modifier = Modifier, size: Dp = 24.dp) {
         Text(
             text = "$rank",
             modifier = modifier,
-            color = RankMuted,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontWeight = FontWeight.SemiBold,
             style = MaterialTheme.typography.bodyMedium,
         )

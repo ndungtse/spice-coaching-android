@@ -18,7 +18,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueDark
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -41,14 +40,14 @@ internal fun WhyThisMattersBox(explanation: String) {
             Icon(
                 imageVector = Icons.Outlined.Lightbulb,
                 contentDescription = null,
-                tint = SpiceBlueDark,
+                tint = MaterialTheme.colorScheme.onPrimaryContainer,
                 modifier = Modifier.size(16.dp),
             )
             Spacer(modifier = Modifier.size(6.dp))
             Text(
                 text = stringResource(R.string.feedback_why_this_matters),
                 style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                color = SpiceBlueDark,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
             )
         }
         Spacer(Modifier.height(6.dp))

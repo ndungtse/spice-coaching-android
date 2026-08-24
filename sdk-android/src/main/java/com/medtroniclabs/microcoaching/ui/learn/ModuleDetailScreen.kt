@@ -51,8 +51,6 @@ import androidx.compose.ui.unit.sp
 import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.ui.common.SdkScreenHeader
 import com.medtroniclabs.microcoaching.ui.common.translatedText
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlue
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueContainer
 
 /**
  * Module detail screen — flat single-scroll layout:
@@ -190,7 +188,7 @@ fun ModuleDetailScreen(
                 Text(
                     text = stringResource(R.string.module_detail_learning_cards),
                     style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-                    color = SpiceBlue,
+                    color = MaterialTheme.colorScheme.primary,
                 )
                 Spacer(Modifier.height(8.dp))
 
@@ -210,7 +208,7 @@ fun ModuleDetailScreen(
                 Text(
                     text = stringResource(R.string.module_detail_quiz_section),
                     style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-                    color = SpiceBlue,
+                    color = MaterialTheme.colorScheme.primary,
                 )
                 Spacer(Modifier.height(8.dp))
                 CurriculumRow(
@@ -236,7 +234,7 @@ fun ModuleDetailScreen(
                     else Icons.Outlined.HearingDisabled,
                     contentDescription = null,
                     modifier = Modifier.size(16.dp),
-                    tint = if (autoSpeakEnabled) SpiceBlue else MetadataColor,
+                    tint = if (autoSpeakEnabled) MaterialTheme.colorScheme.primary else MetadataColor,
                 )
                 Spacer(Modifier.width(6.dp))
                 Text(
@@ -284,25 +282,25 @@ private fun StatsRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(SpiceBlueContainer, RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(12.dp))
             .padding(horizontal = 16.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         StatItem(
-            icon = { Icon(Icons.AutoMirrored.Filled.MenuBook, null, Modifier.size(16.dp), tint = SpiceBlue) },
+            icon = { Icon(Icons.AutoMirrored.Filled.MenuBook, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary) },
             value = "$cardCount",
             label = stringResource(R.string.module_detail_cards_stat),
         )
         StatDivider()
         StatItem(
-            icon = { Icon(Icons.Default.HelpOutline, null, Modifier.size(16.dp), tint = SpiceBlue) },
+            icon = { Icon(Icons.Default.HelpOutline, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary) },
             value = "$questionCount",
             label = stringResource(R.string.module_detail_questions_stat),
         )
         StatDivider()
         StatItem(
-            icon = { Icon(Icons.Default.AccessTime, null, Modifier.size(16.dp), tint = SpiceBlue) },
+            icon = { Icon(Icons.Default.AccessTime, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary) },
             value = "$estimatedMinutes",
             label = stringResource(R.string.module_detail_duration_stat),
         )
@@ -369,12 +367,12 @@ private fun CurriculumRow(
             modifier = Modifier
                 .size(36.dp)
                 .clip(CircleShape)
-                .background(if (isQuiz) SpiceBlueContainer else IndexBg),
+                .background(if (isQuiz) MaterialTheme.colorScheme.primaryContainer else IndexBg),
             contentAlignment = Alignment.Center,
         ) {
             Text(
                 text = "%02d".format(number),
-                color = SpiceBlue,
+                color = MaterialTheme.colorScheme.primary,
                 style = MaterialTheme.typography.labelMedium.copy(
                     fontWeight = FontWeight.Bold,
                     fontSize = 13.sp,

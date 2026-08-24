@@ -25,9 +25,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.medtroniclabs.microcoaching.R
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlue
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueContainer
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueDark
 
 /**
  * Horizontally-scrolled card used in the Training row (module_type ==
@@ -84,7 +81,7 @@ fun TrainingCard(
                                 .matchParentSize()
                                 .background(
                                     Brush.linearGradient(
-                                        colors = listOf(SpiceBlueContainer, SpiceBlue.copy(alpha = 0.3f)),
+                                        colors = listOf(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)),
                                     ),
                                 ),
                         )
@@ -125,12 +122,12 @@ fun TrainingCard(
                 LinearProgressIndicator(
                     progress = { progressFraction.coerceIn(0f, 1f) },
                     modifier = Modifier.fillMaxWidth(),
-                    color = SpiceBlueDark,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
                 )
                 Text(
                     text = "${(progressFraction.coerceIn(0f, 1f) * 100).toInt()}%",
                     style = MaterialTheme.typography.labelSmall,
-                    color = SpiceBlueDark,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
                     modifier = Modifier.padding(top = 4.dp),
                 )
             }

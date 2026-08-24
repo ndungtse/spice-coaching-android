@@ -43,8 +43,6 @@ import com.medtroniclabs.microcoaching.ui.podashboard.SuggestionEvidenceItem
 import com.medtroniclabs.microcoaching.ui.podashboard.components.MutedText
 import com.medtroniclabs.microcoaching.ui.podashboard.components.poCard
 import com.medtroniclabs.microcoaching.ui.podashboard.components.FREE_TEXT_MAX_LINES
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlue
-import com.medtroniclabs.microcoaching.ui.theme.SurfaceMuted
 
 private val DividerColor = Color(0xFFEFEFF3)
 
@@ -60,7 +58,7 @@ fun SuggestionDetailScreen(suggestionId: String, onBack: () -> Unit, onHome: () 
     val state by vm.uiState.collectAsState()
     val networkAvailable by vm.networkAvailable.collectAsState()
 
-    Column(modifier = Modifier.fillMaxSize().background(SurfaceMuted)) {
+    Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainerLow)) {
         val title = (state as? SuggestionDetailUiState.Ready)?.detail?.title
             ?: stringResource(R.string.po_searched_suggested_title)
         SdkScreenHeader(title = title, onBack = onBack, onHome = onHome)
@@ -143,7 +141,7 @@ private fun EvidenceAccordionRow(item: SuggestionEvidenceItem, expanded: Boolean
                 overflow = TextOverflow.Ellipsis,
             )
             Spacer(Modifier.width(8.dp))
-            Text("${item.occurrenceCount}", color = SpiceBlue, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+            Text("${item.occurrenceCount}", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
             Icon(
                 imageVector = if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
                 contentDescription = null,

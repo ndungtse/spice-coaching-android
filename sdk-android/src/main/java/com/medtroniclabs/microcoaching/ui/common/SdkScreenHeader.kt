@@ -24,7 +24,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.medtroniclabs.microcoaching.R
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlue
 
 /**
  * Consistent blue top-bar used across the coaching module flow:
@@ -59,7 +58,7 @@ fun SdkScreenHeader(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .background(SpiceBlue)
+            .background(MaterialTheme.colorScheme.primary)
             .statusBarsPadding(),
     ) {
         IconButton(

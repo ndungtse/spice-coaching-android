@@ -44,7 +44,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.ui.learn.LearnUiState
-import com.medtroniclabs.microcoaching.ui.theme.SurfaceBackground
 
 // Palette (kept local to this screen to match the minimal result design).
 private val ResultOrange = Color(0xFFC23C02)
@@ -111,7 +110,7 @@ fun QuizResultScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(SurfaceBackground),
+            .background(MaterialTheme.colorScheme.surface),
     ) {
         LazyColumn(
             modifier = Modifier
