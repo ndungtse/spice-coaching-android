@@ -34,16 +34,19 @@ import androidx.compose.ui.unit.sp
 import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.domain.refresher.RefresherKind
 import com.medtroniclabs.microcoaching.ui.learn.LearnModule
+import com.medtroniclabs.microcoaching.ui.theme.CoachingTheme
+import androidx.compose.runtime.ReadOnlyComposable
 
 /**
- * Soft background tints cycled across the Practice Zone row (blue / peach / green). Callers
- * pick by position: `PracticeZonePalette[index % PracticeZonePalette.size]`.
+ * Soft background tints cycled across the Practice Zone row. Callers pick by position:
+ * `practiceZonePalette[index % practiceZonePalette.size]`.
+ *
+ * Shares the theme's decorative category palette rather than carrying its own three
+ * hardcoded tints, so a host restyling `categoryTags` restyles this row too.
  */
-val PracticeZonePalette = listOf(
-    Color(0xFFE7F0FB), // soft blue
-    Color(0xFFFBEEE3), // soft peach
-    Color(0xFFE7F4EC), // soft green
-)
+val practiceZonePalette: List<Color>
+    @Composable @ReadOnlyComposable
+    get() = CoachingTheme.colors.categoryTags.map { it.container }
 
 /**
  * Display label for a [RefresherKind]. Shared by both refresher tiles so the Practice Zone
@@ -65,14 +68,14 @@ internal fun refresherKindLabel(kind: RefresherKind?): Int = when (kind) {
  *
  * @param module The refresher/practice module to present.
  * @param onClick Invoked when the whole card is tapped.
- * @param containerColor Soft card fill; cycle [PracticeZonePalette] by position.
+ * @param containerColor Soft card fill; cycle [practiceZonePalette] by position.
  */
 @Composable
 fun PracticeZoneCard(
     module: LearnModule,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    containerColor: Color = PracticeZonePalette[0],
+    containerColor: Color = practiceZonePalette[0],
 ) {
     Card(
         onClick = onClick,

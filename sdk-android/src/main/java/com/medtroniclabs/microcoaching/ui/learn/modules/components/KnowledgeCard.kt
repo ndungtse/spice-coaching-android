@@ -35,6 +35,7 @@ import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.ui.document.DocumentFileType
 import com.medtroniclabs.microcoaching.ui.document.icon
 import com.medtroniclabs.microcoaching.ui.document.labelRes
+import com.medtroniclabs.microcoaching.ui.theme.CoachingTheme
 
 /**
  * Horizontal Knowledge-section card for a **source document**.
@@ -139,7 +140,7 @@ internal fun BoxScope.KnowledgeThumbnailFallback(
             .matchParentSize()
             .background(
                 Brush.linearGradient(
-                    colors = listOf(MaterialTheme.colorScheme.primaryContainer, Color(0xFFFBEFEA)),
+                    colors = listOf(MaterialTheme.colorScheme.primaryContainer, CoachingTheme.colors.categoryTags[2].container),
                 ),
             ),
         contentAlignment = Alignment.Center,

@@ -26,7 +26,6 @@ import androidx.compose.material3.MaterialTheme
 import com.medtroniclabs.microcoaching.ui.theme.CoachingTheme
 
 /** Ring colour for the locked state — a soft neutral grey so it recedes behind earned rings. */
-private val LockedRing = Color(0xFFC3C9D4)
 
 /**
  * The circular badge medallion artwork, shared by the Badges grid tile ([BadgeMedallion])
@@ -59,7 +58,7 @@ fun BadgeArtwork(
     val greyscale = remember {
         ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0f) })
     }
-    val ringColor = if (locked) LockedRing else CoachingTheme.colors.success
+    val ringColor = if (locked) CoachingTheme.colors.lockedOutline else CoachingTheme.colors.success
     val cachedFile by rememberCachedImageFileForUrl(imageUrl)
 
     Box(modifier = modifier.size(size), contentAlignment = Alignment.Center) {

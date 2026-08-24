@@ -56,9 +56,8 @@ import com.medtroniclabs.microcoaching.ui.podashboard.components.MutedText
 import com.medtroniclabs.microcoaching.ui.podashboard.components.StatusGreen
 import com.medtroniclabs.microcoaching.ui.podashboard.components.StatusGreenBg
 import com.medtroniclabs.microcoaching.ui.podashboard.components.poCard
+import com.medtroniclabs.microcoaching.ui.theme.CoachingTheme
 
-private val HeaderGradientStart = Color(0xFF1E40AF)
-private val HeaderGradientEnd = Color(0xFF2563EB)
 
 /** "My SK" — one SK's profile: summary metrics, module checklist, activity, top queries. */
 @Composable
@@ -118,7 +117,7 @@ private fun SkDetailHeader(d: SkDetail, onBack: () -> Unit, onHome: () -> Unit) 
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Brush.horizontalGradient(listOf(HeaderGradientStart, HeaderGradientEnd)))
+            .background(Brush.horizontalGradient(CoachingTheme.colors.headerGradient))
             .statusBarsPadding()
             .padding(horizontal = 8.dp, vertical = 8.dp),
     ) {

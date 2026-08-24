@@ -61,7 +61,7 @@ fun BadgeMedallion(badge: AchievementBadge, modifier: Modifier = Modifier) {
                     modifier = Modifier.align(Alignment.BottomEnd),
                 )
                 BadgeState.LOCKED -> CornerMarker(
-                    background = Color(0xFFE4E8EF),
+                    background = CoachingTheme.colors.lockedSurface,
                     icon = { Icon(Icons.Filled.Lock, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(14.dp)) },
                     modifier = Modifier.align(Alignment.BottomEnd),
                 )

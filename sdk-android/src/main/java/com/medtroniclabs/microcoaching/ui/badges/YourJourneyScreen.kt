@@ -54,7 +54,6 @@ private val CornerRadius = 30.dp
 private const val NodeColumnFraction = 0.25f
 
 /** Locked connector/segment colour — a light neutral so upcoming path recedes. */
-private val LockedPath = Color(0xFFD7DCE4)
 
 /** Screen margin on a milestone label's outer side. */
 private val EdgePadding = 20.dp
@@ -142,6 +141,7 @@ private fun JourneyHeader(
 private fun JourneyPath(milestones: List<JourneyMilestone>) {
     // Read outside Canvas: DrawScope is not a composable context.
     val earnedColor = CoachingTheme.colors.success
+    val lockedColor = CoachingTheme.colors.lockedOutline
     Box(modifier = Modifier.fillMaxWidth()) {
         Canvas(modifier = Modifier.matchParentSize()) {
             val rowPx = RowHeight.toPx()
@@ -169,7 +169,7 @@ private fun JourneyPath(milestones: List<JourneyMilestone>) {
                 }
                 val color = when (milestones[i + 1].state) {
                     BadgeState.EARNED -> earnedColor
-                    BadgeState.LOCKED -> LockedPath
+                    BadgeState.LOCKED -> lockedColor
                 }
                 drawPath(
                     path = path,
@@ -252,7 +252,7 @@ private fun NodeCell(milestone: JourneyMilestone, modifier: Modifier = Modifier)
                     .align(Alignment.BottomEnd)
                     .size(24.dp)
                     .border(2.dp, Color.White, CircleShape)
-                    .background(Color(0xFFE4E8EF), CircleShape),
+                    .background(CoachingTheme.colors.lockedSurface, CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(Icons.Filled.Lock, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(13.dp))

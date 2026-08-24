@@ -33,7 +33,7 @@ internal fun WhyThisMattersBox(explanation: String) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color(0xFFDCEEFF), shape = RoundedCornerShape(10.dp))
+            .background(MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(10.dp))
             .padding(12.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -54,7 +54,7 @@ internal fun WhyThisMattersBox(explanation: String) {
         Text(
             text = explanation,
             style = MaterialTheme.typography.bodySmall,
-            color = Color(0xFF1A3A5C),
+            color = MaterialTheme.colorScheme.onPrimaryContainer,
         )
     }
 }

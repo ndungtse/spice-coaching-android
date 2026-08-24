@@ -30,7 +30,7 @@ import com.medtroniclabs.microcoaching.ui.common.TopLoadingBar
 import com.medtroniclabs.microcoaching.ui.common.TrainingCardSkeleton
 import com.medtroniclabs.microcoaching.ui.learn.LearnModule
 import com.medtroniclabs.microcoaching.ui.learn.modules.components.PracticeZoneCard
-import com.medtroniclabs.microcoaching.ui.learn.modules.components.PracticeZonePalette
+import com.medtroniclabs.microcoaching.ui.learn.modules.components.practiceZonePalette
 import com.medtroniclabs.microcoaching.ui.learn.modules.components.RefresherHeroCard
 import com.medtroniclabs.microcoaching.ui.learn.modules.components.SectionHeader
 import com.medtroniclabs.microcoaching.ui.learn.modules.components.TrainingGrid
@@ -134,7 +134,7 @@ fun RefresherSubTab(
                             onRefresherStart(module)
                             onShowRefresherQuiz(poolFamilyIds)
                         },
-                        containerColor = PracticeZonePalette[index % PracticeZonePalette.size],
+                        containerColor = practiceZonePalette[index % practiceZonePalette.size],
                     )
                 }
             }
