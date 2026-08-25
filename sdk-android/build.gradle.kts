@@ -192,7 +192,7 @@ dependencies {
  * Local retrieval lab: runs the real offline-chat ranking stack over a static corpus
  * file so it can be exercised from a browser without a device or synced backend data.
  *
- *   MC_CORPUS=ignored/v3/modules/modules.json ./gradlew :sdk-android:retrievalLab
+ *   MC_CORPUS=path/to/modules.json ./gradlew :sdk-android:retrievalLab
  */
 tasks.register<JavaExec>("retrievalLab") {
     group = "verification"
