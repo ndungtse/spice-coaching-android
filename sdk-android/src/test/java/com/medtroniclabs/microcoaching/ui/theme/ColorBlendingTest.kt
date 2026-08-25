@@ -28,7 +28,9 @@ class ColorBlendingTest {
     )
 
     @Test
-    fun `blending the brand primary at 70 percent gives the documented user bubble`() {
+    fun `blending the brand primary at 70 percent composites in sRGB not perceptually`() {
+        // The value Compose's own lerp would give here is #556CD7. This is the whole
+        // reason blendOver exists rather than delegating to lerp.
         assertEquals("665BD2", hex(blendOver(white, primary, 0.70f)))
     }
 
@@ -53,19 +55,22 @@ class ColorBlendingTest {
     }
 
     @Test
-    fun `the derived user bubble clears WCAG AA for white text`() {
-        val bubble = blendOver(white, primary, 0.70f)
-        assertTrue(
-            "expected >= 4.5:1, was ${bubble.contrastAgainst(white)}",
-            bubble.contrastAgainst(white) >= 4.5f,
-        )
+    fun `the old hardcoded user bubble did not clear WCAG AA`() {
+        // Documents why moving the bubble onto the brand colour was an accessibility
+        // improvement rather than merely a restyle. If this ever passes, the premise
+        // has shifted.
+        assertTrue(Color(0xFF0085CA).contrastAgainst(white) < 4.5f)
     }
 
     @Test
-    fun `the old hardcoded user bubble did not clear WCAG AA`() {
-        // Documents why the bubble restyle is an accessibility improvement rather than
-        // merely a brand change. If this ever passes, the premise has shifted.
-        assertTrue(Color(0xFF0085CA).contrastAgainst(white) < 4.5f)
+    fun `a blend that is too light for white and too dark for black can exist`() {
+        // Why the outgoing bubble is no longer a blend. Blending the UHIS magenta to
+        // 85% lands in a band where neither on-colour clears AA: white scores 3.96 and
+        // near-black 4.49. A dark brand hue has no such band, which is exactly the
+        // problem — the safe blend factor depends on the host's hue.
+        val magentaAt85 = blendOver(white, Color(0xFFD6218C), 0.85f)
+        assertTrue(magentaAt85.contrastAgainst(white) < 4.5f)
+        assertTrue(magentaAt85.contrastAgainst(Color(0xFF101828)) < 4.5f)
     }
 
     @Test

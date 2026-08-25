@@ -36,9 +36,24 @@ class CoachingExtendedColors internal constructor(
     val lockedSurface: Color,
     val lockedOutline: Color,
     val categoryTags: List<CategoryTagColors>,
-    /** Outgoing chat bubble. Derived: `primary` at 70% over `surface`. */
+    /**
+     * Outgoing chat bubble: the brand colour at full strength, as most chat UIs do it.
+     *
+     * A semantic alias for `primary` rather than a blend. Earlier revisions tinted it
+     * (70%, then 85%), but the right blend factor turned out to depend on the brand
+     * hue's luminance: blending a dark blue stays dark enough for white text from 70%
+     * up, while a light magenta does not until 90%, leaving an 85-95% band where neither
+     * white nor black clears WCAG AA. Full strength has no such cliff.
+     */
     val userBubble: Color,
-    /** Text on [userBubble], chosen by contrast so a pale brand colour stays readable. */
+    /**
+     * Text on [userBubble] — this is `onPrimary`, deliberately not picked by contrast.
+     *
+     * The bubble IS `primary`, so it must agree with every other primary-coloured
+     * surface (the screen header, filled buttons) about what goes on top. A bubble that
+     * contrast-picked its own label could render dark text on the same colour the header
+     * renders white text on.
+     */
     val onUserBubble: Color,
     /** Incoming chat bubble. Derived: `primary` at 6% over `surface`. */
     val assistantBubble: Color,
@@ -55,7 +70,6 @@ class CoachingExtendedColors internal constructor(
  * header and the badge labels without a host naming any of them.
  */
 fun CoachingColors.extended(): CoachingExtendedColors {
-    val user = blendOver(surface, primary, 0.70f)
     val assistant = blendOver(surface, primary, 0.06f)
     return CoachingExtendedColors(
         textStrong = textStrong,
@@ -76,8 +90,8 @@ fun CoachingColors.extended(): CoachingExtendedColors {
         lockedSurface = lockedSurface,
         lockedOutline = lockedOutline,
         categoryTags = categoryTags,
-        userBubble = user,
-        onUserBubble = onColorFor(user, light = onPrimary, dark = textStrong),
+        userBubble = primary,
+        onUserBubble = onPrimary,
         assistantBubble = assistant,
         onAssistantBubble = onColorFor(assistant, light = onPrimary, dark = textStrong),
         headerGradient = listOf(primary, blendOver(surface, primary, 0.85f)),

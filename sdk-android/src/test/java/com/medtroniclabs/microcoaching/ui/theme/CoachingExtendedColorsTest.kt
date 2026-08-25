@@ -48,8 +48,16 @@ class CoachingExtendedColorsTest {
     }
 
     @Test
-    fun `the user bubble is derived from primary not from a token`() {
-        assertEquals("665BD2", hex(ext.userBubble))
+    fun `the user bubble is the brand colour at full strength`() {
+        assertEquals(CoachingColors.Spice.primary, ext.userBubble)
+        assertEquals("2514BE", hex(ext.userBubble))
+    }
+
+    @Test
+    fun `the user bubble label agrees with every other primary surface`() {
+        // Not contrast-picked: the bubble IS primary, so a bubble that chose its own
+        // label could put dark text on the colour the screen header puts white text on.
+        assertEquals(CoachingColors.Spice.onPrimary, ext.onUserBubble)
     }
 
     @Test
@@ -61,6 +69,13 @@ class CoachingExtendedColorsTest {
     fun `bubble on-colours clear WCAG AA against their bubbles`() {
         assertTrue(ext.userBubble.contrastAgainst(ext.onUserBubble) >= 4.5f)
         assertTrue(ext.assistantBubble.contrastAgainst(ext.onAssistantBubble) >= 4.5f)
+    }
+
+    @Test
+    fun `the UHIS magenta clears AA on the bubble at full strength`() {
+        // The hue that failed at 85%. At full strength white reaches 4.71:1.
+        val uhis = CoachingColors.Spice.copy(primary = Color(0xFFD6218C)).extended()
+        assertTrue(uhis.userBubble.contrastAgainst(uhis.onUserBubble) >= 4.5f)
     }
 
     @Test
@@ -86,19 +101,15 @@ class CoachingExtendedColorsTest {
         // What matters is that the derivation tracks primary rather than a stale token.
         assertNotEquals(ext.userBubble, teal.userBubble)
         assertNotEquals(ext.assistantBubble, teal.assistantBubble)
+        assertEquals(Color(0xFF00695C), teal.userBubble)
         assertEquals(Color(0xFF00695C), teal.headerGradient[0])
         assertNotEquals(ext.headerGradient[1], teal.headerGradient[1])
     }
 
     @Test
-    fun `a pale primary flips the attention and bubble on-colours to dark for contrast`() {
-        val pale = CoachingColors.Spice.copy(
-            primary = Color(0xFFFFE082),
-            attention = Color(0xFFFFE082),
-        ).extended()
-        assertEquals(pale.textStrong, pale.onUserBubble)
+    fun `a pale attention colour flips its label to dark for contrast`() {
+        val pale = CoachingColors.Spice.copy(attention = Color(0xFFFFE082)).extended()
         assertEquals(pale.textStrong, pale.onAttention)
-        assertTrue(pale.userBubble.contrastAgainst(pale.onUserBubble) >= 4.5f)
         assertTrue(pale.attention.contrastAgainst(pale.onAttention) >= 4.5f)
     }
 }
