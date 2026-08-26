@@ -1,5 +1,6 @@
 package com.medtroniclabs.microcoaching.ai.retrieval
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -240,5 +241,37 @@ class ClinicalSynonymMapTest {
         // Exact-token gate: "benefits" must not trigger the "fits" bridge.
         val w = ClinicalSynonymMap.expandQueryWeighted(listOf("benefits", "of", "anc")) { 0 }
         assertFalse("'benefits' must not pull in convulsion vocabulary", w.containsKey("convulsion"))
+    }
+
+    // ── edema group: transliteration variants ─────────────────────────────────
+
+    @Test
+    fun `edema group bridges the MLKit spelling to the corpus spelling`() {
+        // MLKit EN→BN writes "এডিমা"; the authored corpus writes "ইডিমা". The two
+        // share no token, so either spelling must pull in the other or an
+        // English-mode question about swelling cannot reach the cards that answer it.
+        val fromMlkit = ClinicalSynonymMap.expandQuery(listOf("এডিমা")).toSet()
+        assertTrue("এডিমা must expand to ইডিমা", fromMlkit.contains("ইডিমা"))
+
+        val fromCorpus = ClinicalSynonymMap.expandQuery(listOf("ইডিমা")).toSet()
+        assertTrue("ইডিমা must expand to এডিমা", fromCorpus.contains("এডিমা"))
+    }
+
+    @Test
+    fun `edema group carries EN and BN swelling vocabulary`() {
+        val out = ClinicalSynonymMap.expandQuery(listOf("edema")).toSet()
+        assertTrue(out.contains("ইডিমা"))
+        assertTrue(out.contains("ফোলা"))
+    }
+
+    // ── প্রেশার bridge: CHW register spelling (golden-benchmark gap) ───────────
+
+    @Test
+    fun `preshar with sh spelling bridges to blood-pressure vocabulary`() {
+        // CHWs type প্রেশার (শ); only প্রেসার (স) was bridged. The word exists in no
+        // card body, so with df=0 the bridge target must arrive at full weight.
+        val w = ClinicalSynonymMap.expandQueryWeighted(listOf("প্রেশার")) { 0 }
+        assertTrue("প্রেশার must bridge to রক্তচাপ", w.containsKey("রক্তচাপ"))
+        assertEquals(1.0f, w.getValue("রক্তচাপ"), 0.001f)
     }
 }

@@ -4,6 +4,7 @@ import android.util.Log
 import com.medtroniclabs.microcoaching.MicroCoachingConfig
 import com.medtroniclabs.microcoaching.ai.retrieval.ModuleKnowledgeIndex
 import com.medtroniclabs.microcoaching.ai.retrieval.RetrievalHintOverlay
+import com.medtroniclabs.microcoaching.ai.retrieval.ScopeClassifier
 import com.medtroniclabs.microcoaching.data.db.dao.ModuleDao
 import com.medtroniclabs.microcoaching.data.db.entity.sortedForDisplay
 import kotlinx.coroutines.CoroutineScope
@@ -37,6 +38,17 @@ internal class ChatKnowledgeIndexBootstrap(
     /** In-memory BM25 index over the on-device module corpus. `empty()` until [ensure] runs. */
     val index: StateFlow<ModuleKnowledgeIndex> = _index.asStateFlow()
 
+    private val _scope = MutableStateFlow(ScopeClassifier.buildFrom(emptyList()))
+
+    /**
+     * Scope/evidence vocabulary over the SAME modules as [index]. The two must be built
+     * from one corpus: retrieval can surface a card from any indexed module, and
+     * [com.medtroniclabs.microcoaching.ai.retrieval.ServeDecision] judges that card
+     * against this gazetteer. A narrower vocabulary here makes a card's own topic
+     * invisible to the gate, which then reads the hit as having no evidence.
+     */
+    val scopeClassifier: StateFlow<ScopeClassifier> = _scope.asStateFlow()
+
     @Volatile private var started = false
 
     /**
@@ -63,15 +75,16 @@ internal class ChatKnowledgeIndexBootstrap(
                 }
                 .conflate()
                 .collect { modules ->
+                    // Retired families are dropped here rather than inside the index
+                    // build, so the index and the vocabulary see one identical list.
+                    val retired = retiredFamilyIds()
                     val indexedModules = RetrievalHintOverlay.apply(
-                        modules = modules.sortedForDisplay(),
+                        modules = modules.sortedForDisplay().filter { it.moduleFamilyId !in retired },
                         assets = config.context.assets,
                         enabled = config.enableRetrievalHintFixtureOverlay,
                     )
-                    _index.value = ModuleKnowledgeIndex.build(
-                        indexedModules,
-                        retiredFamilyIds = retiredFamilyIds(),
-                    )
+                    _index.value = ModuleKnowledgeIndex.build(indexedModules)
+                    _scope.value = ScopeClassifier.buildFrom(indexedModules)
                     delay(RECOMPUTE_THROTTLE_MS)
                 }
         }

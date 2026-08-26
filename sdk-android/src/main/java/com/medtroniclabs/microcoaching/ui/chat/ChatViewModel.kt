@@ -24,7 +24,6 @@ import com.medtroniclabs.microcoaching.ai.retrieval.ChatRefusal
 import com.medtroniclabs.microcoaching.ai.retrieval.GroundingChunk
 import com.medtroniclabs.microcoaching.ai.retrieval.GroundingSelector
 import com.medtroniclabs.microcoaching.ai.retrieval.ModuleKnowledgeIndex
-import com.medtroniclabs.microcoaching.ai.retrieval.OffTopicGuard
 import com.medtroniclabs.microcoaching.ai.retrieval.ScopeClassifier
 import com.medtroniclabs.microcoaching.ai.voice.CoachingTtsHelper
 import com.medtroniclabs.microcoaching.ai.voice.TtsState
@@ -1287,10 +1286,10 @@ class ChatViewModel(
          */
         internal const val GROUNDING_K = 3
 
-        // The groundedness floor and the streamed-response cap are now tunable at
-        // runtime via [com.medtroniclabs.microcoaching.ChatTuning] (groundednessFloor /
-        // streamCapChars), set through MicroCoachingSDK.Builder.chatTuning(...). They
-        // used to be the fixed constants GROUNDEDNESS_FLOOR=0.25 and STREAM_CAP_CHARS=700.
+        // The groundedness floor and the streamed-response cap live in
+        // [com.medtroniclabs.microcoaching.ChatTuning] (groundednessFloor /
+        // streamCapChars), so hosts can set them through
+        // MicroCoachingSDK.Builder.chatTuning(...).
 
         /** Sentence terminators recognised by [trimToCompleteSentence] — EN + Bangla danda. */
         private val SENTENCE_TERMINATORS = charArrayOf('.', '!', '?', '।')

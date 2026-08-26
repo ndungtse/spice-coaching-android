@@ -18,7 +18,7 @@ import com.medtroniclabs.microcoaching.ai.retrieval.ChatRefusal
 import com.medtroniclabs.microcoaching.ai.retrieval.GroundingChunk
 import com.medtroniclabs.microcoaching.ai.retrieval.GroundingSelector
 import com.medtroniclabs.microcoaching.ai.retrieval.ModuleKnowledgeIndex
-import com.medtroniclabs.microcoaching.ai.retrieval.OffTopicGuard
+import com.medtroniclabs.microcoaching.ai.retrieval.ServeDecision
 import com.medtroniclabs.microcoaching.ai.retrieval.ScopeClassifier
 import com.medtroniclabs.microcoaching.ai.voice.CoachingTtsHelper
 import com.medtroniclabs.microcoaching.network.RagQueryRequest
@@ -131,35 +131,35 @@ internal suspend fun ChatViewModel.serveGroundingFallbackOrRefuse(
     queryForSafety: String,
     clinicalTerms: Set<String>,
 ) {
-    val fallbackHit = OffTopicGuard.bestFallbackHit(
+    // The model's own answer has already been rejected, so the card is all that is left
+    // to serve. The same [ServeDecision] the serve paths use decides whether any card
+    // has real question↔evidence — groundedness and the L4 validator both compare the
+    // answer to the references, so a faithful summary of the wrong card passes them.
+    // On top of the evidence gate, the fallback keeps its own minimum score.
+    val decision = ServeDecision.decide(
         query = queryForSafety,
         hits = grounding,
         clinicalTerms = clinicalTerms,
-        minScore = config.chatTuning.minFallbackServeScore,
+        tuning = config.chatTuning.serve,
+        isBanglaTurn = isBangla,
     )
-    // The model's own answer has already been rejected, so the card is all that is left
-    // to serve — and nothing upstream has checked that the card is about the QUESTION.
-    // Groundedness and the L4 validator both compare the answer to the references, so a
-    // faithful summary of the wrong card passes them; retrieval score cannot help either
-    // (measured: wrong cards score higher than right ones). Require the card to share at
-    // least one topical word with the question — anything beyond "both mention pregnant
-    // women" — and refuse honestly when it does not.
-    val topicallyRelated = fallbackHit != null &&
-        OffTopicGuard.sharesTopicalTerm(queryForSafety, fallbackHit)
-    if (fallbackHit == null || !topicallyRelated) {
-        val why = if (fallbackHit == null) "weak/irrelevant grounding" else "top card is topically unrelated"
+    val fallbackHit = (decision as? ServeDecision.Decision.Serve)?.hit
+        ?.takeIf { it.score >= config.chatTuning.minFallbackServeScore }
+    if (fallbackHit == null) {
+        val why = when (decision) {
+            is ServeDecision.Decision.Refuse -> "no evidence-bearing grounding (${decision.reason})"
+            is ServeDecision.Decision.Serve -> "decided card below minFallbackServeScore"
+        }
         Log.i(
             ChatViewModel.TRACE_TAG,
             "fallback-refusal: refusing instead of serving — $why " +
-                "topScore=${grounding.firstOrNull()?.score} " +
-                "card=${fallbackHit?.chunkId ?: "∅"} reason=${validatorReason ?: "∅"}",
+                "topScore=${grounding.firstOrNull()?.score} reason=${validatorReason ?: "∅"}",
         )
         serveRefusal(
             ChatRefusal.NoGround,
             groundedFrom = grounding.map { it.chunkId },
             topScore = grounding.firstOrNull()?.score,
-            validatorReason = if (fallbackHit == null) validatorReason
-            else listOfNotNull(validatorReason, "topical_miss").joinToString(";"),
+            validatorReason = listOfNotNull(validatorReason, "no_evidence").joinToString(";"),
         )
         return
     }

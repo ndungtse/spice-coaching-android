@@ -415,6 +415,35 @@ data class ChatTuning(
     val enableDosageGuard: Boolean = true,
     val enableDrugGuard: Boolean = true,
     val llmContextCards: Int = 1,
+    val serve: ServeTuning = ServeTuning(),
+)
+
+/**
+ * Score bounds for the offline serve/refuse decision
+ * ([com.medtroniclabs.microcoaching.ai.retrieval.ServeDecision]). Evidence decides
+ * whether a card may be served at all; these decide when a match is too weak to
+ * trust regardless.
+ *
+ * Floors are per-language because BM25 scores are not comparable across them: a
+ * native Bangla query scores far below the same question translated into the index's
+ * language, so one constant cannot gate both without either over-refusing Bangla or
+ * under-refusing English.
+ *
+ * @property bnScoreFloor Minimum score for a hit to be served on a Bangla turn.
+ * @property enScoreFloor Minimum score for a hit to be served on an English turn.
+ * @property promoteRatio A hit may be served ahead of BM25 rank-1 only while it
+ *           retains at least this fraction of rank-1's score.
+ * @property bigramRescueScore Rescue band for mangled input (OCR, mistyped Bangla).
+ *           Such a query matches no term, yet when it is a garbled rendition of a
+ *           card's own words the character-bigram channel drives BM25 far above
+ *           anything a topic mismatch reaches, so rank-1 is served without term
+ *           evidence at or above this score.
+ */
+data class ServeTuning(
+    val bnScoreFloor: Float = 25f,
+    val enScoreFloor: Float = 40f,
+    val promoteRatio: Float = 0.55f,
+    val bigramRescueScore: Float = 250f,
 )
 
 /**
