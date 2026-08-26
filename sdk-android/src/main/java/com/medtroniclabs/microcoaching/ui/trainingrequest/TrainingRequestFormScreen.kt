@@ -55,9 +55,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.ui.common.SdkScreenHeader
 import com.medtroniclabs.microcoaching.ui.common.translatedText
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlue
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueContainer
-import com.medtroniclabs.microcoaching.ui.theme.SurfaceMuted
 
 /**
  * Training-request form: intro description, module selector (bottom-sheet
@@ -88,7 +85,7 @@ fun TrainingRequestFormScreen(
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize().background(SurfaceMuted)) {
+    Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainerLow)) {
         SdkScreenHeader(
             title = stringResource(R.string.training_request_form_title),
             onBack = onBack,
@@ -145,9 +142,9 @@ fun TrainingRequestFormScreen(
                     )
                 },
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = SpiceBlue,
-                    unfocusedContainerColor = Color.White,
-                    focusedContainerColor = Color.White,
+                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                    focusedContainerColor = MaterialTheme.colorScheme.surface,
                 ),
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -171,7 +168,7 @@ fun TrainingRequestFormScreen(
                 onClick = vm::submit,
                 enabled = uiState.canSubmit,
                 shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = SpiceBlue),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 if (uiState.submitting) {
@@ -218,13 +215,13 @@ private fun FormDescriptionCard() {
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .background(SpiceBlueContainer, RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(12.dp))
             .padding(horizontal = 16.dp, vertical = 12.dp),
     ) {
         Icon(
             imageVector = Icons.Outlined.School,
             contentDescription = null,
-            tint = SpiceBlue,
+            tint = MaterialTheme.colorScheme.primary,
             modifier = Modifier.size(24.dp),
         )
         Spacer(Modifier.padding(start = 12.dp))
@@ -252,7 +249,7 @@ private fun ModuleSelectorField(
                 Icon(
                     imageVector = Icons.Filled.ArrowDropDown,
                     contentDescription = null,
-                    tint = SpiceBlue,
+                    tint = MaterialTheme.colorScheme.primary,
                 )
             },
             // Disabled so the read-only field never grabs focus/IME; restyled to
@@ -261,7 +258,7 @@ private fun ModuleSelectorField(
                 disabledTextColor = MaterialTheme.colorScheme.onBackground,
                 disabledBorderColor = MaterialTheme.colorScheme.outline,
                 disabledPlaceholderColor = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f),
-                disabledContainerColor = Color.White,
+                disabledContainerColor = MaterialTheme.colorScheme.surface,
             ),
             modifier = Modifier.fillMaxWidth(),
         )
@@ -304,9 +301,9 @@ private fun CustomModuleTitleField(
             )
         },
         colors = OutlinedTextFieldDefaults.colors(
-            focusedBorderColor = SpiceBlue,
-            unfocusedContainerColor = Color.White,
-            focusedContainerColor = Color.White,
+            focusedBorderColor = MaterialTheme.colorScheme.primary,
+            unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+            focusedContainerColor = MaterialTheme.colorScheme.surface,
         ),
         modifier = Modifier.fillMaxWidth(),
     )
@@ -327,7 +324,7 @@ private fun ModulePickerBottomSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = Color.White,
+        containerColor = MaterialTheme.colorScheme.surface,
     ) {
         Column(modifier = Modifier.fillMaxWidth().fillMaxHeight(0.85f)) {
             Text(
@@ -341,7 +338,7 @@ private fun ModulePickerBottomSheet(
                 onValueChange = { query = it },
                 placeholder = { Text(stringResource(R.string.training_request_picker_search_hint)) },
                 singleLine = true,
-                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = SpiceBlue),
+                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = MaterialTheme.colorScheme.primary),
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
             )
             // Always-visible escape hatch into "suggest a new module" mode,
@@ -355,21 +352,21 @@ private fun ModulePickerBottomSheet(
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp)
                     .clip(RoundedCornerShape(10.dp))
-                    .background(SpiceBlueContainer)
+                    .background(MaterialTheme.colorScheme.primaryContainer)
                     .clickable { onSuggestNew(query.trim()) }
                     .padding(horizontal = 14.dp, vertical = 12.dp),
             ) {
                 Icon(
                     imageVector = Icons.Filled.Add,
                     contentDescription = null,
-                    tint = SpiceBlue,
+                    tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(20.dp),
                 )
                 Spacer(Modifier.padding(start = 8.dp))
                 Text(
                     text = stringResource(R.string.training_request_picker_suggest_new),
                     style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                    color = SpiceBlue,
+                    color = MaterialTheme.colorScheme.primary,
                 )
             }
             Spacer(Modifier.height(4.dp))
@@ -388,7 +385,7 @@ private fun ModulePickerBottomSheet(
                         Button(
                             onClick = { onSuggestNew(query.trim()) },
                             shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = SpiceBlue),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                         ) {
                             Text(
                                 text = stringResource(

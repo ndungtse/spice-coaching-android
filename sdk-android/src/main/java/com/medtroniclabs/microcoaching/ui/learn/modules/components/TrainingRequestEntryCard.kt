@@ -26,8 +26,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.medtroniclabs.microcoaching.R
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlue
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueContainer
 
 /**
  * SK-only entry into the training-request hub — a slim tappable card below
@@ -38,7 +36,7 @@ import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueContainer
 fun TrainingRequestEntryCard(onClick: () -> Unit) {
     Card(
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
         modifier = Modifier
             .fillMaxWidth()
@@ -53,12 +51,12 @@ fun TrainingRequestEntryCard(onClick: () -> Unit) {
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
                     .size(40.dp)
-                    .background(SpiceBlueContainer, CircleShape),
+                    .background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
             ) {
                 Icon(
                     imageVector = Icons.Outlined.School,
                     contentDescription = null,
-                    tint = SpiceBlue,
+                    tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(22.dp),
                 )
             }
@@ -80,7 +78,7 @@ fun TrainingRequestEntryCard(onClick: () -> Unit) {
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                 contentDescription = stringResource(R.string.training_requests_entry_view),
-                tint = SpiceBlue,
+                tint = MaterialTheme.colorScheme.primary,
             )
         }
     }

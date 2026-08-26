@@ -35,11 +35,9 @@ import androidx.compose.ui.unit.dp
 import com.medtroniclabs.microcoaching.MicroCoachingSDK
 import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.ui.SdkLocalizedTheme
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlue
 import kotlinx.coroutines.flow.MutableStateFlow
 
 /** Bell indicator colour (matches the host's alert red). */
-private val AlertRed = Color(0xFFD0342C)
 
 /**
  * Self-contained "Coaching" tile for the SPICE home menu grid. The host drops this
@@ -71,7 +69,7 @@ fun CoachingGridTile(
             Card(
                 onClick = onClick,
                 shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
             ) {
                 // Box so the assignment indicators overlay the top-end corner without
@@ -89,7 +87,7 @@ fun CoachingGridTile(
                         Icon(
                             imageVector = Icons.Outlined.School,
                             contentDescription = null,
-                            tint = SpiceBlue,
+                            tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(72.dp),
                         )
                         Spacer(Modifier.height(20.dp))
@@ -97,7 +95,7 @@ fun CoachingGridTile(
                             text = label.uppercase(),
                             style = MaterialTheme.typography.titleMedium
                                 .copy(fontWeight = FontWeight.Bold),
-                            color = SpiceBlue,
+                            color = MaterialTheme.colorScheme.primary,
                             textAlign = TextAlign.Center,
                         )
                     }
@@ -137,7 +135,7 @@ private fun AssignmentIndicators(
             Icon(
                 imageVector = Icons.Outlined.SmartDisplay,
                 contentDescription = stringResource(R.string.coaching_tile_new_videos),
-                tint = SpiceBlue,
+                tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(18.dp),
             )
         }
@@ -145,7 +143,7 @@ private fun AssignmentIndicators(
             Icon(
                 imageVector = Icons.Outlined.NotificationsActive,
                 contentDescription = stringResource(R.string.coaching_tile_new_modules),
-                tint = AlertRed,
+                tint = MaterialTheme.colorScheme.error,
                 modifier = Modifier.size(18.dp),
             )
         }

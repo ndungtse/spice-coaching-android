@@ -31,8 +31,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueContainer
-import com.medtroniclabs.microcoaching.ui.theme.SurfaceMuted
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.ReadOnlyComposable
 
 /**
  * Reusable skeleton (shimmer) placeholders for list screens, shaped like the real
@@ -60,7 +60,7 @@ private fun rememberShimmerBrush(): Brush {
         label = "skeleton-x",
     )
     return Brush.linearGradient(
-        colors = listOf(SurfaceMuted, HIGHLIGHT, SurfaceMuted),
+        colors = listOf(MaterialTheme.colorScheme.surfaceContainerLow, shimmerHighlight, MaterialTheme.colorScheme.surfaceContainerLow),
         start = Offset(x - SHIMMER_BAND, 0f),
         end = Offset(x, 0f),
     )
@@ -85,7 +85,7 @@ fun ModuleTileSkeleton(modifier: Modifier = Modifier) {
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
     ) {
         Row(
@@ -114,7 +114,7 @@ fun TrainingCardSkeleton(modifier: Modifier = Modifier) {
     Card(
         modifier = modifier.height(220.dp),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
     ) {
         Column(Modifier.fillMaxSize()) {
@@ -144,7 +144,7 @@ fun KnowledgeCardSkeleton(modifier: Modifier = Modifier) {
     Card(
         modifier = modifier.height(200.dp),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
     ) {
         Column(Modifier.fillMaxSize()) {
@@ -203,4 +203,7 @@ fun ModuleTileListSkeleton(
 
 private const val SHIMMER_TRAVEL = 1_000f
 private const val SHIMMER_BAND = 300f
-private val HIGHLIGHT = SpiceBlueContainer.copy(alpha = 0.55f)
+/** Shimmer band colour. A function rather than a val so it can read the host's tokens. */
+private val shimmerHighlight: Color
+    @Composable @ReadOnlyComposable
+    get() = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)

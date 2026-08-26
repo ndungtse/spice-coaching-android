@@ -30,8 +30,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.domain.refresher.RefresherKind
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueContainer
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueDark
+import com.medtroniclabs.microcoaching.ui.theme.CoachingTheme
+import com.medtroniclabs.microcoaching.ui.theme.onColorFor
 
 /**
  * List-row tile for a refresher: leading 56.dp icon block, the kind label, bold title and a
@@ -57,7 +57,7 @@ fun RefresherTile(
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 6.dp),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
     ) {
         Row(
@@ -74,7 +74,7 @@ fun RefresherTile(
             ) {
                 Text(
                     text = stringResource(refresherKindLabel(kind)),
-                    color = SpiceBlueDark,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
                     style = MaterialTheme.typography.labelMedium.copy(
                         fontWeight = FontWeight.SemiBold,
                         letterSpacing = 0.4.sp,
@@ -93,7 +93,7 @@ fun RefresherTile(
                 Text(
                     text = meta,
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFF6B7280),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
@@ -118,13 +118,13 @@ private fun RefresherIconBlock(kind: RefresherKind?, thumbnailUrl: String? = nul
             Box(
                 modifier = Modifier
                     .matchParentSize()
-                    .background(SpiceBlueContainer),
+                    .background(MaterialTheme.colorScheme.primaryContainer),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    tint = SpiceBlueDark,
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
                 )
             }
         },
@@ -136,12 +136,12 @@ internal fun CriticalBadge() {
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(4.dp))
-            .background(Color(0xFFB91C1C))
+            .background(CoachingTheme.colors.attention)
             .padding(horizontal = 6.dp, vertical = 2.dp),
     ) {
         Text(
             text = androidx.compose.ui.res.stringResource(com.medtroniclabs.microcoaching.R.string.badge_critical),
-            color = Color.White,
+            color = CoachingTheme.colors.onAttention,
             style = MaterialTheme.typography.labelSmall.copy(
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 0.5.sp,
@@ -154,9 +154,9 @@ internal fun CriticalBadge() {
 @Composable
 internal fun SeverityChip(severity: String?) {
     val (color, labelRes) = when (severity?.lowercase()) {
-        "high" -> Color(0xFFB91C1C) to R.string.severity_high
-        "moderate" -> Color(0xFFD97706) to R.string.severity_moderate
-        "low" -> SpiceBlueDark to R.string.severity_low
+        "high" -> CoachingTheme.colors.attention to R.string.severity_high
+        "moderate" -> CoachingTheme.colors.warning to R.string.severity_moderate
+        "low" -> MaterialTheme.colorScheme.onPrimaryContainer to R.string.severity_low
         else -> return
     }
     Box(
@@ -167,7 +167,7 @@ internal fun SeverityChip(severity: String?) {
     ) {
         Text(
             text = stringResource(labelRes),
-            color = Color.White,
+            color = onColorFor(color, light = MaterialTheme.colorScheme.onPrimary, dark = CoachingTheme.colors.textStrong),
             style = MaterialTheme.typography.labelSmall.copy(
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 0.5.sp,

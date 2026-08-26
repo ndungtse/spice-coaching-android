@@ -1,6 +1,7 @@
 package com.medtroniclabs.microcoaching
 
 import android.content.Context
+import androidx.compose.material3.Typography
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
@@ -25,6 +26,8 @@ import com.medtroniclabs.microcoaching.progress.moduleIdList
 import com.medtroniclabs.microcoaching.progress.buildModuleCompletion
 import com.medtroniclabs.microcoaching.sdk.chat.ChatKnowledgeIndexBootstrap
 import com.medtroniclabs.microcoaching.sdk.context.ChwContextStore
+import com.medtroniclabs.microcoaching.ui.theme.CoachingColors
+import com.medtroniclabs.microcoaching.ui.theme.coachingTypography
 import com.medtroniclabs.microcoaching.sdk.hooks.handleAssessmentSubmitted
 import com.medtroniclabs.microcoaching.sdk.hooks.handleReferralSubmitted
 import com.medtroniclabs.microcoaching.sdk.morning.MorningSurfaceCoordinator
@@ -1202,6 +1205,8 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
         private var enableMeasureModule: Boolean = false
         private var dataCallback: MicroCoachingDataCallback? = null
         private var uiTheme: CoachingUiTheme = CoachingUiTheme.SYSTEM
+        private var themeColors: CoachingColors = CoachingColors.Spice
+        private var themeTypography: Typography = coachingTypography()
         private var forcedMode: CoachingMode? = null
         // Keep in sync with MicroCoachingConfig.minFreeStorageBytes default (512 MB).
         private var minFreeStorageBytes: Long = 512L * 1024 * 1024
@@ -1306,7 +1311,24 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
         fun enableApplyModule(enabled: Boolean) = apply { enableApplyModule = enabled }
         fun enableMeasureModule(enabled: Boolean) = apply { enableMeasureModule = enabled }
         fun dataCallback(callback: MicroCoachingDataCallback) = apply { dataCallback = callback }
-        /** Set the colour scheme for SDK-owned screens. Default: [CoachingUiTheme.SYSTEM]. */
+        /**
+         * Restyle SDK-owned screens.
+         *
+         * Override only what you need — everything else stays at the SPICE default:
+         *
+         * ```kotlin
+         * .theme(CoachingColors.Spice.copy(primary = Color(0xFF00695C)))
+         * ```
+         *
+         * Chat bubbles, the SK-detail header and progress tracks are derived from
+         * `primary`, so they follow a brand override automatically.
+         */
+        fun theme(colors: CoachingColors) = apply { themeColors = colors }
+
+        /** Set the type scale, e.g. `coachingTypography(fontFamily = MyBrandFont)`. */
+        fun typography(typography: Typography) = apply { themeTypography = typography }
+
+        @Deprecated("Never read by the SDK; dark mode is unsupported. Use theme() instead.")
         fun uiTheme(theme: CoachingUiTheme) = apply { uiTheme = theme }
         /**
          * Force a specific coaching mode regardless of network or RAM state.
@@ -1393,6 +1415,8 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
                 enableApplyModule = enableApplyModule,
                 enableMeasureModule = enableMeasureModule,
                 dataCallback = dataCallback,
+                themeColors = themeColors,
+                themeTypography = themeTypography,
                 uiTheme = uiTheme,
                 forcedMode = forcedMode,
                 minFreeStorageBytes = minFreeStorageBytes,

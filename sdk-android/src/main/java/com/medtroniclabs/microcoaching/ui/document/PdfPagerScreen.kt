@@ -128,7 +128,7 @@ internal fun PdfPagerScreen(
         onDispose { session?.close() }
     }
 
-    Box(modifier = modifier.fillMaxSize().background(Color(0xFFEEEEEE))) {
+    Box(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainerLow)) {
         when {
             // "Unavailable" is reserved for a genuine OPEN failure (corrupt /
             // protected PDF, missing file). Per-page render hiccups degrade to a
@@ -383,7 +383,7 @@ private fun PdfPageItem(
                 modifier = Modifier
                     .fillMaxWidth()
                     .aspectRatio(1f / 1.414f)
-                    .background(Color.White),
+                    .background(MaterialTheme.colorScheme.surface),
             )
         }
     }

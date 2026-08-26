@@ -35,9 +35,7 @@ import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.ui.document.DocumentFileType
 import com.medtroniclabs.microcoaching.ui.document.icon
 import com.medtroniclabs.microcoaching.ui.document.labelRes
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueContainer
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueDark
-import com.medtroniclabs.microcoaching.ui.theme.SpiceNavy
+import com.medtroniclabs.microcoaching.ui.theme.CoachingTheme
 
 /**
  * Horizontal Knowledge-section card for a **source document**.
@@ -69,7 +67,7 @@ fun KnowledgeCard(
         modifier = modifier
             .height(200.dp),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -96,7 +94,7 @@ fun KnowledgeCard(
                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
-                    color = SpiceNavy,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
                 Box(modifier = Modifier.weight(1f))
                 Row(
@@ -108,13 +106,13 @@ fun KnowledgeCard(
                         contentDescription = stringResource(
                             if (cached) R.string.knowledge_view_cd else R.string.modules_download_cd,
                         ),
-                        tint = SpiceBlueDark,
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
                         modifier = Modifier.size(18.dp),
                     )
                     Text(
                         text = stringResource(fileType.labelRes),
                         style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-                        color = SpiceBlueDark,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
                     )
                 }
             }
@@ -142,7 +140,7 @@ internal fun BoxScope.KnowledgeThumbnailFallback(
             .matchParentSize()
             .background(
                 Brush.linearGradient(
-                    colors = listOf(SpiceBlueContainer, Color(0xFFFBEFEA)),
+                    colors = listOf(MaterialTheme.colorScheme.primaryContainer, CoachingTheme.colors.categoryTags[2].container),
                 ),
             ),
         contentAlignment = Alignment.Center,
@@ -150,7 +148,7 @@ internal fun BoxScope.KnowledgeThumbnailFallback(
         Icon(
             imageVector = fileType.icon,
             contentDescription = null,
-            tint = SpiceBlueDark.copy(alpha = 0.5f),
+            tint = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.5f),
             modifier = Modifier.size(iconSize),
         )
     }

@@ -46,8 +46,6 @@ import androidx.compose.ui.unit.sp
 import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.ui.podashboard.MetricKey
 import com.medtroniclabs.microcoaching.ui.podashboard.PoMetric
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlue
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueContainer
 
 /** Fixed square size so all KPI cards match and their labels get a predictable width. */
 private val MetricCardSize = 110.dp
@@ -63,8 +61,8 @@ private val MetricCardSize = 110.dp
 @Composable
 fun MetricCard(metric: PoMetric, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val alert = metric.key == MetricKey.INACTIVE
-    val iconBg = if (alert) StatusRedBg else SpiceBlueContainer
-    val iconTint = if (alert) StatusRed else SpiceBlue
+    val iconBg = if (alert) StatusRedBg else MaterialTheme.colorScheme.primaryContainer
+    val iconTint = if (alert) StatusRed else MaterialTheme.colorScheme.primary
     val valueColor = if (alert) StatusRed else MaterialTheme.colorScheme.onBackground
     var showInfo by remember { mutableStateOf(false) }
 
@@ -153,7 +151,7 @@ fun MetricCard(metric: PoMetric, onClick: () -> Unit, modifier: Modifier = Modif
                 Button(
                     onClick = { showInfo = false },
                     modifier = Modifier.fillMaxWidth().height(52.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = SpiceBlue),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                 ) {
                     Text(stringResource(R.string.po_metric_info_dismiss))
                 }

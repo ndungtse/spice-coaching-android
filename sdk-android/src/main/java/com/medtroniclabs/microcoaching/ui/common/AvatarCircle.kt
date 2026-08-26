@@ -21,8 +21,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil.compose.SubcomposeAsyncImage
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueContainer
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueDark
 
 /**
  * Circular avatar. Precedence: [imageRes] (local drawable) → [avatarUrl] (network;
@@ -36,8 +34,8 @@ fun AvatarCircle(
     size: Dp = 40.dp,
     avatarUrl: String? = null,
     @DrawableRes imageRes: Int? = null,
-    containerColor: Color = SpiceBlueContainer,
-    contentColor: Color = SpiceBlueDark,
+    containerColor: Color = MaterialTheme.colorScheme.primaryContainer,
+    contentColor: Color = MaterialTheme.colorScheme.onPrimaryContainer,
 ) {
     val initials = remember(name) {
         name.trim().split(" ").filter { it.isNotBlank() }.take(2)

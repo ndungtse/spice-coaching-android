@@ -46,10 +46,7 @@ import com.medtroniclabs.microcoaching.ui.podashboard.components.MutedText
 import com.medtroniclabs.microcoaching.ui.podashboard.components.StatusGreen
 import com.medtroniclabs.microcoaching.ui.podashboard.components.poCard
 import com.medtroniclabs.microcoaching.ui.podashboard.components.FREE_TEXT_MAX_LINES
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlue
-import com.medtroniclabs.microcoaching.ui.theme.SurfaceMuted
 
-private val DividerColor = Color(0xFFEFEFF3)
 
 /**
  * "Top Searched Existing" drill-down: served/requested split at the top,
@@ -68,7 +65,7 @@ fun SearchedModuleDetailScreen(
     val state by vm.uiState.collectAsState()
     val networkAvailable by vm.networkAvailable.collectAsState()
 
-    Column(modifier = Modifier.fillMaxSize().background(SurfaceMuted)) {
+    Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainerLow)) {
         val title = (state as? SearchedModuleDetailUiState.Ready)?.detail?.title
             ?: stringResource(R.string.po_searched_existing_title)
         SdkScreenHeader(title = title, onBack = onBack, onHome = onHome)
@@ -90,7 +87,7 @@ private fun Content(detail: SearchedModuleDetail) {
             modifier = Modifier.fillMaxWidth().poCard().padding(16.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            StatCell(stringResource(R.string.po_searched_served), detail.servedCount, SpiceBlue, Modifier.weight(1f))
+            StatCell(stringResource(R.string.po_searched_served), detail.servedCount, MaterialTheme.colorScheme.primary, Modifier.weight(1f))
             StatCell(stringResource(R.string.po_searched_requested), detail.requestedCount, StatusGreen, Modifier.weight(1f))
         }
 
@@ -110,7 +107,7 @@ private fun Content(detail: SearchedModuleDetail) {
         } else {
             Column(modifier = Modifier.fillMaxWidth().poCard()) {
                 detail.questions.forEachIndexed { i, q ->
-                    if (i > 0) HorizontalDivider(color = DividerColor)
+                    if (i > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     QueryAccordionRow(q, expanded[i] == true) { expanded[i] = !(expanded[i] ?: false) }
                 }
             }
@@ -149,7 +146,7 @@ private fun QueryAccordionRow(item: ModuleQuestionItem, expanded: Boolean, onTog
                 overflow = TextOverflow.Ellipsis,
             )
             Spacer(Modifier.width(8.dp))
-            Text("${item.occurrenceCount}", color = SpiceBlue, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+            Text("${item.occurrenceCount}", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
             Icon(
                 imageVector = if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
                 contentDescription = null,

@@ -25,10 +25,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlue
 
-private val SegmentTrack = Color(0xFFEEEEF3)
-private val SegmentTextMuted = com.medtroniclabs.microcoaching.ui.theme.MutedText
 private val SegmentHeight = 40.dp
 
 /**
@@ -47,7 +44,7 @@ fun SegmentedToggle(
         modifier = modifier
             .height(SegmentHeight)
             .clip(RoundedCornerShape(percent = 50))
-            .background(SegmentTrack)
+            .background(MaterialTheme.colorScheme.surfaceContainerLow)
             .padding(4.dp),
     ) {
         val segmentWidth = maxWidth / count
@@ -62,7 +59,7 @@ fun SegmentedToggle(
                 .width(segmentWidth)
                 .fillMaxHeight()
                 .clip(RoundedCornerShape(percent = 50))
-                .background(SpiceBlue),
+                .background(MaterialTheme.colorScheme.primary),
         )
         Row(modifier = Modifier.fillMaxSize()) {
             options.forEachIndexed { index, label ->
@@ -79,7 +76,7 @@ fun SegmentedToggle(
                 ) {
                     Text(
                         text = label,
-                        color = if (selected) Color.White else SegmentTextMuted,
+                        color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
                         fontWeight = FontWeight.SemiBold,
                         style = MaterialTheme.typography.labelSmall,
                         maxLines = 1,

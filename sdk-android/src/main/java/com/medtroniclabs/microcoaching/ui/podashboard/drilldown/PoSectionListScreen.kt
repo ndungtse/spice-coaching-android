@@ -48,7 +48,6 @@ import com.medtroniclabs.microcoaching.ui.podashboard.components.SkListRow
 import com.medtroniclabs.microcoaching.ui.podashboard.components.SkSearchBar
 import com.medtroniclabs.microcoaching.ui.podashboard.components.TopQueryRow
 import com.medtroniclabs.microcoaching.ui.podashboard.components.poCard
-import com.medtroniclabs.microcoaching.ui.theme.SurfaceMuted
 
 /**
  * Flat, searchable "Show all" list for one dashboard [section] over the selected [range].
@@ -76,7 +75,7 @@ fun PoSectionListScreen(
     var filterIndex by rememberSaveable(section) { mutableIntStateOf(0) }
     val expanded = remember(section) { mutableStateMapOf<Int, Boolean>() }
 
-    Column(modifier = Modifier.fillMaxSize().background(SurfaceMuted)) {
+    Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainerLow)) {
         SdkScreenHeader(title = stringResource(section.titleRes()), onBack = onBack, onHome = onHome)
         when (val s = state) {
             is PoSectionListUiState.Loading -> CenterProgress()

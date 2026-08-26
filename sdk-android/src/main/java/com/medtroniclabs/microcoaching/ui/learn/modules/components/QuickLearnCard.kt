@@ -25,8 +25,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.medtroniclabs.microcoaching.R
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlue
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueDark
 
 /**
  * Blue gradient banner shown at the top of the modules screen. Renders one
@@ -53,7 +51,7 @@ fun QuickLearnCard(
             .padding(horizontal = 16.dp, vertical = 8.dp)
             .clip(RoundedCornerShape(20.dp))
             .background(
-                Brush.linearGradient(listOf(SpiceBlue, SpiceBlueDark)),
+                Brush.linearGradient(listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.onPrimaryContainer)),
             )
             .clickable(onClick = onClick)
             .padding(20.dp),

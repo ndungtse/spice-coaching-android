@@ -40,11 +40,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.foundation.layout.PaddingValues
 import com.medtroniclabs.microcoaching.R
-import com.medtroniclabs.microcoaching.ui.theme.ErrorRedContainer
-import com.medtroniclabs.microcoaching.ui.theme.ErrorRedDark
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlue
-import com.medtroniclabs.microcoaching.ui.theme.SpiceGreenContainer
-import com.medtroniclabs.microcoaching.ui.theme.SpiceGreenDark
+import com.medtroniclabs.microcoaching.ui.theme.CoachingTheme
 
 /**
  * Overlay shown after the CHW selects an answer.
@@ -75,8 +71,8 @@ fun AnswerFeedbackOverlay(
     explanation: String = "",
     onNext: (() -> Unit)? = null,
 ) {
-    val backgroundColor = if (isCorrect) SpiceGreenContainer else ErrorRedContainer
-    val textColor = if (isCorrect) SpiceGreenDark else ErrorRedDark
+    val backgroundColor = if (isCorrect) CoachingTheme.colors.successContainer else MaterialTheme.colorScheme.errorContainer
+    val textColor = if (isCorrect) CoachingTheme.colors.onSuccessContainer else MaterialTheme.colorScheme.onErrorContainer
     val headline = if (isCorrect) stringResource(R.string.quiz_correct) else stringResource(R.string.quiz_incorrect)
 
     // Floating "+N pts" animation (starts immediately on render)
@@ -127,7 +123,7 @@ fun AnswerFeedbackOverlay(
                         .navigationBarsPadding(),
                     shape = RoundedCornerShape(28.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = SpiceBlue,
+                        containerColor = MaterialTheme.colorScheme.primary,
                     ),
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
                 ) {
@@ -152,7 +148,7 @@ fun AnswerFeedbackOverlay(
         //     ) {
         //         Text(
         //             text = stringResource(R.string.quiz_points, pointValue),
-        //             color = Color(0xFF1B6B4A),
+        //             color = CoachingTheme.colors.success,
         //             fontWeight = FontWeight.Bold,
         //             fontSize = 18.sp,
         //             modifier = Modifier.padding(end = 16.dp),

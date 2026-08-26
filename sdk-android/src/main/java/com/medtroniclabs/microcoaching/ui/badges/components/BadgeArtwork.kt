@@ -22,11 +22,10 @@ import androidx.compose.ui.unit.dp
 import coil.compose.rememberAsyncImagePainter
 import com.medtroniclabs.microcoaching.ui.asset.rememberCachedImageFileForUrl
 import com.medtroniclabs.microcoaching.ui.badges.BadgeState
-import com.medtroniclabs.microcoaching.ui.theme.SpiceGreen
-import com.medtroniclabs.microcoaching.ui.theme.SurfaceMuted
+import androidx.compose.material3.MaterialTheme
+import com.medtroniclabs.microcoaching.ui.theme.CoachingTheme
 
 /** Ring colour for the locked state — a soft neutral grey so it recedes behind earned rings. */
-private val LockedRing = Color(0xFFC3C9D4)
 
 /**
  * The circular badge medallion artwork, shared by the Badges grid tile ([BadgeMedallion])
@@ -59,7 +58,7 @@ fun BadgeArtwork(
     val greyscale = remember {
         ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0f) })
     }
-    val ringColor = if (locked) LockedRing else SpiceGreen
+    val ringColor = if (locked) CoachingTheme.colors.lockedOutline else CoachingTheme.colors.success
     val cachedFile by rememberCachedImageFileForUrl(imageUrl)
 
     Box(modifier = modifier.size(size), contentAlignment = Alignment.Center) {
@@ -79,7 +78,7 @@ fun BadgeArtwork(
                     modifier = Modifier.size(artSize).clip(CircleShape),
                 )
             } else {
-                Box(Modifier.size(artSize).background(SurfaceMuted, CircleShape))
+                Box(Modifier.size(artSize).background(MaterialTheme.colorScheme.surfaceContainerLow, CircleShape))
             }
         }
     }

@@ -15,18 +15,19 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.medtroniclabs.microcoaching.R
+import com.medtroniclabs.microcoaching.ui.theme.CoachingTheme
+import com.medtroniclabs.microcoaching.ui.theme.onColorFor
 
-private val AchievementOrange = Color(0xFFF57C00)
 
 /** Celebratory banner shown when the SK is ranked #1 in their group. */
 @Composable
 fun AchievementBanner(groupName: String, modifier: Modifier = Modifier) {
     Box(
-        modifier = modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(AchievementOrange).padding(16.dp),
+        modifier = modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(CoachingTheme.colors.warning).padding(16.dp),
     ) {
         Text(
             text = stringResource(R.string.leaderboard_achievement_leading, groupName),
-            color = Color.White,
+            color = onColorFor(CoachingTheme.colors.warning, light = MaterialTheme.colorScheme.onPrimary, dark = CoachingTheme.colors.textStrong),
             fontWeight = FontWeight.SemiBold,
             style = MaterialTheme.typography.bodyMedium,
         )

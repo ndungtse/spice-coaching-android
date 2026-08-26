@@ -26,7 +26,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.medtroniclabs.microcoaching.R
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlue
 
 /**
  * Bottom sheet shown after a CHW taps thumbs-down on a chat response, inviting
@@ -56,7 +55,7 @@ fun ChatFeedbackNoteSheet(
     ModalBottomSheet(
         onDismissRequest = { onCommit(text) },
         sheetState = sheetState,
-        containerColor = Color.White,
+        containerColor = MaterialTheme.colorScheme.surface,
     ) {
         Column(
             modifier = Modifier
@@ -92,7 +91,7 @@ fun ChatFeedbackNoteSheet(
                     .fillMaxWidth()
                     .height(52.dp),
                 shape = RoundedCornerShape(28.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = SpiceBlue),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
             ) {
                 Text(
                     text = stringResource(R.string.chat_feedback_sheet_submit),

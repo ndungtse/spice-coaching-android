@@ -51,8 +51,7 @@ import androidx.compose.ui.unit.sp
 import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.ui.common.SdkScreenHeader
 import com.medtroniclabs.microcoaching.ui.common.translatedText
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlue
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueContainer
+import com.medtroniclabs.microcoaching.ui.theme.CoachingTheme
 
 /**
  * Module detail screen — flat single-scroll layout:
@@ -91,7 +90,7 @@ fun ModuleDetailScreen(
         // Never compose NOTHING — a bare `return` painted the route white when
         // both the live and cached module were unavailable.
         Box(
-            modifier = Modifier.fillMaxSize().background(Color.White),
+            modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface),
             contentAlignment = Alignment.Center,
         ) {
             CircularProgressIndicator()
@@ -111,7 +110,7 @@ fun ModuleDetailScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.White),
+            .background(MaterialTheme.colorScheme.surface),
     ) {
         SdkScreenHeader(title = module.title, onBack = onBack, onHome = onHome)
 
@@ -143,7 +142,7 @@ fun ModuleDetailScreen(
             Text(
                 text = module.title,
                 style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold, fontSize = 20.sp),
-                color = TitleColor,
+                color = CoachingTheme.colors.textStrong,
             )
 
             // Content-domain tag: Clinical / Digital / Operational.
@@ -182,7 +181,7 @@ fun ModuleDetailScreen(
             Text(
                 text = stringResource(R.string.module_detail_curriculum),
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                color = TitleColor,
+                color = CoachingTheme.colors.textStrong,
             )
             Spacer(Modifier.height(12.dp))
 
@@ -190,7 +189,7 @@ fun ModuleDetailScreen(
                 Text(
                     text = stringResource(R.string.module_detail_learning_cards),
                     style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-                    color = SpiceBlue,
+                    color = MaterialTheme.colorScheme.primary,
                 )
                 Spacer(Modifier.height(8.dp))
 
@@ -200,7 +199,7 @@ fun ModuleDetailScreen(
                         title = translatedText(bn = card.titleBn, en = card.titleEn),
                     )
                     if (index < cards.size - 1) {
-                        HorizontalDivider(color = DividerColor, thickness = 0.5.dp)
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 0.5.dp)
                     }
                 }
             }
@@ -210,7 +209,7 @@ fun ModuleDetailScreen(
                 Text(
                     text = stringResource(R.string.module_detail_quiz_section),
                     style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-                    color = SpiceBlue,
+                    color = MaterialTheme.colorScheme.primary,
                 )
                 Spacer(Modifier.height(8.dp))
                 CurriculumRow(
@@ -236,7 +235,7 @@ fun ModuleDetailScreen(
                     else Icons.Outlined.HearingDisabled,
                     contentDescription = null,
                     modifier = Modifier.size(16.dp),
-                    tint = if (autoSpeakEnabled) SpiceBlue else MetadataColor,
+                    tint = if (autoSpeakEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.width(6.dp))
                 Text(
@@ -249,7 +248,7 @@ fun ModuleDetailScreen(
                 Text(
                     text = stringResource(R.string.module_detail_listen_caption),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MetadataColor,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
 
@@ -284,25 +283,25 @@ private fun StatsRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(SpiceBlueContainer, RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(12.dp))
             .padding(horizontal = 16.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         StatItem(
-            icon = { Icon(Icons.AutoMirrored.Filled.MenuBook, null, Modifier.size(16.dp), tint = SpiceBlue) },
+            icon = { Icon(Icons.AutoMirrored.Filled.MenuBook, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary) },
             value = "$cardCount",
             label = stringResource(R.string.module_detail_cards_stat),
         )
         StatDivider()
         StatItem(
-            icon = { Icon(Icons.Default.HelpOutline, null, Modifier.size(16.dp), tint = SpiceBlue) },
+            icon = { Icon(Icons.Default.HelpOutline, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary) },
             value = "$questionCount",
             label = stringResource(R.string.module_detail_questions_stat),
         )
         StatDivider()
         StatItem(
-            icon = { Icon(Icons.Default.AccessTime, null, Modifier.size(16.dp), tint = SpiceBlue) },
+            icon = { Icon(Icons.Default.AccessTime, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary) },
             value = "$estimatedMinutes",
             label = stringResource(R.string.module_detail_duration_stat),
         )
@@ -315,7 +314,7 @@ private fun StatDivider() {
         modifier = Modifier
             .height(28.dp)
             .width(1.dp)
-            .background(DividerColor),
+            .background(MaterialTheme.colorScheme.outlineVariant),
     )
 }
 
@@ -332,13 +331,13 @@ private fun StatItem(
             Text(
                 text = value,
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                color = TitleColor,
+                color = CoachingTheme.colors.textStrong,
             )
         }
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
-            color = MetadataColor,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
@@ -369,12 +368,12 @@ private fun CurriculumRow(
             modifier = Modifier
                 .size(36.dp)
                 .clip(CircleShape)
-                .background(if (isQuiz) SpiceBlueContainer else IndexBg),
+                .background(MaterialTheme.colorScheme.primaryContainer),
             contentAlignment = Alignment.Center,
         ) {
             Text(
                 text = "%02d".format(number),
-                color = SpiceBlue,
+                color = MaterialTheme.colorScheme.primary,
                 style = MaterialTheme.typography.labelMedium.copy(
                     fontWeight = FontWeight.Bold,
                     fontSize = 13.sp,
@@ -385,20 +384,20 @@ private fun CurriculumRow(
             Text(
                 text = title,
                 style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
-                color = TitleColor,
+                color = CoachingTheme.colors.textStrong,
             )
             subtitle?.let {
                 Text(
                     text = it,
                     style = MaterialTheme.typography.labelSmall,
-                    color = MetadataColor,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
         Icon(
             imageVector = Icons.AutoMirrored.Filled.ArrowForward,
             contentDescription = null,
-            tint = MetadataColor,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.size(16.dp),
         )
     }
@@ -413,8 +412,8 @@ private fun ReadAgainCta(onReadAgain: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color.White)
-            .border(width = 0.5.dp, color = DividerColor)
+            .background(MaterialTheme.colorScheme.surface)
+            .border(width = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
             .navigationBarsPadding()
             .padding(horizontal = 20.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -450,8 +449,8 @@ private fun CtaRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color.White)
-            .border(width = 0.5.dp, color = DividerColor)
+            .background(MaterialTheme.colorScheme.surface)
+            .border(width = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
             .navigationBarsPadding()
             .padding(horizontal = 20.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -500,7 +499,3 @@ private fun moduleSubtitle(module: LearnModule): String {
     return typeDisplay
 }
 
-private val TitleColor = Color(0xFF101828)
-private val MetadataColor = Color(0xFF667085)
-private val DividerColor = Color(0xFFE4E7EC)
-private val IndexBg = Color(0xFFEFF4FF)

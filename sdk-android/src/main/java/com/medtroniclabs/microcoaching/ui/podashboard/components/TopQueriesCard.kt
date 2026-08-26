@@ -24,9 +24,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.style.TextOverflow
 import com.medtroniclabs.microcoaching.ui.podashboard.TopQuery
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlue
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueContainer
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueDark
 
 /**
  * Ranked "Top Queries / Top Searched" card (rank badge · text · count).
@@ -61,10 +58,10 @@ fun TopQueryRow(query: TopQuery, onClick: (() -> Unit)? = null, modifier: Modifi
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
-            modifier = Modifier.size(24.dp).clip(CircleShape).background(SpiceBlueContainer),
+            modifier = Modifier.size(24.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
             contentAlignment = Alignment.Center,
         ) {
-            Text("${query.rank}", color = SpiceBlueDark, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelSmall)
+            Text("${query.rank}", color = MaterialTheme.colorScheme.onPrimaryContainer, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelSmall)
         }
         Spacer(Modifier.width(12.dp))
         Text(
@@ -75,7 +72,7 @@ fun TopQueryRow(query: TopQuery, onClick: (() -> Unit)? = null, modifier: Modifi
             overflow = TextOverflow.Ellipsis,
         )
         Spacer(Modifier.width(8.dp))
-        Text("${query.count}", color = SpiceBlue, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+        Text("${query.count}", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
         if (onClick != null) {
             Spacer(Modifier.width(8.dp))
             Icon(

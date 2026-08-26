@@ -28,6 +28,7 @@ import com.medtroniclabs.microcoaching.ui.SdkLocalizedTheme
 import com.medtroniclabs.microcoaching.ui.flow.CoachingFlowActivity
 import com.medtroniclabs.microcoaching.ui.learn.LearnViewModel
 import com.medtroniclabs.microcoaching.ui.learn.modules.QuickLearnViewModel
+import androidx.compose.material3.MaterialTheme
 
 /**
  * Bottom sheet for the refresher experience. Which phases run — cards, quiz, or both — is
@@ -89,7 +90,7 @@ class RefresherBottomSheet : BottomSheetDialogFragment() {
                             .fillMaxWidth()
                             .height(sheetHeight)
                             .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                            .background(Color.White),
+                            .background(MaterialTheme.colorScheme.surface),
                     ) {
                         RefresherContent(
                             viewModel = viewModel,

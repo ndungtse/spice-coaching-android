@@ -29,7 +29,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.medtroniclabs.microcoaching.R
-import com.medtroniclabs.microcoaching.ui.theme.MutedText
 
 /**
  * How much vertical room a status message claims. The only genuinely orthogonal axis —
@@ -75,9 +74,9 @@ fun ErrorState(
         } else {
             message?.takeIf { it.isNotBlank() } ?: stringResource(R.string.common_error_generic)
         },
-        textColor = if (offline) MutedText else MaterialTheme.colorScheme.error,
+        textColor = if (offline) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
         icon = if (offline) Icons.Filled.CloudOff else Icons.Filled.ErrorOutline,
-        iconTint = if (offline) MutedText else MaterialTheme.colorScheme.error,
+        iconTint = if (offline) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
         action = onRetry?.let { StatusAction(stringResource(R.string.common_retry), it) },
         density = density,
         modifier = modifier,
@@ -97,9 +96,9 @@ fun ErrorState(
 ) {
     StatusCore(
         text = stringResource(error.stringRes),
-        textColor = if (error.isOffline) MutedText else MaterialTheme.colorScheme.error,
+        textColor = if (error.isOffline) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
         icon = if (error.isOffline) Icons.Filled.CloudOff else Icons.Filled.ErrorOutline,
-        iconTint = if (error.isOffline) MutedText else MaterialTheme.colorScheme.error,
+        iconTint = if (error.isOffline) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
         action = onRetry?.let { StatusAction(stringResource(R.string.common_retry), it) },
         density = density,
         modifier = modifier,
@@ -120,9 +119,9 @@ fun EmptyState(
 ) {
     StatusCore(
         text = text,
-        textColor = MutedText,
+        textColor = MaterialTheme.colorScheme.onSurfaceVariant,
         icon = icon,
-        iconTint = MutedText,
+        iconTint = MaterialTheme.colorScheme.onSurfaceVariant,
         action = action,
         density = density,
         modifier = modifier,
@@ -140,7 +139,7 @@ fun NoticeBanner(
     hint: String? = null,
     modifier: Modifier = Modifier,
 ) {
-    val accent = if (tone == NoticeTone.Warning) MaterialTheme.colorScheme.error else MutedText
+    val accent = if (tone == NoticeTone.Warning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -157,7 +156,7 @@ fun NoticeBanner(
             fontWeight = FontWeight.SemiBold,
         )
         if (hint != null) {
-            Text(text = hint, style = MaterialTheme.typography.bodySmall, color = MutedText)
+            Text(text = hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

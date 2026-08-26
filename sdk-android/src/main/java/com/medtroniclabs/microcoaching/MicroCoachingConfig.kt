@@ -1,6 +1,9 @@
 package com.medtroniclabs.microcoaching
 
 import android.content.Context
+import androidx.compose.material3.Typography
+import com.medtroniclabs.microcoaching.ui.theme.CoachingColors
+import com.medtroniclabs.microcoaching.ui.theme.coachingTypography
 import com.medtroniclabs.microcoaching.ai.model.ModelCatalog
 import com.medtroniclabs.microcoaching.ai.model.ModelProvider
 import com.medtroniclabs.microcoaching.ai.model.ModelVariant
@@ -287,6 +290,23 @@ data class MicroCoachingConfig internal constructor(
      * Controls the colour scheme used by SDK-owned screens (e.g. [CoachingFlowActivity]).
      * Default: follows the system setting.
      */
+    /**
+     * Colour tokens for SDK-owned screens. Defaults to the SDK's own SPICE palette.
+     *
+     * Set via [MicroCoachingSDK.Builder.theme]. Init-time only: the SDK owns its own
+     * Compose roots ([CoachingFlowActivity], four bottom-sheet fragments), so a host
+     * cannot supply this through composition from outside.
+     */
+    val themeColors: CoachingColors = CoachingColors.Spice,
+
+    /** Type scale for SDK-owned screens. Set via [MicroCoachingSDK.Builder.typography]. */
+    val themeTypography: Typography = coachingTypography(),
+
+    @Deprecated(
+        "Never read by the SDK. Dark mode is not supported: the bottom-sheet fragments " +
+            "force Theme_Material3_Light_BottomSheetDialog and three manifest activities " +
+            "force Theme.AppCompat.Light.NoActionBar. Use themeColors to restyle instead.",
+    )
     val uiTheme: CoachingUiTheme = CoachingUiTheme.SYSTEM,
 
     // ── Data Access ───────────────────────────────────────────────────────────
@@ -454,7 +474,11 @@ enum class CoachingPersona {
     UNKNOWN,
 }
 
-/** Controls the colour scheme applied to SDK-owned UI screens. */
+/**
+ * Controls the colour scheme applied to SDK-owned UI screens.
+ *
+ * Retained only for source compatibility. See [MicroCoachingConfig.uiTheme].
+ */
 enum class CoachingUiTheme {
     /** Follow the device system setting (default). */
     SYSTEM,

@@ -40,7 +40,8 @@ import com.medtroniclabs.microcoaching.ui.learn.LessonCard
 import com.medtroniclabs.microcoaching.ui.learn.LessonCardAutoSpeak
 import com.medtroniclabs.microcoaching.ui.markdown.MarkdownDefaults
 import com.medtroniclabs.microcoaching.ui.richtext.RichCardBody
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlue
+import com.medtroniclabs.microcoaching.ui.theme.CoachingTheme
+import com.medtroniclabs.microcoaching.ui.theme.trackFor
 
 // ── Cards phase ───────────────────────────────────────────────────────────────
 // Lesson-card rendering + terminal actions for the refresher sheet; RefresherContent
@@ -100,7 +101,7 @@ internal fun RefresherCardSlide(
             Text(
                 text = translatedText(bn = card.titleBn, en = card.titleEn),
                 style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                color = Color(0xFF101828),
+                color = CoachingTheme.colors.textStrong,
                 modifier = Modifier.weight(1f),
             )
             IconButton(onClick = onToggleAutoSpeak) {
@@ -111,7 +112,7 @@ internal fun RefresherCardSlide(
                         if (autoSpeakEnabled) R.string.lesson_player_auto_speak_on
                         else R.string.lesson_player_auto_speak_off,
                     ),
-                    tint = SpiceBlue,
+                    tint = MaterialTheme.colorScheme.primary,
                 )
             }
         }
@@ -119,14 +120,14 @@ internal fun RefresherCardSlide(
         LinearProgressIndicator(
             progress = { (safeIndex + 1f) / cards.size },
             modifier = Modifier.fillMaxWidth(),
-            color = SpiceBlue,
-            trackColor = Color(0xFFE4E7EC),
+            color = MaterialTheme.colorScheme.primary,
+            trackColor = trackFor(MaterialTheme.colorScheme.primary),
         )
         Spacer(Modifier.height(4.dp))
         Text(
             text = "${safeIndex + 1} / ${cards.size}",
             style = MaterialTheme.typography.labelSmall,
-            color = Color(0xFF667085),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.align(Alignment.End),
         )
         Spacer(Modifier.height(12.dp))
@@ -142,7 +143,7 @@ internal fun RefresherCardSlide(
                 RichCardBody(
                     raw = bodyText,
                     modifier = Modifier.fillMaxWidth(),
-                    style = MarkdownDefaults.style(textColor = Color(0xFF344054)),
+                    style = MarkdownDefaults.style(),
                 )
             }
         }
@@ -161,7 +162,7 @@ internal fun RefresherCardSlide(
                 onClick = onNext,
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(28.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = SpiceBlue),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                 contentPadding = buttonContentPadding,
             ) {
                 Text(
@@ -203,7 +204,7 @@ internal fun RefresherTerminalActions(
                 onClick = actions.onNextRefresher,
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(28.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = SpiceBlue),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                 contentPadding = contentPadding,
             ) {
                 Text(
@@ -227,7 +228,7 @@ internal fun RefresherTerminalActions(
                 onClick = actions.onDismiss,
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(28.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = SpiceBlue),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                 contentPadding = contentPadding,
             ) {
                 Text(

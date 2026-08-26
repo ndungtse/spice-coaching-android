@@ -24,14 +24,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import com.medtroniclabs.microcoaching.ui.theme.SpiceGreen
-import com.medtroniclabs.microcoaching.ui.theme.SpiceGreenContainer
-import com.medtroniclabs.microcoaching.ui.theme.SpiceGreenDark
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.ui.learn.LearnModule
+import com.medtroniclabs.microcoaching.ui.theme.CoachingTheme
 
 /**
  * Card tile for a learning module. Used in the legacy [ModuleListContent]
@@ -52,7 +50,7 @@ fun ModuleCard(
             .fillMaxWidth()
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
     ) {
       Column {
@@ -75,14 +73,14 @@ fun ModuleCard(
                 Text(
                     text = module.title,
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                    color = SpiceGreenDark,
+                    color = CoachingTheme.colors.onSuccessContainer,
                     modifier = Modifier.weight(1f),
                 )
                 if (module.status == "completed") {
                     Icon(
                         imageVector = Icons.Default.CheckCircle,
                         contentDescription = stringResource(R.string.learn_completed_cd),
-                        tint = SpiceGreen,
+                        tint = CoachingTheme.colors.success,
                         modifier = Modifier.size(20.dp),
                     )
                 }
@@ -93,7 +91,7 @@ fun ModuleCard(
                 Text(
                     text = module.body,
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFF555555),
+                    color = CoachingTheme.colors.textBody,
                     maxLines = 3,
                 )
             }
@@ -139,8 +137,8 @@ fun DomainChip(domain: String) {
 @Composable
 fun StatusChip(status: String) {
     val (label, bg, fg) = when (status) {
-        "completed"   -> Triple(stringResource(R.string.status_completed), SpiceGreenContainer, SpiceGreenDark)
-        "in_progress" -> Triple(stringResource(R.string.status_in_progress), Color(0xFFFFF3CD), Color(0xFF856404))
+        "completed"   -> Triple(stringResource(R.string.status_completed), CoachingTheme.colors.successContainer, CoachingTheme.colors.onSuccessContainer)
+        "in_progress" -> Triple(stringResource(R.string.status_in_progress), CoachingTheme.colors.warningContainer, CoachingTheme.colors.onWarningContainer)
         else -> return
     }
     Text(

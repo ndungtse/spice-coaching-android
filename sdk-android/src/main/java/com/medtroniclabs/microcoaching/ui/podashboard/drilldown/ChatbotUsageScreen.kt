@@ -39,9 +39,7 @@ import com.medtroniclabs.microcoaching.ui.podashboard.components.StatusGreenBg
 import com.medtroniclabs.microcoaching.ui.podashboard.components.StatusRed
 import com.medtroniclabs.microcoaching.ui.podashboard.components.StatusRedBg
 import com.medtroniclabs.microcoaching.ui.podashboard.components.poCard
-import com.medtroniclabs.microcoaching.ui.theme.SurfaceMuted
 
-private val DividerColor = Color(0xFFEFEFF3)
 
 /**
  * "Chatbot Usage" — SKs grouped into Using / Not using, with query counts, over the
@@ -53,7 +51,7 @@ fun ChatbotUsageScreen(chwId: String, range: DateRange, onBack: () -> Unit, onHo
     val state by vm.uiState.collectAsState()
     val networkAvailable by vm.networkAvailable.collectAsState()
 
-    Column(modifier = Modifier.fillMaxSize().background(SurfaceMuted)) {
+    Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainerLow)) {
         SdkScreenHeader(title = stringResource(R.string.po_drilldown_chatbot), onBack = onBack, onHome = onHome)
         when (val s = state) {
             is PODashboardUiState.Loading -> CenterProgress()
@@ -85,7 +83,7 @@ private fun UsageGroup(@StringRes titleRes: Int, sks: List<SkSummary>, usesChatb
     )
     Column(modifier = Modifier.fillMaxWidth().poCard()) {
         sks.forEachIndexed { i, sk ->
-            if (i > 0) HorizontalDivider(color = DividerColor)
+            if (i > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,

@@ -47,13 +47,10 @@ import com.medtroniclabs.microcoaching.ui.chat.ChatMessage
 import com.medtroniclabs.microcoaching.ui.chat.ChatRole
 import com.medtroniclabs.microcoaching.ui.markdown.MarkdownDefaults
 import com.medtroniclabs.microcoaching.ui.markdown.MarkdownText
-import com.medtroniclabs.microcoaching.ui.theme.AssistantBubble
-import com.medtroniclabs.microcoaching.ui.theme.AssistantBubbleText
-import com.medtroniclabs.microcoaching.ui.theme.UserBubble
-import com.medtroniclabs.microcoaching.ui.theme.UserBubbleText
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import com.medtroniclabs.microcoaching.ui.theme.CoachingTheme
 
 /**
  * A user message, or any role without a dedicated bubble.
@@ -74,8 +71,8 @@ fun MessageBubble(
     val haptics = LocalHapticFeedback.current
 
     val isUser = message.role == ChatRole.USER
-    val bubbleColor = if (isUser) UserBubble else AssistantBubble
-    val textColor = if (isUser) UserBubbleText else AssistantBubbleText
+    val bubbleColor = if (isUser) CoachingTheme.colors.userBubble else CoachingTheme.colors.assistantBubble
+    val textColor = if (isUser) CoachingTheme.colors.onUserBubble else CoachingTheme.colors.onAssistantBubble
     val alignment = if (isUser) Arrangement.End else Arrangement.Start
     val shape = if (isUser) {
         RoundedCornerShape(topStart = 16.dp, topEnd = 4.dp, bottomStart = 16.dp, bottomEnd = 16.dp)
@@ -173,7 +170,7 @@ fun AssistantBubbleWithAvatar(
             horizontalAlignment = Alignment.Start,
         ) {
             Surface(
-                color = AssistantBubble,
+                color = CoachingTheme.colors.assistantBubble,
                 shape = RoundedCornerShape(
                     topStart = 4.dp,
                     topEnd = 16.dp,
@@ -195,7 +192,7 @@ fun AssistantBubbleWithAvatar(
                         content = message.text,
                         style = MarkdownDefaults.style(
                             textStyle = MaterialTheme.typography.bodyMedium,
-                            textColor = AssistantBubbleText,
+                            textColor = CoachingTheme.colors.onAssistantBubble,
                             blockSpacing = 6.dp,
                         ),
                         modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
@@ -229,7 +226,7 @@ fun StreamingBubble(
     ) {
         AssistantAvatar()
         Surface(
-            color = AssistantBubble,
+            color = CoachingTheme.colors.assistantBubble,
             shape = RoundedCornerShape(
                 topStart = 4.dp,
                 topEnd = 16.dp,
@@ -246,7 +243,7 @@ fun StreamingBubble(
             } else {
                 Text(
                     text = text,
-                    color = AssistantBubbleText,
+                    color = CoachingTheme.colors.onAssistantBubble,
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
                 )
@@ -281,7 +278,7 @@ private fun TypingDots(modifier: Modifier = Modifier) {
                 modifier = Modifier
                     .size(6.dp)
                     .clip(CircleShape)
-                    .background(AssistantBubbleText.copy(alpha = if (phase.toInt() == i) 1f else 0.25f)),
+                    .background(CoachingTheme.colors.onAssistantBubble.copy(alpha = if (phase.toInt() == i) 1f else 0.25f)),
             )
         }
     }

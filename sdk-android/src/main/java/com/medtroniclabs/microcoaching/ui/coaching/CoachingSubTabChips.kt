@@ -21,19 +21,16 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlue
-import com.medtroniclabs.microcoaching.ui.theme.SpiceNavy
 
 /** One Coaching sub-tab: a leading icon and its label. */
 data class SubTabChip(val icon: ImageVector, val label: String)
 
 /** Soft neutral fill for unselected chips (no hard outline). */
-private val UnselectedChip = Color(0xFFEFF1F6)
 
 /**
  * Sub-tab chip row for the Coaching tab (Training | Refresher | Knowledge): centred,
- * icon-led rounded pills where the selected chip fills [SpiceBlue] with white icon + label
- * and the rest sit on a soft neutral fill with [SpiceNavy] content. A third shape,
+ * icon-led rounded pills where the selected chip fills `primary` with white icon + label
+ * and the rest sit on a soft neutral fill with `onSurface` content. A third shape,
  * deliberately distinct from [CoachingTopTabs] (full-width underline TabRow) and the
  * connected-track SegmentedToggle.
  */
@@ -60,7 +57,7 @@ fun CoachingSubTabChips(
                     this.selected = selected
                 },
                 shape = RoundedCornerShape(50),
-                color = if (selected) SpiceBlue else UnselectedChip,
+                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerLow,
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
@@ -70,14 +67,14 @@ fun CoachingSubTabChips(
                     Icon(
                         imageVector = chip.icon,
                         contentDescription = null,
-                        tint = if (selected) Color.White else SpiceNavy,
+                        tint = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.size(16.dp),
                     )
                     Text(
                         text = chip.label,
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                        color = if (selected) Color.White else SpiceNavy,
+                        color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
                    
                     )
                 }

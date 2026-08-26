@@ -31,8 +31,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.domain.decision.AnswerMode
-import com.medtroniclabs.microcoaching.ui.theme.MutedText
-import com.medtroniclabs.microcoaching.ui.theme.SpiceGreen
+import com.medtroniclabs.microcoaching.ui.theme.CoachingTheme
 
 /**
  * Full-width strip under the chat header stating how the next answer will be found, and
@@ -91,7 +90,7 @@ fun ChatModeBar(
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = if (online) SpiceGreen else MutedText,
+                tint = if (online) CoachingTheme.colors.success else MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(16.dp),
             )
             Spacer(Modifier.size(width = 8.dp, height = 0.dp))
@@ -119,7 +118,7 @@ fun ChatModeBar(
                 Text(
                     text = stringResource(R.string.chat_mode_bar_change),
                     style = MaterialTheme.typography.labelMedium,
-                    color = SpiceGreen,
+                    color = CoachingTheme.colors.success,
                     maxLines = 1,
                 )
             }
@@ -163,7 +162,7 @@ private fun DownloadControls(
                 Icon(
                     imageVector = Icons.Filled.PlayArrow,
                     contentDescription = stringResource(R.string.download_card_action_resume),
-                    tint = SpiceGreen,
+                    tint = CoachingTheme.colors.success,
                     modifier = Modifier.size(18.dp),
                 )
             }
@@ -172,7 +171,7 @@ private fun DownloadControls(
                 Icon(
                     imageVector = Icons.Filled.Pause,
                     contentDescription = stringResource(R.string.download_card_action_pause),
-                    tint = MutedText,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(18.dp),
                 )
             }
@@ -181,7 +180,7 @@ private fun DownloadControls(
             Icon(
                 imageVector = Icons.Filled.Close,
                 contentDescription = stringResource(R.string.download_card_action_cancel),
-                tint = MutedText,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(18.dp),
             )
         }

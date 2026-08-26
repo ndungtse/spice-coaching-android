@@ -13,7 +13,6 @@ import androidx.compose.ui.res.stringResource
 import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.ui.leaderboard.LeaderboardGroup
 
-private val HeaderMuted = com.medtroniclabs.microcoaching.ui.theme.MutedText
 
 /** "Dhamrai Upazila · 28 SKs" on the left, "Updated 12:00 AM" on the right. */
 @Composable
@@ -26,12 +25,12 @@ fun LeaderboardGroupHeader(group: LeaderboardGroup, modifier: Modifier = Modifie
         Text(
             text = stringResource(R.string.leaderboard_group_meta, group.name, group.memberCount),
             style = MaterialTheme.typography.labelSmall,
-            color = HeaderMuted,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(
             text = stringResource(R.string.leaderboard_updated, group.updatedLabel),
             style = MaterialTheme.typography.labelSmall,
-            color = HeaderMuted,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }

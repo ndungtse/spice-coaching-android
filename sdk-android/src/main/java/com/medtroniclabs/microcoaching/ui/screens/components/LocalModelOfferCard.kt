@@ -29,7 +29,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.medtroniclabs.microcoaching.R
-import com.medtroniclabs.microcoaching.ui.theme.MutedText
 
 /**
  * Dismissible card offering the optional on-device model.
@@ -95,7 +94,7 @@ fun LocalModelOfferCard(
                     stringResource(R.string.local_model_offer_body)
                 },
                 style = MaterialTheme.typography.labelMedium,
-                color = MutedText,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(2.dp))
             Row(

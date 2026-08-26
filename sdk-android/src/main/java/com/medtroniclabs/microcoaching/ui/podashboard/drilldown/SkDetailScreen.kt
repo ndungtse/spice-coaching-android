@@ -56,13 +56,8 @@ import com.medtroniclabs.microcoaching.ui.podashboard.components.MutedText
 import com.medtroniclabs.microcoaching.ui.podashboard.components.StatusGreen
 import com.medtroniclabs.microcoaching.ui.podashboard.components.StatusGreenBg
 import com.medtroniclabs.microcoaching.ui.podashboard.components.poCard
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlue
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueContainer
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueDark
-import com.medtroniclabs.microcoaching.ui.theme.SurfaceMuted
+import com.medtroniclabs.microcoaching.ui.theme.CoachingTheme
 
-private val HeaderGradientStart = Color(0xFF1E40AF)
-private val HeaderGradientEnd = Color(0xFF2563EB)
 
 /** "My SK" — one SK's profile: summary metrics, module checklist, activity, top queries. */
 @Composable
@@ -71,7 +66,7 @@ fun SkDetailScreen(skId: String, range: DateRange, onBack: () -> Unit, onHome: (
     val state by vm.uiState.collectAsState()
     val networkAvailable by vm.networkAvailable.collectAsState()
 
-    Column(modifier = Modifier.fillMaxSize().background(SurfaceMuted)) {
+    Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainerLow)) {
         when (val s = state) {
             is SkDetailUiState.Ready -> SkDetailHeader(s.detail, onBack, onHome)
             else -> SdkScreenHeader(title = stringResource(R.string.po_drilldown_sk), onBack = onBack, onHome = onHome)
@@ -122,31 +117,31 @@ private fun SkDetailHeader(d: SkDetail, onBack: () -> Unit, onHome: () -> Unit) 
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Brush.horizontalGradient(listOf(HeaderGradientStart, HeaderGradientEnd)))
+            .background(Brush.horizontalGradient(CoachingTheme.colors.headerGradient))
             .statusBarsPadding()
             .padding(horizontal = 8.dp, vertical = 8.dp),
     ) {
         Column {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, tint = Color.White)
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary)
                 }
-                Text(stringResource(R.string.po_drilldown_sk), color = Color.White.copy(alpha = 0.85f), style = MaterialTheme.typography.bodyMedium)
+                Text(stringResource(R.string.po_drilldown_sk), color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.85f), style = MaterialTheme.typography.bodyMedium)
                 Spacer(Modifier.weight(1f))
                 IconButton(onClick = onHome) {
-                    Icon(Icons.Filled.Home, contentDescription = null, tint = Color.White)
+                    Icon(Icons.Filled.Home, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary)
                 }
             }
             Row(
                 modifier = Modifier.padding(start = 8.dp, end = 8.dp, top = 4.dp, bottom = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                AvatarCircle(d.name, size = 64.dp, containerColor = Color.White.copy(alpha = 0.2f), contentColor = Color.White)
+                AvatarCircle(d.name, size = 64.dp, containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.2f), contentColor = MaterialTheme.colorScheme.onPrimary)
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(
                         text = d.name,
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.onPrimary,
                         fontWeight = FontWeight.Bold,
                         style = MaterialTheme.typography.titleLarge,
                         maxLines = 1,
@@ -154,18 +149,18 @@ private fun SkDetailHeader(d: SkDetail, onBack: () -> Unit, onHome: () -> Unit) 
                     )
                     /*Text(
                         text = d.location.ifBlank { stringResource(R.string.po_na) },
-                        color = Color.White.copy(alpha = 0.8f),
+                        color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f),
                         style = MaterialTheme.typography.bodyMedium,
                     )*/
                 }
                 Text(
                     text = stringResource(skStatusLabel(d.status)),
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onPrimary,
                     fontWeight = FontWeight.SemiBold,
                     style = MaterialTheme.typography.labelSmall,
                     modifier = Modifier
                         .clip(RoundedCornerShape(percent = 50))
-                        .background(Color.White.copy(alpha = 0.2f))
+                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.2f))
                         .padding(horizontal = 12.dp, vertical = 6.dp),
                 )
             }
@@ -179,7 +174,7 @@ private fun SummaryCard(value: String, label: String, modifier: Modifier = Modif
         modifier = modifier.poCard().padding(vertical = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = SpiceBlue)
+        Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
         Spacer(Modifier.height(4.dp))
         Text(label, style = MaterialTheme.typography.labelSmall, color = MutedText)
     }
@@ -216,7 +211,7 @@ private fun ModuleStatusRow(m: SkModuleStatus) {
         val (labelRes, fg, bg) = if (m.done) {
             Triple(R.string.po_sk_module_done, StatusGreen, StatusGreenBg)
         } else {
-            Triple(R.string.po_sk_module_pending, MutedText, Color(0xFFEFEFF3))
+            Triple(R.string.po_sk_module_pending, MutedText, MaterialTheme.colorScheme.outlineVariant)
         }
         Text(
             text = stringResource(labelRes),
@@ -279,10 +274,10 @@ private fun TopQueryRow(q: TopQuery) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
-            modifier = Modifier.width(24.dp).height(24.dp).clip(RoundedCornerShape(percent = 50)).background(SpiceBlueContainer),
+            modifier = Modifier.width(24.dp).height(24.dp).clip(RoundedCornerShape(percent = 50)).background(MaterialTheme.colorScheme.primaryContainer),
             contentAlignment = Alignment.Center,
         ) {
-            Text("${q.rank}", color = SpiceBlueDark, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelSmall)
+            Text("${q.rank}", color = MaterialTheme.colorScheme.onPrimaryContainer, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelSmall)
         }
         Spacer(Modifier.width(12.dp))
         Text(
@@ -293,7 +288,7 @@ private fun TopQueryRow(q: TopQuery) {
             overflow = TextOverflow.Ellipsis,
         )
         Spacer(Modifier.width(8.dp))
-        Text("${q.count}", color = SpiceBlue, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+        Text("${q.count}", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
     }
 }
 

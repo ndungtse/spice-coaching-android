@@ -25,9 +25,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.medtroniclabs.microcoaching.R
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlue
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueContainer
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueDark
+import com.medtroniclabs.microcoaching.ui.theme.CoachingTheme
 
 /**
  * Horizontally-scrolled card used in the Training row (module_type ==
@@ -63,7 +61,7 @@ fun TrainingCard(
             .fillMaxWidth()
             .height(220.dp),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -84,7 +82,7 @@ fun TrainingCard(
                                 .matchParentSize()
                                 .background(
                                     Brush.linearGradient(
-                                        colors = listOf(SpiceBlueContainer, SpiceBlue.copy(alpha = 0.3f)),
+                                        colors = listOf(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)),
                                     ),
                                 ),
                         )
@@ -118,19 +116,19 @@ fun TrainingCard(
                 Text(
                     text = meta,
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFF6B7280),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 4.dp),
                 )
                 Box(modifier = Modifier.weight(1f))
                 LinearProgressIndicator(
                     progress = { progressFraction.coerceIn(0f, 1f) },
                     modifier = Modifier.fillMaxWidth(),
-                    color = SpiceBlueDark,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
                 )
                 Text(
                     text = "${(progressFraction.coerceIn(0f, 1f) * 100).toInt()}%",
                     style = MaterialTheme.typography.labelSmall,
-                    color = SpiceBlueDark,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
                     modifier = Modifier.padding(top = 4.dp),
                 )
             }
@@ -148,12 +146,12 @@ private fun TrainingNewBadge(modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(4.dp))
-            .background(Color(0xFFB91C1C))
+            .background(CoachingTheme.colors.attention)
             .padding(horizontal = 6.dp, vertical = 2.dp),
     ) {
         Text(
             text = stringResource(R.string.badge_new),
-            color = Color.White,
+            color = CoachingTheme.colors.onAttention,
             style = MaterialTheme.typography.labelSmall.copy(
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 0.5.sp,

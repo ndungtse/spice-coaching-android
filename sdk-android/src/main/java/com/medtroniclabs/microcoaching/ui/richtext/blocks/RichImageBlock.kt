@@ -29,7 +29,6 @@ import androidx.compose.foundation.Image
 import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.content.richtext.RichBlock
 import com.medtroniclabs.microcoaching.network.MediaUrlResolver
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueContainer
 
 /**
  * Renders a TipTap image node. Resolves the loadable URL via [MediaUrlResolver]
@@ -103,7 +102,7 @@ private fun RichImageSurface(
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
-            .background(SpiceBlueContainer.copy(alpha = 0.3f)),
+            .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)),
         contentAlignment = Alignment.Center,
     ) {
         if (file == null) {

@@ -44,9 +44,7 @@ import com.medtroniclabs.microcoaching.ui.podashboard.components.MutedText
 import com.medtroniclabs.microcoaching.ui.podashboard.components.poCard
 import com.medtroniclabs.microcoaching.ui.podashboard.components.statusBg
 import com.medtroniclabs.microcoaching.ui.podashboard.components.statusFg
-import com.medtroniclabs.microcoaching.ui.theme.SurfaceMuted
 
-private val DividerColor = Color(0xFFEFEFF3)
 
 /**
  * SKs for one KPI card, scoped to a single [status] (responsive vs non-responsive) — the card
@@ -70,7 +68,7 @@ fun ActiveSksScreen(
     val state by vm.uiState.collectAsState()
     val networkAvailable by vm.networkAvailable.collectAsState()
 
-    Column(modifier = Modifier.fillMaxSize().background(SurfaceMuted)) {
+    Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainerLow)) {
         SdkScreenHeader(title = stringResource(headerTitleRes(status)), onBack = onBack, onHome = onHome)
         when (val s = state) {
             is PODashboardUiState.Loading -> CenterProgress()
@@ -130,7 +128,7 @@ private fun StatusGroup(
     )
     Column(modifier = Modifier.fillMaxWidth().poCard()) {
         sks.forEachIndexed { i, sk ->
-            if (i > 0) HorizontalDivider(color = DividerColor)
+            if (i > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             Row(
                 modifier = Modifier.fillMaxWidth().clickable { onOpenSkDetail(sk.id) }.padding(horizontal = 16.dp, vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,

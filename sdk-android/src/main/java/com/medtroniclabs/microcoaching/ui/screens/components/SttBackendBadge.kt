@@ -21,6 +21,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.ai.voice.ChatVoiceInputController
+import com.medtroniclabs.microcoaching.ui.theme.CoachingTheme
 
 /**
  * Compact pill that tells the user which engine is transcribing right now —
@@ -36,13 +37,13 @@ fun SttBackendBadge(
     val (label, dotColor) = when (backend) {
         ChatVoiceInputController.Backend.PlatformOnDevice ->
             stringResource(R.string.chat_voice_backend_on_device) to
-                Color(0xFF34A853) // green
+                CoachingTheme.colors.success
         ChatVoiceInputController.Backend.PlatformCloud ->
             stringResource(R.string.chat_voice_backend_server) to
-                Color(0xFFFB8C00) // orange
+                CoachingTheme.colors.warning
         ChatVoiceInputController.Backend.OfflineSherpa ->
             stringResource(R.string.chat_voice_backend_offline_model) to
-                Color(0xFF1A73E8) // blue
+                MaterialTheme.colorScheme.primary
         ChatVoiceInputController.Backend.Unknown -> return
     }
 

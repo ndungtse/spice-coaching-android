@@ -12,20 +12,18 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.medtroniclabs.microcoaching.R
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueContainer
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueDark
 
 /** Rounded XP badge, e.g. "1,840 XP". */
 @Composable
 fun XpPill(xp: Int, modifier: Modifier = Modifier) {
     Text(
         text = stringResource(R.string.leaderboard_xp_value, "%,d".format(xp)),
-        color = SpiceBlueDark,
+        color = MaterialTheme.colorScheme.onPrimaryContainer,
         fontWeight = FontWeight.SemiBold,
         style = MaterialTheme.typography.labelSmall,
         modifier = modifier
             .clip(RoundedCornerShape(percent = 50))
-            .background(SpiceBlueContainer)
+            .background(MaterialTheme.colorScheme.primaryContainer)
             .padding(horizontal = 12.dp, vertical = 6.dp),
     )
 }
