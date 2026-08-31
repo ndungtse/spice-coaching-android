@@ -1,6 +1,6 @@
 # 06 — Troubleshooting & Verification
 
-**Version:** 0.3.8-SNAPSHOT · **Date:** 2026-06-03 · **Status:** Draft
+**Version:** 0.6.0-SNAPSHOT · **Date:** 2026-08-31 · **Status:** Draft
 
 Common integration failures, how to verify a working integration, a security checklist, and an FAQ.
 
@@ -10,8 +10,10 @@ Common integration failures, how to verify a working integration, a security che
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `Could not resolve com.medtroniclabs.microcoaching:sdk-android:0.3.8-SNAPSHOT` | Artifacts not in Maven Local. | Run `./gradlew :sdk-android:publishToMavenLocal` in the SDK repo (and `:sdk-android-sherpa:publishToMavenLocal` if used). See [01 — Step 1](./01-setup.md#step-1--build--publish-the-sdk-to-maven-local). |
-| Resolves `sdk-android` but not `sdk-android-sherpa` | Only one artifact published, or wrong version. | Versions differ on purpose: `sdk-android` is `0.3.8-SNAPSHOT`, `sdk-android-sherpa` is `0.3.7-SNAPSHOT`. Publish both. |
+| `Could not resolve com.medtroniclabs.microcoaching:sdk-android:0.6.0-SNAPSHOT` | Artifacts not in Maven Local. | Run `./gradlew :sdk-android:publishToMavenLocal` in the SDK repo (and `:sdk-android-sherpa:publishToMavenLocal` if used). See [01 — Step 1](./01-setup.md#step-1--build--publish-the-sdk-to-maven-local). |
+| Resolves `sdk-android` but not `sdk-android-sherpa` | Only one artifact published, or wrong version. | The artifacts version independently: `sdk-android` is `0.6.0-SNAPSHOT`, `sdk-android-sherpa` is `0.4.0-SNAPSHOT`. Publish both. |
+| `UnsatisfiedLinkError` / missing `.so` at runtime, or a much larger APK than expected | Compressed native ML runtimes not extracted. | Set `packaging { jniLibs { useLegacyPackaging = true } }`. See [01 — Step 5b](./01-setup.md#step-5b--host-build-file-additions). |
+| `Module was compiled with an incompatible version of Kotlin` | Host Kotlin older than the SDK's 2.1.x. | Add `freeCompilerArgs += "-Xskip-metadata-version-check"`. See [01 — Step 5b](./01-setup.md#step-5b--host-build-file-additions). |
 | `mavenLocal()` ignored / artifact still not found | `mavenLocal()` missing or after other repos. | Add `mavenLocal()` as the **first** entry under `dependencyResolutionManagement.repositories`. See [01 — Step 2](./01-setup.md#step-2--add-mavenlocal-to-the-repositories). |
 | KAPT crash: `NullPointerException` on a synthetic node | Kotlin 2.1.x K2-based KAPT (KAPT4). | Add `kapt.use.k2=false` to `gradle.properties`. See [01 — Step 5](./01-setup.md#step-5--gradleproperties). |
 | Manifest merger: `uses-sdk:minSdkVersion 23 cannot be smaller than … 24` (MediaPipe) | A future SDK bump, or your own override conflict. | The SDK already declares `tools:overrideLibrary="com.google.mediapipe.tasks.genai"`. If needed, mirror it in your app manifest (SPICE does, defensively). |
@@ -26,7 +28,13 @@ Common integration failures, how to verify a working integration, a security che
 | Symptom | Cause | Fix |
 |---|---|---|
 | `IllegalStateException: MicroCoachingSDK is not initialized` | `getInstance()` called before `build()`, or before login on a fresh install. | Build in `Application.onCreate()`; guard every callsite with `if (!MicroCoachingSDK.isInitialized()) return`. See [02](./02-initialization.md#the-singleton-model). |
-| Coaching API returns HTTP 401 | SDK built with an empty/expired `authToken` (pre-login). | Rebuild the SDK with the JWT after login. See [02 — Re-initializing after login](./02-initialization.md#re-initializing-after-login-jwt). |
+| Hooks, badges, tiles, or morning cards silently do nothing | `onHomeScreenShown(chwId)` never called — it is the only setter of the current CHW id; every other hook no-ops without it. | Call it whenever the home screen appears. See [04](./04-hooks-and-data.md#workflow-hooks-overview). |
+| Coaching API returns HTTP 401 | SDK built with an empty/expired `authToken` (pre-login). | Call `updateAuthToken(jwt)` after login (or rebuild with the full chain). See [02 — Refreshing the auth token](./02-initialization.md#refreshing-the-auth-token-after-login). |
+| No sync, no network monitoring, telemetry never flushes | `backendUrl` is blank — that disables all of them. | Pass a real `backendUrl` at every `build()`. See [02](./02-initialization.md#minimal-initialization). |
+| Brand colours revert to SPICE blue after login | Post-login rebuild omitted `.theme()`/`.typography()` — `build()` resets omitted options to defaults. | Prefer `updateAuthToken()`; if you rebuild, repeat the full chain from one shared helper. See [02](./02-initialization.md#refreshing-the-auth-token-after-login) and [07](./07-theming.md). |
+| Custom colours/fonts ignored entirely | Theme set by wrapping SDK content in your `MaterialTheme`, or set after init. | Theming is init-time only, via `Builder.theme()`/`.typography()`. See [07](./07-theming.md). |
+| SDK screens don't follow dark mode | Dark mode is unsupported — SDK screens always render the light scheme. | Expected. `uiTheme` is deprecated and never read. See [07 — Not themeable](./07-theming.md#not-themeable). |
+| Chat crashes **only** in minified release builds | Stale keep rule in the SDK's consumer ProGuard file (wrong package for `CoachingChatFragment`). | Add `-keep class com.medtroniclabs.microcoaching.ui.chat.CoachingChatFragment { *; }` to your rules. See [01 — Step 5b](./01-setup.md#step-5b--host-build-file-additions). |
 | Model download never progresses (stuck at 0% / `-1`) | Missing/invalid HuggingFace token, or no network. | Verify `BuildConfig.HF_TOKEN` is set and has access to the gated repo; check `ModelManager.state` for `DownloadFailed(reason)`. See [05 — Providers](./05-model-and-voice.md#providers--the-huggingface-token). |
 | Chat opens but answers without the LLM | Low-RAM device → retrieval-only mode (expected). | Confirm with `isLowEndDevice`. Use `.forceLowEndMode(false)` only on capable hardware. |
 | Download foreground-service crash: `foregroundServiceType … not a subset` | `SystemForegroundService` not patched with `dataSync`. | The SDK merges this via its manifest. Don't override `SystemForegroundService` with `tools:node="replace"` in your app. |
@@ -50,7 +58,7 @@ Common integration failures, how to verify a working integration, a security che
    adb logcat -s MicroCoachingSDK ModelManager
    ```
    You should see `onAssessmentSubmitted — encounterId='' assessmentKeys=[…]` after submitting an assessment, and `ModelState` transitions during a download.
-4. **Manual smoke test:** log in → "CHW Assistant" drawer item appears → tap it → chat opens (or download prompt if no model) → home screen shows the chat FAB and (when a module is due) the morning card.
+4. **Manual smoke test:** log in → home screen shows the Coaching tile and chat FAB → tap the FAB → chat opens (the SDK's own setup screen asks for download consent when no model is staged) → the tile opens the Learn flow.
 
 ---
 
@@ -91,8 +99,7 @@ Devices under ~3 GB RAM run retrieval-only mode by design (no model download). S
 
 ## Getting help / reference docs
 
-- Architecture, components, and Maven publishing internals: [docs/SDK.md](../SDK.md)
+- Architecture, components, and Maven publishing internals: [docs/ARCHITECTURE.md](../ARCHITECTURE.md)
 - Gap detection model & tests: [docs/gaps/GAP_DETECTION_SDK.md](../gaps/GAP_DETECTION_SDK.md), [docs/gaps/GAPS_TEST.md](../gaps/GAPS_TEST.md)
 - How the chat works under the hood: [references/chat.md](../references/chat.md)
-- Use cases & CHW journey: [docs/UseCases_v2.md](../UseCases_v2.md)
 - Offline STT module: [sdk-android-sherpa/README.md](../../sdk-android-sherpa/README.md)

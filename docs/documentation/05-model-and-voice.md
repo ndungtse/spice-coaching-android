@@ -1,6 +1,6 @@
 # 05 — Model Download & Voice
 
-**Version:** 0.3.8-SNAPSHOT · **Date:** 2026-06-03 · **Status:** Draft
+**Version:** 0.6.0-SNAPSHOT · **Date:** 2026-08-31 · **Status:** Draft
 
 The on-device LLM (Gemma) powers the chat. It is downloaded at runtime, not bundled in the APK. This page covers download strategies, the `ModelManager` API, the download-consent UI, low-end-device behaviour, and voice/STT.
 
@@ -33,29 +33,20 @@ Set via `.modelDownloadStrategy(...)` on the Builder.
 | `PROVIDED` | No download — the SDK reads `modelPath` directly. | Model pre-provisioned by MDM or a previous download. |
 | `MANUAL` | Download only when you call `ModelManager.triggerDownload()`. | Host fully controls the consent/onboarding flow. |
 
-**SPICE reference** — SPICE picks the strategy at init by scanning the model dir, then drives the download manually from a consent dialog:
+**SPICE reference** — SPICE stays on the default:
 
 ```kotlin
 // SpiceBaseApplication.initCoachingSdk() / LandingActivity.reinitCoachingSdkWithToken()
-val existingModel = getExternalFilesDir(null)
-    ?.listFiles()
-    ?.firstOrNull { it.extension == "task" || it.extension == "litertlm" }
-
-val downloadStrategy = if (existingModel != null) {
-    ModelDownloadStrategy.PROVIDED          // reuse the staged model
-} else {
-    ModelDownloadStrategy.ON_FIRST_USE
-}
-
 MicroCoachingSDK.Builder(this)
-    .modelDownloadStrategy(downloadStrategy)
-    .modelPath(existingModel?.absolutePath ?: "")
+    .modelDownloadStrategy(ModelDownloadStrategy.ON_FIRST_USE)
     .modelProviders(listOf(ModelProvider.HuggingFace))
     .huggingFaceToken(BuildConfig.HF_TOKEN)
-    .wifiOnlyModelDownload(false)            // host owns metered-network consent
+    .wifiOnlyModelDownload(false)            // consent (incl. metered data) handled in the SDK setup screen
     // …
     .build()
 ```
+
+SPICE deliberately does **not** scan the model directory or pass `modelPath`/`PROVIDED`: directory-listing order could hand the SDK a stale bundle, and `ON_FIRST_USE` already no-ops when the selected model variant is present on disk.
 
 ---
 
@@ -92,6 +83,7 @@ Access via `MicroCoachingSDK.getInstance().modelManager`.
 | `findLocalModel(): File?` | The staged model file, or null. |
 | `triggerDownload()` | Start a download (used with `MANUAL`, or to kick off after consent). |
 | `scheduleDownloadIfNeeded()` | Queue a download honouring the configured constraints. |
+| `pauseDownload()` / `resumeDownload()` / `cancelDownload()` | Control an in-flight download (partial file kept on pause). |
 
 `ModelState` (sealed class):
 
@@ -121,54 +113,20 @@ lifecycleScope.launch {
 
 ---
 
-## Driving a download UI
+## Download consent — the SDK owns it
 
-Pattern: before opening the chat, check whether the model is present (or the device is low-end and doesn't need one). If not, ask for consent — including a metered-data warning — then trigger the download.
-
-**SPICE reference** — `LandingActivity` (drawer entry) and `HomeScreenFragment` (chat FAB) share the same flow:
+The download-consent experience lives **inside** the SDK: the chat's setup screen asks the user before anything downloads (the download is consent-gated, not just hardware-gated — see `localModelPrefs`), shows progress, and handles failure/retry. The host does not build a prompt, dialog, or progress banner.
 
 ```kotlin
-private fun launchCoachingAssistant() {
-    if (!MicroCoachingSDK.isInitialized()) return
-    val sdk = MicroCoachingSDK.getInstance()
-    // Low-end devices run retrieval-only — no model needed, skip the prompt.
-    if (sdk.isLowEndDevice || sdk.modelManager.isModelPresent()) {
-        CoachingAssistantActivity.launch(this)
-    } else {
-        showCoachingModelDownloadPrompt()
-    }
-}
-
-// Single dialog; the metered-data hint is baked into the message string.
-private fun showCoachingModelDownloadPrompt() {
-    val metered = isOnMeteredNetwork()
-    val messageRes = if (metered) {
-        R.string.coaching_model_download_message_metered
-    } else {
-        R.string.coaching_model_download_message
-    }
-    showErrorDialogue(
-        title = getString(R.string.coaching_model_download_title),
-        message = getString(messageRes),
-        isNegativeButtonNeed = true,
-        positiveButtonName = getString(R.string.yes),
-        cancelBtnName = getString(R.string.no),
-    ) { isPositive -> if (isPositive) triggerCoachingModelDownload() }
-}
-
-private fun triggerCoachingModelDownload() {
-    runCatching { MicroCoachingSDK.getInstance().modelManager.triggerDownload() }
-    Toast.makeText(this, getString(R.string.coaching_download_started), Toast.LENGTH_LONG).show()
-}
-
-private fun isOnMeteredNetwork(): Boolean {
-    val cm = getSystemService(ConnectivityManager::class.java) ?: return true
-    val caps = cm.getNetworkCapabilities(cm.activeNetwork) ?: return true
-    return !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
-}
+// Host side — this is the whole flow:
+CoachingChatBottomSheet.show(parentFragmentManager)
 ```
 
-> **Note:** SPICE uses a **single** confirmation dialog (the metered warning is folded into the message). An earlier two-dialog flow was removed after a QA report — keep it to one explicit "yes". Because `wifiOnlyModelDownload(false)` is set, honouring the user's "use mobile data" choice means the worker isn't blocked on a Wi-Fi constraint.
+**SPICE reference** — earlier SPICE versions showed their own consent dialog (`showCoachingModelDownloadPrompt()`) before opening the chat. That flow was removed; `HomeScreenFragment.launchCoachingChatSheet()` is now a guard + `show()` and the SDK's setup screen owns the rest.
+
+If you do want a custom surface *outside* the chat (e.g. an onboarding download step), use `.modelDownloadStrategy(ModelDownloadStrategy.MANUAL)` and drive `modelManager.triggerDownload()` / `state` yourself — but don't duplicate the consent inside the default `ON_FIRST_USE` flow.
+
+Related host-readable state: `sdk.localModelEnabled` (device capable **and** user opted in) and `sdk.localModelPrefs.choice`.
 
 ---
 
