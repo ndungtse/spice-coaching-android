@@ -25,8 +25,6 @@ import androidx.compose.ui.unit.dp
 /** One Coaching sub-tab: a leading icon and its label. */
 data class SubTabChip(val icon: ImageVector, val label: String)
 
-/** Soft neutral fill for unselected chips (no hard outline). */
-
 /**
  * Sub-tab chip row for the Coaching tab (Training | Refresher | Knowledge): centred,
  * icon-led rounded pills where the selected chip fills `primary` with white icon + label

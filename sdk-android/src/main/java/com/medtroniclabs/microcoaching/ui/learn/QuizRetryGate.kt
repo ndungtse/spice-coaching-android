@@ -3,70 +3,31 @@ package com.medtroniclabs.microcoaching.ui.learn
 import java.util.concurrent.TimeUnit
 
 /**
- * **Temporary retry-window gate. Intentionally isolated so it's easy to
- * delete in one step when product moves on from this rule.**
+ * **Temporary retry-window gate (MED-1529 Req 1). Deliberately isolated so it can be
+ * deleted in one step when product moves on from this rule.**
  *
- * ## What this does
+ * Closes the "Try Again" CTA on [QuizResultScreen] — via
+ * [LearnViewModel.canRetryActiveQuiz] — once a module's reattempt window has elapsed.
+ * [isRetryWindowClosed] returns `true` only when all three hold:
  *
- * Implements MED-1529 Req 1: closes the quiz-retry CTA once the reattempt
- * validity window — **Module Assignment Date + configured days** — has
- * elapsed AND the CHW has attempted every question at least once. While
- * closed, the "Try Again" button on [QuizResultScreen] is hidden (via
- * [LearnViewModel.canRetryActiveQuiz]); the read-only "Back to modules"
- * path already used for `status == "completed"` modules covers the rest.
+ *  1. the module has a quiz (`inlineQuestions` non-empty),
+ *  2. the CHW has attempted every question at least once, cumulatively
+ *     ([LearnModule.attemptedQuestionCount] ≥ [LearnModule.inlineQuestions].size), and
+ *  3. at least `windowDays` have passed since [LearnModule.assignedAtMs].
  *
- * The window length is **admin-configurable** — synced from the backend
- * under [KEY_QUIZ_REATTEMPT_VALIDITY_DAYS] and resolved via
- * [resolveValidityDays] — falling back to [QUIZ_RETRY_WINDOW_DAYS] (7)
- * when unset/invalid. Within the window CHWs can keep retrying regardless
- * of how many attempts they've made. First-time attempts are always
- * allowed — a never-attempted module isn't a "retry".
+ * Anything else — no quiz, no `assignedAtMs`, a partly-attempted quiz — leaves the gate
+ * open, so a first attempt is never blocked. The window length is admin-configurable,
+ * synced under [KEY_QUIZ_REATTEMPT_VALIDITY_DAYS] and read by [resolveValidityDays],
+ * falling back to [QUIZ_RETRY_WINDOW_DAYS].
  *
- * ## Why it's structured this way
+ * The gate does **not** read [LearnModule.status]: completion is orthogonal to retry
+ * eligibility, so a passed module inside the window stays re-quizzable. Status reaches
+ * rule 2 only indirectly, because `CoachingModuleStore` treats a `completedAt`-stamped
+ * completion as implying every question was attempted.
  *
- * The whole feature lives behind a single boolean expression
- * ([isRetryWindowClosed]) used at one call site
- * ([LearnViewModel.canRetryActiveQuiz]). The two pieces of state outside
- * this file are [LearnModule.assignedAtMs] — the backend's per-assignment
- * `assigned_at`, joined onto the module in
- * [com.medtroniclabs.microcoaching.domain.refresher.CoachingModuleStore.trainingModules]
- * — and the synced window days on [MicroCoachingSDK.quizReattemptValidityDays].
- * That tight surface is deliberate so the rule can be removed cleanly later.
- *
- * ## Rule semantics
- *
- * The gate closes when **all three** are true:
- *
- *  1. The module has a quiz (`inlineQuestions` non-empty).
- *  2. The CHW has attempted every question on this module's quiz at least
- *     once (cumulative across sessions —
- *     [LearnModule.attemptedQuestionCount] ≥
- *     [LearnModule.inlineQuestions].size).
- *  3. The module was assigned more than `windowDays` days ago
- *     ([LearnModule.assignedAtMs]).
- *
- * Modules with no quiz, no `assignedAtMs` (e.g. reached outside the
- * assigned-training list), no attempts at all, or incomplete attempts →
- * the gate stays open (CTA visible). The day boundary is **exclusive** —
- * at exactly the `windowDays` mark the window has just closed.
- *
- * **The gate does NOT read [LearnModule.status]** — completion is
- * orthogonal to retry eligibility. A passed module within the window stays
- * re-quizzable. Status only enters the picture through the cache-first
- * `attemptedCount` derivation in `CoachingModuleStore`: a
- * `completedAt`-stamped completion implies all questions were attempted,
- * which feeds rule #2 above.
- *
- * ## How to remove
- *
- * When this rule is no longer wanted:
- *
- *  1. Delete this file and `QuizRetryGateTest`.
- *  2. In [LearnViewModel] make `canRetryActiveQuiz` return `true`
- *     unconditionally (or delete it with the gate).
- *  3. In [LearnModule] remove the `assignedAtMs` field + its assignment in
- *     `CoachingModuleStore.trainingModules`.
- *  4. Optionally drop [MicroCoachingSDK.quizReattemptValidityDays].
+ * To remove the rule: delete this file and `QuizRetryGateTest`, make
+ * `canRetryActiveQuiz` return `true`, and drop [LearnModule.assignedAtMs] (set in
+ * `CoachingModuleStore.trainingModules`) and [MicroCoachingSDK.quizReattemptValidityDays].
  */
 internal object QuizRetryGate {
 
@@ -111,8 +72,8 @@ internal object QuizRetryGate {
      *   (and tests) that don't thread config through.
      * @param nowMs Current millis-since-epoch. Parameterised so unit tests
      *   can pin a deterministic clock without injecting a Clock interface.
-     * @return `true` when the CTA should be locked (window closed),
-     *   `false` otherwise.
+     * @return `true` when the CTA should be locked — the window is closed once the
+     *   elapsed time reaches `windowDays`, not after it.
      */
     fun isRetryWindowClosed(
         module: LearnModule,

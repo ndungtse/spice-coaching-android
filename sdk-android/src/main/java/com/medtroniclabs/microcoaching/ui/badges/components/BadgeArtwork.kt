@@ -25,8 +25,6 @@ import com.medtroniclabs.microcoaching.ui.badges.BadgeState
 import androidx.compose.material3.MaterialTheme
 import com.medtroniclabs.microcoaching.ui.theme.CoachingTheme
 
-/** Ring colour for the locked state — a soft neutral grey so it recedes behind earned rings. */
-
 /**
  * The circular badge medallion artwork, shared by the Badges grid tile ([BadgeMedallion])
  * and the Your Journey path node.

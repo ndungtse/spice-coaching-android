@@ -53,8 +53,6 @@ private val CornerRadius = 30.dp
  */
 private const val NodeColumnFraction = 0.25f
 
-/** Locked connector/segment colour — a light neutral so upcoming path recedes. */
-
 /** Screen margin on a milestone label's outer side. */
 private val EdgePadding = 20.dp
 

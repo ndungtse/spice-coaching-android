@@ -37,8 +37,6 @@ import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.ui.SdkLocalizedTheme
 import kotlinx.coroutines.flow.MutableStateFlow
 
-/** Bell indicator colour (matches the host's alert red). */
-
 /**
  * Self-contained "Coaching" tile for the SPICE home menu grid. The host drops this
  * into its grid via a `ComposeView` and only forwards [onClick]; the assignment
