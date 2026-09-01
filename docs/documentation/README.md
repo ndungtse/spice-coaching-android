@@ -1,6 +1,6 @@
 # MicroCoaching Android SDK — SPICE Integration Guide
 
-**Version:** 0.3.8-SNAPSHOT · **Date:** 2026-06-03 · **Status:** Draft
+**Version:** 0.6.0-SNAPSHOT · **Date:** 2026-08-31 · **Status:** Draft
 
 The MicroCoaching SDK embeds on-device AI coaching for Community Health Workers (CHWs) directly inside the SPICE clinical app — chat, micro-learning, morning coaching cards, and coaching telemetry, with an offline-first on-device LLM. This guide walks the SPICE Android team through integrating the SDK into an app that does **not** yet reference it.
 
@@ -14,12 +14,14 @@ Every topic is explained generically (works for any host app) and then shown wit
 
 | Doc | Topic |
 |---|---|
+| [00 — Quick Start](./00-quick-start.md) | **Start here.** The whole integration in one file: gradle → init → token refresh → CHW id → UI entry points → recommended extras → what NOT to wire. |
 | [01 — Build Setup & Dependency Wiring](./01-setup.md) | Publish to Maven Local, `mavenLocal()`, the two SDK dependencies, Compose/Kotlin plugins, `gradle.properties`, `BuildConfig` config, version matrix. |
 | [02 — Initialization & Configuration](./02-initialization.md) | The `MicroCoachingSDK.Builder`, the full `MicroCoachingConfig` reference, init in `Application.onCreate()`, post-login rebuild, telemetry, language. |
-| [03 — UI Embedding](./03-ui-embedding.md) | Chat fragment, chat bottom sheet, the full coaching flow activity, home-screen Compose components (FAB, cards), theming. |
-| [04 — Workflow Hooks & Data](./04-hooks-and-data.md) | Lifecycle hooks (`onAssessmentSubmitted`, …), the assessment-data bridge, push/pull data interfaces, CHW context, gap detection. |
+| [03 — UI Embedding](./03-ui-embedding.md) | Chat fragment, chat bottom sheet, the full coaching flow activity, home-screen Compose components (FAB, cards). |
+| [04 — Workflow Hooks & Data](./04-hooks-and-data.md) | Lifecycle hooks (`onAssessmentSubmitted`, `onReferralSubmitted`, …), the assessment/referral data bridges, push/pull data interfaces, CHW context, today's visits. |
 | [05 — Model Download & Voice](./05-model-and-voice.md) | On-device model lifecycle, download strategies & providers, `ModelManager`, the download-consent UI, low-end devices, STT/voice. |
 | [06 — Troubleshooting & Verification](./06-troubleshooting.md) | Build/runtime errors, how to verify the integration, security checklist, FAQ. |
+| [07 — Theming & Brand Customization](./07-theming.md) | Restyle SDK screens with your own colours and fonts: the 35 tokens, what is derived from `primary` for free, and the two traps that make theming appear not to work. |
 
 ---
 
@@ -44,8 +46,8 @@ Authoritative version facts (verified against source). These supersede any older
 | Item | Value |
 |---|---|
 | groupId | `com.medtroniclabs.microcoaching` |
-| Required artifact | `sdk-android:0.3.8-SNAPSHOT` |
-| Optional artifact (offline BN STT) | `sdk-android-sherpa:0.3.7-SNAPSHOT` |
+| Required artifact | `sdk-android:0.6.0-SNAPSHOT` |
+| Optional artifact (offline BN STT) | `sdk-android-sherpa:0.4.0-SNAPSHOT` |
 | Consumption | Maven Local (`publishToMavenLocal` → `mavenLocal()`) |
 | `minSdk` | 23 |
 | `compileSdk` | 36 |
@@ -58,8 +60,10 @@ Authoritative version facts (verified against source). These supersede any older
 
 ## 5-minute quick start
 
+The four required pieces — the full walkthrough (token refresh, theming, hooks, what NOT to wire) is **[00 — Quick Start](./00-quick-start.md)**.
+
 ```bash
-# 1. Publish the SDK to Maven Local (from the micro-coaching-android-sdk repo)
+# 1. Publish the SDK to Maven Local (from this repo)
 ./gradlew :sdk-android:publishToMavenLocal
 ```
 
@@ -70,7 +74,7 @@ dependencyResolutionManagement {
 }
 
 // 2. app/build.gradle.kts — add the dependency
-implementation("com.medtroniclabs.microcoaching:sdk-android:0.3.8-SNAPSHOT")
+implementation("com.medtroniclabs.microcoaching:sdk-android:0.6.0-SNAPSHOT")
 ```
 
 ```kotlin
@@ -79,19 +83,21 @@ MicroCoachingSDK.Builder(this)
     .language(Language.BANGLA)
     .backendUrl(BuildConfig.COACHING_BACKEND_URL)
     .authToken(getAuthTokenOrEmpty())
-    .enableChat(true)
+    .theme(MyBrandCoachingColors)   // CoachingColors.Spice.copy(primary = …) — see 07
     .huggingFaceToken(BuildConfig.HF_TOKEN)
     .build()
+
+// After the user logs in:
+MicroCoachingSDK.getInstance().updateAuthToken(jwt)
 ```
 
 ```kotlin
-// 4. Embed the chat anywhere
-supportFragmentManager.beginTransaction()
-    .replace(R.id.coaching_container, CoachingChatFragment.newInstance())
-    .commit()
+// 4. Identify the CHW (required — all hooks no-op without it), then embed a surface
+MicroCoachingSDK.getInstance().onHomeScreenShown(chwId)
+CoachingChatBottomSheet.show(supportFragmentManager)
 ```
 
-Full detail: [01 — Setup](./01-setup.md) → [02 — Initialization](./02-initialization.md) → [03 — UI Embedding](./03-ui-embedding.md).
+Full detail: [00 — Quick Start](./00-quick-start.md) → [01 — Setup](./01-setup.md) → [02 — Initialization](./02-initialization.md) → [03 — UI Embedding](./03-ui-embedding.md).
 
 ---
 
@@ -131,26 +137,32 @@ Full detail: [01 — Setup](./01-setup.md) → [02 — Initialization](./02-init
 
 | Method | Purpose |
 |---|---|
-| `Builder(context)` / `.build()` | Create or rebuild the singleton. |
+| `Builder(context)` / `.build()` | Create or rebuild the singleton (a rebuild resets every omitted option — see [02](./02-initialization.md)). |
 | `.language(Language)` | `BANGLA` (default) / `ENGLISH`. |
-| `.backendUrl(String)` · `.authToken(String)` | Coaching backend + SPICE JWT. |
-| `.enableChat / enableLearnModule / enableApplyModule / enableVoice(Boolean)` | Feature flags. |
+| `.backendUrl(String)` · `.authToken(String)` | Coaching backend + SPICE JWT. Blank `backendUrl` disables sync entirely. |
+| `.persona(CoachingPersona)` | `SK` (default) / `PO`. |
+| `.enableVoice(Boolean)` | Voice input in chat (the mic). |
+| `.enableChat / enableLearnModule / enableApplyModule / enableMeasureModule(Boolean)` | **Reserved — currently no effect.** |
 | `.huggingFaceToken(String)` · `.modelDownloadStrategy(…)` · `.modelProviders(…)` | Model download. |
 | `.offlineSttEngineFactory(SherpaOnnxStt.factory)` | Optional offline BN STT. |
 | `.enableTelemetry(Boolean)` · `.otelEndpoint(String)` · `.otelHeaders(Map)` | OpenTelemetry. |
 | `.dataCallback(MicroCoachingDataCallback)` | Push-pattern data. |
+| `.theme(CoachingColors)` · `.typography(Typography)` | Brand colours and type scale for SDK screens. See [07](./07-theming.md). |
 
 Full table: [02 — Builder methods](./02-initialization.md#builder-methods).
 
-### Workflow hooks (on `MicroCoachingSDK.getInstance()`)
+### Workflow hooks & runtime control (on `MicroCoachingSDK.getInstance()`)
 
-| Hook | Call when |
+| Call | When |
 |---|---|
-| `onHomeScreenShown(chwId)` | Home shown. |
-| `onPatientSelected(patientId)` | Patient opened. |
-| `onAssessmentSubmitted(encounterId, patientId, assessmentData)` | Assessment saved. |
+| `onHomeScreenShown(chwId)` | Home shown. **Required** — every other hook no-ops until this runs. |
+| `onTodaysVisitsUpdated(visits)` | Today's schedule loaded/changed (PII-free projection). |
+| `onAssessmentSubmitted(encounterId, patientId, assessmentData)` | Assessment saved (workflow signals). |
+| `onReferralSubmitted(encounterId, patientId, referralData)` | Referral committed (referral-correctness evaluation). |
 | `onConnectivityRestored()` | Network restored. |
-| `setLanguage(Language)` · `checkHealth()` · `shutdown()` | Runtime control. |
+| `updateAuthToken(jwt)` | After login / token refresh — preferred over a rebuild. |
+| `setLanguage(Language)` · `setPersona(…)` · `checkHealth()` · `shutdown()` | Runtime control. |
+| `clearDashboardCache()` · `flushTelemetryNow()` · `triggerFullInboundSync()` | Logout cleanup / manual smoke tests. |
 
 Full table: [04 — Workflow hooks](./04-hooks-and-data.md#workflow-hooks-overview).
 
@@ -161,7 +173,8 @@ Full table: [04 — Workflow hooks](./04-hooks-and-data.md#workflow-hooks-overvi
 | `CoachingChatFragment` | `newInstance(patientId, systemContext)` |
 | `CoachingChatBottomSheet` | `show(fragmentManager)` |
 | `CoachingFlowActivity` | `launch()` / `launchLearn()` / `launchLearnModule()` |
-| `ChatFab` · `MorningCard` · `LearnCard` | Compose components rendered in a `ComposeView` |
+| `CoachingGridTile` · `ChatFab` · `MorningCard` · `LearnCard` | Compose components rendered in a `ComposeView` |
+| Theming | `Builder.theme(CoachingColors)` — see [07](./07-theming.md) |
 
 Full detail: [03 — UI Embedding](./03-ui-embedding.md).
 
@@ -169,8 +182,7 @@ Full detail: [03 — UI Embedding](./03-ui-embedding.md).
 
 ## Related docs
 
-- [docs/SDK.md](../SDK.md) — architecture, components, and Maven publishing internals.
-- [docs/UseCases_v2.md](../UseCases_v2.md) — use cases (UC-1/2/3) and the CHW journey.
+- [docs/ARCHITECTURE.md](../ARCHITECTURE.md) — architecture, components, data model, workflows, and Maven publishing.
 - [docs/gaps/GAP_DETECTION_SDK.md](../gaps/GAP_DETECTION_SDK.md) — gap-detection rule model.
 - [references/chat.md](../references/chat.md) — how the chat works under the hood (pipeline, retrieval, guardrails, voice).
 - [sdk-android-sherpa/README.md](../../sdk-android-sherpa/README.md) — offline STT module.

@@ -184,17 +184,16 @@ class ScopeClassifier(private val terms: Set<String>) {
          *
          * Harvested words are filtered against [BanglaTokenizer.STOPWORDS] — the
          * `length >= 3` gate alone admits function words like "and"/"the" (from
-         * titles such as "Maternal and Neonatal Referral Process"), which then
-         * count as *clinical* overlap in [OffTopicGuard]. That is the verified
-         * hole that let "Breast Engorgement and Pain" pass the garbage guard
-         * against a newborn-warmth card: the only shared "clinical" token was "and".
+         * titles such as "Maternal and Neonatal Referral Process"), which would then
+         * count as topical evidence in [ServeDecision] and pair any two cards that
+         * happen to share them.
          */
         /**
          * Structural / framing words that appear in card titles & metadata but carry
          * no clinical meaning. Excluded from harvested DYNAMIC terms only (never from
          * [STATIC_TERMS] or [ClinicalSynonymMap]) so an everyday word like "nature"
          * (from "…Nature of Diarrhoea") can't widen the Strict-mode allow-list or
-         * count as clinical overlap in [OffTopicGuard]. Real clinical vocabulary is
+         * count as topical evidence in [ServeDecision]. Real clinical vocabulary is
          * unaffected — it lives in the static seed list.
          */
         private val GENERIC_HARVEST_STOPWORDS: Set<String> = setOf(
@@ -226,8 +225,8 @@ class ScopeClassifier(private val terms: Set<String>) {
                 // CHW might type that don't appear in the module title — fewer false
                 // off-scope refusals. Routed through the same word-harvest +
                 // stop-word filter as titles. Full search_phrases are deliberately
-                // skipped: they're whole sentences and would inflate the clinical
-                // overlap set OffTopicGuard reads from scopeTerms().
+                // skipped: they're whole sentences and would inflate the evidence
+                // vocabulary ServeDecision reads from scopeTerms().
                 harvestMetadataTerms(m.searchMetadataJson).forEach { harvestTitleWords(it) }
             }
             val all = STATIC_TERMS.map { it.lowercase() }.toSet() +

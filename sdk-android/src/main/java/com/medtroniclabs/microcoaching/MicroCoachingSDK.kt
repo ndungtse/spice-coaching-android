@@ -92,6 +92,7 @@ import com.medtroniclabs.microcoaching.domain.validation.OutputValidator
 import  com.medtroniclabs.microcoaching.ai.voice.stt.SttModelManager
 import com.medtroniclabs.microcoaching.ai.voice.VoiceInputController
 import com.medtroniclabs.microcoaching.ai.retrieval.ModuleKnowledgeIndex
+import com.medtroniclabs.microcoaching.ai.retrieval.ScopeClassifier
 import com.medtroniclabs.microcoaching.ai.retrieval.RetrievalHintOverlay
 import com.medtroniclabs.microcoaching.ai.translation.TranslationModelState
 import com.medtroniclabs.microcoaching.ai.voice.OfflineSttEngine
@@ -469,6 +470,13 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
      * open ([ensureChatKnowledgeIndex]), not at SDK init. `empty()` until then.
      */
     val chatKnowledgeIndex: StateFlow<ModuleKnowledgeIndex> = chatIndexBootstrap.index
+
+    /**
+     * Scope/evidence vocabulary over the same corpus as [chatKnowledgeIndex]. Chat reads
+     * this rather than building one from the morning subset, so the gate knows the
+     * vocabulary of every card retrieval can return.
+     */
+    internal val chatScopeClassifier: StateFlow<ScopeClassifier> = chatIndexBootstrap.scopeClassifier
 
     /**
      * Start (once) the background collector that builds and maintains [chatKnowledgeIndex].

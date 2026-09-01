@@ -205,6 +205,12 @@ tasks.register<JavaExec>("retrievalLab") {
     mainClass.set("com.medtroniclabs.microcoaching.ai.retrieval.DevRetrievalServer")
     // corpus paths in the docs are written relative to the repo root
     workingDir = rootDir
-    environment("MC_CORPUS", System.getenv("MC_CORPUS") ?: "ignored/v3/modules/modules.json")
+    // Defaults to the corpus snapshot committed for the retrieval tests, so the lab
+    // starts with no environment set up.
+    environment(
+        "MC_CORPUS",
+        System.getenv("MC_CORPUS")
+            ?: "sdk-android/src/test/resources/retrieval/audit_corpus_2026-08.json",
+    )
     environment("MC_LAB_PORT", System.getenv("MC_LAB_PORT") ?: "7171")
 }

@@ -2,7 +2,7 @@
 
 An Android library that embeds AI coaching directly inside the SPICE clinical app, delivering on-device guidance to Community Health Workers (CHWs) in Bangladesh — with full OpenTelemetry observability, an exportable chat UI, and offline-first data storage.
 
-> **Version:** `0.6.0-SNAPSHOT` · **Min SDK:** 24 (Android 7.0) · **ABI:** `arm64-v8a` · **Language:** Kotlin
+> **Version:** `0.6.0-SNAPSHOT` · **Min SDK:** 23 · **ABI:** `arm64-v8a` · **Language:** Kotlin
 
 ---
 
@@ -11,141 +11,47 @@ An Android library that embeds AI coaching directly inside the SPICE clinical ap
 | Module | Role |
 |---|---|
 | `sdk-android/` | The library — produces the `.aar` consumed by SPICE or any host app |
+| `sdk-android-sherpa/` | Optional offline Bengali speech-to-text sidecar (bundles sherpa-onnx) |
 | `app/` | Sample app that imports `sdk-android` and shows a working integration |
 
-See [docs/SDK.md](docs/SDK.md) for a full breakdown of every feature and component.
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full architecture — components, data model, workflows, and decisions.
 
 ---
 
 ## Using the SDK in your project
 
-### 1. Add the dependency
+**Full integration guide: [docs/documentation/00-quick-start.md](docs/documentation/00-quick-start.md)** — everything a host app needs (gradle wiring, init, post-login token refresh, UI embedding, hooks, theming, and what NOT to wire) in one file. The gist:
 
-**Option A — Local project dependency (for SPICE development)**
-
-In SPICE's `settings.gradle.kts`:
-```kotlin
-includeBuild("../micro-coaching-android-sdk") {
-    dependencySubstitution {
-        substitute(module("com.medtroniclabs:micro-coaching-sdk")).using(project(":sdk-android"))
-    }
-}
+```bash
+# Publish to Maven Local from this repo
+./gradlew :sdk-android:publishToMavenLocal
 ```
 
-Or as a direct project reference if both repos share a root:
 ```kotlin
-// settings.gradle.kts
-include(":sdk-android")
-project(":sdk-android").projectDir = file("../micro-coaching-android-sdk/sdk-android")
+// settings.gradle.kts — mavenLocal() first; app/build.gradle.kts:
+implementation("com.medtroniclabs.microcoaching:sdk-android:0.6.0-SNAPSHOT")
 ```
 
-Then in SPICE's `app/build.gradle.kts`:
 ```kotlin
-implementation(project(":sdk-android"))
-```
-
-**Option B — Maven (when published)**
-
-```kotlin
-// build.gradle.kts
-dependencies {
-    implementation("com.medtroniclabs:micro-coaching-sdk:0.1.0")
-}
-```
-
-See [Publishing to Maven](#publishing-to-maven) below.
-
----
-
-### 2. Initialise in Application.onCreate()
-
-```kotlin
-class SpiceApplication : Application() {
-    override fun onCreate() {
-        super.onCreate()
-
-        MicroCoachingSDK.Builder(this)
-            .language(Language.BANGLA)
-            .backendUrl(BuildConfig.COACHING_BACKEND_URL)
-            .authToken(SecuredPreference.getToken())      // SPICE JWT
-            .otelEndpoint(BuildConfig.OTEL_ENDPOINT)
-            .otelHeaders(mapOf("signoz-access-token" to BuildConfig.SIGNOZ_TOKEN))
-            .enableTelemetry(BuildConfig.ENABLE_COACHING_TELEMETRY)
-            .enableChat(true)
-            .modelPath(getExternalFilesDir(null)?.absolutePath + "/gemma3.task")
-            .build()
-    }
-}
-```
-
-Every option has a sensible default — the only required call is `Builder(context).build()`.
-
----
-
-### 3. Embed the chat UI
-
-```kotlin
-// In any SPICE Activity or Fragment:
-supportFragmentManager.beginTransaction()
-    .replace(R.id.coaching_container, CoachingChatFragment.newInstance(
-        patientId = patient.patientTrackId,
-        systemContext = "Patient has hypertension. Provide diet counselling."
-    ))
-    .commit()
-```
-
-`CoachingChatFragment` handles all states internally: model loading, streaming inference, error recovery, and offline graceful degradation.
-
----
-
-### 4. Access SDK data from SPICE
-
-**Pull pattern (query on demand):**
-```kotlin
-// Hilt AppModule
-@Provides @Singleton
-fun provideCoachingRepo(): CoachingDataRepository =
-    MicroCoachingSDK.getInstance().dataRepository
-
-// In any ViewModel
-val history = coachingRepo.getChatHistory(sessionId)
-val pending = coachingRepo.getPendingCoachingEvents()
-```
-
-**Push pattern (subscribe to events):**
-```kotlin
+// Application.onCreate() — every option has a default; blank backendUrl disables sync
 MicroCoachingSDK.Builder(this)
-    // ...
-    .dataCallback(object : MicroCoachingDataCallback {
-        override fun onCoachingEventsReady(events: List<Map<String, Any>>) {
-            // Forward to SPICE backend as needed
-        }
-        override fun onModelReady(modelPath: String) {
-            Log.d("SPICE", "Coaching model ready: $modelPath")
-        }
-    })
+    .language(Language.BANGLA)
+    .backendUrl(BuildConfig.COACHING_BACKEND_URL)
+    .authToken(getStoredTokenOrEmpty())
+    .theme(MyBrandCoachingColors)          // CoachingColors.Spice.copy(primary = …)
     .build()
+
+// After login:
+MicroCoachingSDK.getInstance().updateAuthToken(jwt)
 ```
-
----
-
-### 5. Wire SPICE lifecycle hooks
 
 ```kotlin
-val sdk = MicroCoachingSDK.getInstance()
-
-// In SPICE home screen
-sdk.onHomeScreenShown(chwId = session.userId)
-
-// When CHW selects a patient
-sdk.onPatientSelected(patientId = patient.patientTrackId)
-
-// After assessment submission
-sdk.onAssessmentSubmitted(encounterId = encounter.id, patientId = patient.patientTrackId)
-
-// When connectivity is restored (triggers OTel flush)
-sdk.onConnectivityRestored()
+// Identify the CHW (required — all other hooks no-op without it), then show a surface
+MicroCoachingSDK.getInstance().onHomeScreenShown(chwId)
+CoachingChatBottomSheet.show(supportFragmentManager)
 ```
+
+Deeper topics: [initialization & config](docs/documentation/02-initialization.md) · [UI embedding](docs/documentation/03-ui-embedding.md) · [workflow hooks & data](docs/documentation/04-hooks-and-data.md) · [model & voice](docs/documentation/05-model-and-voice.md) · [theming](docs/documentation/07-theming.md) · [troubleshooting](docs/documentation/06-troubleshooting.md).
 
 ---
 
@@ -171,11 +77,11 @@ Privacy guarantee: no prompt text, no response text, and no patient-identifiable
 
 ## Publishing to Maven
 
-See [docs/SDK.md — Maven Publishing](docs/SDK.md#maven-publishing) for the full guide.
+See [docs/ARCHITECTURE.md — Build, Publishing & Consumption](docs/ARCHITECTURE.md#8-build-publishing--consumption) for the full guide.
 
 **Quick summary:**
 1. Set the version in `sdk-android/build.gradle.kts` → `buildConfigField("String", "SDK_VERSION", "\"x.y.z\"")`
-2. Also set `version = "x.y.z"` and `group = "com.medtroniclabs"` in the same file (once the `maven-publish` plugin is added)
+2. Also set `version = "x.y.z"` and `group = "com.medtroniclabs.microcoaching"` in the same file's publishing block
 3. Run `./gradlew :sdk-android:publishToMavenLocal` to test locally
 4. Run `./gradlew :sdk-android:publish` to push to the configured remote repository
 
@@ -196,12 +102,12 @@ See [docs/SDK.md — Maven Publishing](docs/SDK.md#maven-publishing) for the ful
 
 | Requirement | Value |
 |---|---|
-| Android min SDK | 24 (Android 7.0 Nougat) |
-| Target / Compile SDK | 35 |
+| Android min SDK | 23 |
+| Compile SDK | 36 |
 | ABI | `arm64-v8a` only |
 | Kotlin | 2.1.20 |
 | AGP | 9.1.0 |
-| Gemma model | `.task` file (Gemma 3 1B INT4, ~800 MB) placed in `getExternalFilesDir(null)` |
+| On-device model | Downloaded at runtime by the SDK (consent-gated, default strategy `ON_FIRST_USE`) — see [docs/documentation/05-model-and-voice.md](docs/documentation/05-model-and-voice.md) |
 
 ---
 

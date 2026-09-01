@@ -18,8 +18,7 @@ import com.medtroniclabs.microcoaching.ai.retrieval.ChatRefusal
 import com.medtroniclabs.microcoaching.ai.retrieval.GroundingChunk
 import com.medtroniclabs.microcoaching.ai.retrieval.GroundingSelector
 import com.medtroniclabs.microcoaching.ai.retrieval.ModuleKnowledgeIndex
-import com.medtroniclabs.microcoaching.ai.retrieval.OffTopicGuard
-import com.medtroniclabs.microcoaching.ai.retrieval.ScopeClassifier
+import com.medtroniclabs.microcoaching.ai.retrieval.ServeDecision
 import com.medtroniclabs.microcoaching.ai.voice.CoachingTtsHelper
 import com.medtroniclabs.microcoaching.network.RagQueryRequest
 import com.medtroniclabs.microcoaching.network.SourceDocumentRef
@@ -105,22 +104,20 @@ internal suspend fun ChatViewModel.handleLocalGemmaMessage(
     // weather, entertainment) before any LLM call. Applies in BOTH Strict and
     // ExtendedClinical modes: a small on-device model is unreliable at refusing these
     // on its own, even with a tight open-scope prompt. Cheap substring match.
-    val scopeClassifier = ScopeClassifier.buildFrom(sdk.morningModules.value)
+    val scopeClassifier = sdk.chatScopeClassifier.value
     if (scopeClassifier.isOutOfScope(trimmed) || scopeClassifier.isOutOfScope(englishCurrent)) {
         Log.d(ChatViewModel.TAG, "L0 deny-list: hard out-of-scope match — refusing without LLM call")
         serveRefusal(ChatRefusal.Scope, groundedFrom = emptyList(), topScore = null)
         return
     }
 
-    // L1 — Scope allow-list. Advisory only: a keyword miss no
-    // longer hard-refuses before retrieval — that pre-search gate caused
-    // false refusals on legitimate clinical questions the gazetteer hadn't seen.
-    // The real backstops are L2 retrieval (no grounding → honest refusal below)
-    // and the OffTopicGuard clinical-overlap check. L0 (deny-list) still blocks
-    // obvious out-of-scope topics hard, before any of this.
+    // L1 — Scope allow-list. Advisory only: refusing here on a keyword miss rejects
+    // legitimate clinical questions whose vocabulary the gazetteer has not seen. The
+    // backstops that do refuse are L2 retrieval (no grounding) and [ServeDecision]
+    // (grounding without topical evidence); L0 still blocks out-of-scope topics hard.
     val l1InScope = scopeClassifier.isInScope(trimmed) || scopeClassifier.isInScope(englishCurrent)
     if (!l1InScope) {
-        Log.d(ChatViewModel.TAG, "L1 advisory: scope keyword miss — deferring to retrieval + OffTopicGuard")
+        Log.d(ChatViewModel.TAG, "L1 advisory: scope keyword miss — deferring to retrieval + ServeDecision")
     }
 
     // L2 — Retrieval. Module content is Bengali-first, so retrieval always anchors
@@ -173,45 +170,34 @@ internal suspend fun ChatViewModel.handleLocalGemmaMessage(
     }
     Log.i(ChatViewModel.TRACE_TAG, "BM25 grounding chosen=${selection.chosenLabel} size=${grounding.size}")
 
-    // Backstop against BM25 latching onto a stop-word: refuse only when the top hits
-    // share ZERO clinical tokens with the query. Deliberately loose — the strict
-    // question↔evidence check runs later, at the serve decision.
     val guardQuery = when {
         banglaQuery != null -> "$trimmed $banglaQuery"          // English mode: EN typed + BN translation
         englishCurrent != trimmed -> "$trimmed $englishCurrent" // Bangla mode: BN typed + EN translation
         else -> trimmed
     }
-    // The same choice the retrieval-only path serves with, so the model rewords the card a
-    // CHW would otherwise have been shown verbatim. `bestMatchingHit` re-ranks by
-    // clinical-term overlap and can promote a different card, which is how the two paths
-    // came to answer the same question from different cards.
-    val guardPrimary = OffTopicGuard.selectLowEndServeHit(
+    // The same decision the retrieval-only path makes, so the model can only reword a
+    // card a CHW would otherwise have been shown verbatim, and a refusal costs no
+    // inference. Honest-refusal policy: the on-device model never answers ungrounded
+    // clinical content, nor from a card that shares no topic with the question.
+    val decision = ServeDecision.decide(
         query = guardQuery,
         hits = grounding,
         clinicalTerms = scopeClassifier.scopeTerms(),
+        tuning = config.chatTuning.serve,
+        isBanglaTurn = sdk.language == Language.BANGLA,
     )
-    if (OffTopicGuard.isClearlyUnanswerable(
-            query = guardQuery,
-            hits = grounding,
-            clinicalTerms = scopeClassifier.scopeTerms(),
-        )
-    ) {
-        Log.i(ChatViewModel.TRACE_TAG, "garbage guard: zero clinical-token overlap across top hits — refusing")
-        serveRefusal(
-            ChatRefusal.NoGround,
-            groundedFrom = emptyList(),
-            topScore = grounding.firstOrNull()?.score,
-        )
-        return
-    }
-
-    // Routing — honest-refusal policy: the on-device model never answers ungrounded
-    // clinical content. No grounding → honest refusal. With grounding present it
-    // answers from that grounding, including the part of the question the references
-    // cover (see the hardened prompt).
-    if (grounding.isEmpty()) {
-        serveRefusal(ChatRefusal.NoGround, groundedFrom = emptyList(), topScore = null)
-        return
+    Log.i(ChatViewModel.TRACE_TAG, ServeDecision.describe(decision))
+    val guardPrimary = when (decision) {
+        is ServeDecision.Decision.Refuse -> {
+            serveRefusal(
+                ChatRefusal.NoGround,
+                groundedFrom = grounding.map { it.chunkId },
+                topScore = grounding.firstOrNull()?.score,
+                validatorReason = decision.reason.name.lowercase(),
+            )
+            return
+        }
+        is ServeDecision.Decision.Serve -> decision.hit
     }
     // Translated to English before it reaches either the prompt or the groundedness check.
     // The corpus is Bengali-authored and the model is always prompted in English, so
@@ -220,11 +206,7 @@ internal suspend fun ChatViewModel.handleLocalGemmaMessage(
     // arithmetic rather than by quality — which discards every answer and serves the card
     // verbatim.
     val ordered = readableGrounding(
-        if (guardPrimary == null) {
-            grounding
-        } else {
-            listOf(guardPrimary) + grounding.filter { it.chunkId != guardPrimary.chunkId }
-        },
+        listOf(guardPrimary) + grounding.filter { it.chunkId != guardPrimary.chunkId },
     )
     // Capped here rather than at the prompt, so everything downstream judges the answer
     // against exactly what the model saw: otherwise the drug/dosage block-list could clear
@@ -400,7 +382,6 @@ internal suspend fun ChatViewModel.handleLocalGemmaMessage(
         // doesn't literally match still serves; a weak match uses the stricter
         // floor. Both floors are tunable via ChatTuning. Score is traced on every
         // grounded turn so the floors can be tuned from logs.
-        // PHASE3_RETIRE: delete score-based bypass when OffTopicGuard is out-of-corpus-only.
         val strongRetrieval = (topScore ?: 0f) >= tuning.strongRetrievalScore
         val floor =
             if (strongRetrieval) tuning.strongRetrievalGroundednessFloor
@@ -593,12 +574,12 @@ internal suspend fun ChatViewModel.handleLocalGemmaMessage(
  *
  * Mirrors that path's scope filters (L0 deny-list, L1 allow-list in Strict mode) and skips the
  * layers that exist to police generated text — the L3 sentinels and the L4 validator — because
- * there is no generated text to police. The topical gate still applies, so an unrelated
+ * there is no generated text to police. [ServeDecision] still applies, so an unrelated
  * top-scoring card is refused rather than served.
  */
 internal suspend fun ChatViewModel.handleRetrievalOnlyMessage(trimmed: String) {
     val isBangla = sdk.language == Language.BANGLA
-    val scopeClassifier = ScopeClassifier.buildFrom(sdk.morningModules.value)
+    val scopeClassifier = sdk.chatScopeClassifier.value
 
     // L0 — hard deny-list. Cheap; runs on the original (untranslated) text.
     if (scopeClassifier.isOutOfScope(trimmed)) {
@@ -654,48 +635,27 @@ internal suspend fun ChatViewModel.handleRetrievalOnlyMessage(trimmed: String) {
     val grounding = selection.hits
     Log.i(ChatViewModel.TRACE_TAG, "BM25 retrieval-only[$searchLang] hits=${grounding.size} chosen=${selection.chosenLabel}")
     grounding.forEachIndexed { i, h -> Log.i(ChatViewModel.TRACE_TAG, traceChunk("  hit", i, h)) }
-    if (grounding.isEmpty()) {
-        Log.d(ChatViewModel.TAG, "Retrieval-only miss — no usable grounding chunk")
-        serveRefusal(ChatRefusal.NoGround, groundedFrom = emptyList(), topScore = null)
-        return
-    }
-    // Clinical-overlap backstop: refuse only on weak top scores with zero overlap,
-    // since confident hits bypass it. Then pick the serve target — BM25 #1 unless a
-    // later hit is clearly better aligned (referral timing, stub body, title overlap).
-    if (OffTopicGuard.shouldRefuseLowEnd(
-            query = guardQuery,
-            hits = grounding,
-            clinicalTerms = scopeClassifier.scopeTerms(),
-        )
-    ) {
-        Log.i(ChatViewModel.TRACE_TAG, "garbage guard (retrieval-only): zero clinical-token overlap across top hits — refusing")
-        serveRefusal(ChatRefusal.NoGround, groundedFrom = emptyList(), topScore = grounding.first().score)
-        return
-    }
-    val top = OffTopicGuard.selectLowEndServeHit(
+    // The same call the LLM path makes, so both paths answer a given question from
+    // the same card: served only with topical evidence, otherwise refused.
+    val decision = ServeDecision.decide(
         query = guardQuery,
         hits = grounding,
         clinicalTerms = scopeClassifier.scopeTerms(),
-    ) ?: grounding.first()
-    // Question↔evidence check. Nothing above it verifies that the card is about what
-    // was ASKED: `shouldRefuseLowEnd` short-circuits on any hit scoring ≥ 80 (real
-    // scores are 135–441, so it never fires) and its overlap test passes on a single
-    // shared clinical term — and "গর্ভবতী" is shared by a quarter of the corpus. Serving
-    // a card that matches only on who the question is about is how a diet question came
-    // back with anemia grading; refuse instead.
-    if (!OffTopicGuard.sharesTopicalTerm(guardQuery, top)) {
-        Log.i(
-            ChatViewModel.TRACE_TAG,
-            "topical-refusal (retrieval-only): top card shares no topical term with the question — " +
-                "chunkId=${top.chunkId} score=${top.score}",
-        )
-        serveRefusal(
-            ChatRefusal.NoGround,
-            groundedFrom = grounding.map { it.chunkId },
-            topScore = top.score,
-            validatorReason = "topical_miss",
-        )
-        return
+        tuning = config.chatTuning.serve,
+        isBanglaTurn = isBangla,
+    )
+    Log.i(ChatViewModel.TRACE_TAG, ServeDecision.describe(decision))
+    val top = when (decision) {
+        is ServeDecision.Decision.Refuse -> {
+            serveRefusal(
+                ChatRefusal.NoGround,
+                groundedFrom = grounding.map { it.chunkId },
+                topScore = grounding.firstOrNull()?.score,
+                validatorReason = decision.reason.name.lowercase(),
+            )
+            return
+        }
+        is ServeDecision.Decision.Serve -> decision.hit
     }
     Log.d(ChatViewModel.TAG, "Serving retrieval-only — chunkId=${top.chunkId} score=${top.score}")
     val attribution = resolveSourceAttribution(listOf(top))

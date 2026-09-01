@@ -35,6 +35,28 @@ internal object ModuleCorpusParser {
         return maxOf(bnLen, enLen) >= MIN_INDEXABLE_BODY_LEN
     }
 
+    /**
+     * Trainer-facing session-guide phrases. A card whose body carries one addresses
+     * the person running a training session ("ask the participants… write them on
+     * the board"), not a CHW with a question, so serving it as a chat answer is
+     * always wrong. Each exclusion is logged at index build, so a false positive here
+     * is visible and reversible by editing this list.
+     */
+    private val FACILITATOR_MARKERS = listOf(
+        "বোর্ডে লিখবেন",
+        "অংশগ্রহণকারী",
+        "সেশন পরিচালনা",
+        "প্রশিক্ষণার্থী",
+        "বলতে বলবেন",
+        "সেশন শেষ",
+    )
+
+    fun isFacilitatorText(bodyBn: String?, bodyEn: String?): Boolean {
+        val body = listOfNotNull(bodyBn, bodyEn).joinToString(" ")
+        if (body.isBlank()) return false
+        return FACILITATOR_MARKERS.any { it in body }
+    }
+
     /** Structured view over a module's `search_metadata`, split by index field + language. */
     data class ParsedMetadata(
         val keywordsEn: List<String>,   // keywords_en + topic_tags + clinical_conditions
@@ -143,6 +165,14 @@ internal object ModuleCorpusParser {
             if (!hasIndexableBody(bodyBn, bodyEn)) {
                 return@mapIndexedNotNull null
             }
+            if (isFacilitatorText(bodyBn, bodyEn)) {
+                android.util.Log.i(
+                    "ModuleKnowledgeIndex",
+                    "excluding facilitator-guide card ${module.moduleFamilyId.take(8)}:$idx \"${titleBn ?: titleEn}\"",
+                )
+                return@mapIndexedNotNull null
+            }
+            val cardMeta = obj.cardSearchMetadata()
             val chunk = GroundingChunk(
                 source = GroundingChunk.Source.CARD,
                 moduleFamilyId = module.moduleFamilyId,
@@ -153,8 +183,12 @@ internal object ModuleCorpusParser {
                 bodyBn = bodyBn,
                 score = 0f,
                 sourcePages = obj.sourcePageRefs(),
+                hintsBn = cardMeta.hintsBn,
+                hintsEn = cardMeta.hintsEn,
+                questionsBn = cardMeta.questionsBn,
+                questionsEn = cardMeta.questionsEn,
             )
-            Triple(chunk, obj.retrievalMetadata(), obj.cardSearchMetadata())
+            Triple(chunk, obj.retrievalMetadata(), cardMeta)
         }
     }
 

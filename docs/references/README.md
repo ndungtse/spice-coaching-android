@@ -1,10 +1,10 @@
 # SDK Reference — How It Works Under the Hood
 
-**Version:** 0.3.8-SNAPSHOT · **Date:** 2026-06-03 · **Status:** Draft
+**Version:** 0.6.0-SNAPSHOT · **Date:** 2026-08-31 · **Status:** Draft
 
 This folder explains **how the SDK works internally** — the mechanisms behind the features. It complements the [integration guide](../documentation/README.md), which covers **how to use** the SDK from a host app.
 
-> **Note:** this is reference material for understanding behaviour and debugging — not API contract. Public API signatures live in the [integration guide](../documentation/README.md); component-level internals live in [docs/SDK.md](../SDK.md).
+> **Note:** this is reference material for understanding behaviour and debugging — not API contract. Public API signatures live in the [integration guide](../documentation/README.md); the full structural picture lives in [docs/ARCHITECTURE.md](../ARCHITECTURE.md).
 
 ---
 
@@ -12,7 +12,7 @@ This folder explains **how the SDK works internally** — the mechanisms behind 
 
 | Doc | Topic |
 |---|---|
-| [chat.md](./chat.md) | How the on-device AI chat (IT-help) works — the input→retrieval→LLM→output pipeline, grounding, guardrails, translation, voice, and telemetry. |
+| [chat.md](./chat.md) | How the on-device AI chat works — the input→retrieval→LLM→output pipeline, grounding, guardrails, translation, voice, and telemetry. |
 
 ---
 
@@ -22,11 +22,11 @@ The chat pipeline is the deepest under-the-hood subsystem and gets its own page 
 
 | Subsystem | What it does | Where |
 |---|---|---|
-| Components & module layout | Every SDK package/component, OTel pipeline, LLM service, networking, Room schema, data-access patterns | [docs/SDK.md](../SDK.md) |
-| Inference mode selection | How the SDK chooses `ONLINE` / `EDGE` / `CACHED` (and the `forcedMode` override) | [documentation/02 — Initialization](../documentation/02-initialization.md#re-initializing-after-login-jwt) |
-| On-device model lifecycle | Download strategies/providers, `ModelManager` + `ModelState`, low-end retrieval-only mode | [documentation/05 — Model & Voice](../documentation/05-model-and-voice.md) |
-| Gap detection | Synced rule evaluation inside `onAssessmentSubmitted` | [docs/gaps/GAP_DETECTION_SDK.md](../gaps/GAP_DETECTION_SDK.md), [docs/gaps/GAPS_TEST.md](../gaps/GAPS_TEST.md) |
-| Workflow hooks & data boundary | Lifecycle hooks, push/pull data interfaces, the SPICE↔SDK data boundary | [documentation/04 — Hooks & Data](../documentation/04-hooks-and-data.md) |
+| Architecture, components & module layout | Every SDK package/layer, composition root, Room schema, sync, workflows, decisions | [docs/ARCHITECTURE.md](../ARCHITECTURE.md) |
+| Answer-mode selection | How chat routes between `ONLINE` / `ON_DEVICE_ASSISTED` / `ON_DEVICE_DIRECT` | [ARCHITECTURE.md §5.3](../ARCHITECTURE.md#53--chat--ai-pipeline) |
+| On-device model lifecycle | Download strategies/providers, `ModelManager` + `ModelState`, consent gating, low-end retrieval-only mode | [documentation/05 — Model & Voice](../documentation/05-model-and-voice.md) |
+| Gap detection | Internal, always-on rule evaluation — referral-correctness runs inside `onReferralSubmitted` | [docs/gaps/GAP_DETECTION_SDK.md](../gaps/GAP_DETECTION_SDK.md), [documentation/04 — Hooks & Data](../documentation/04-hooks-and-data.md#gap-detection) |
+| Workflow hooks & data boundary | Lifecycle hooks, push/pull data interfaces, the host↔SDK data boundary | [documentation/04 — Hooks & Data](../documentation/04-hooks-and-data.md) |
 
 ---
 
@@ -35,20 +35,21 @@ The chat pipeline is the deepest under-the-hood subsystem and gets its own page 
 ```
                        MicroCoachingSDK (singleton)
    ┌──────────────────────────────────────────────────────────────┐
-   │  InferenceRouter ── picks ONLINE / EDGE / CACHED               │
-   │        │                                                       │
-   │        ├─ EdgeInference ── Gemma 3 (on-device, .task/.litertlm)│
-   │        └─ (online RAG route is dormant — edge-only today)      │
-   │                                                                │
-   │  ModuleKnowledgeIndex ── BM25 retrieval over synced module     │
-   │                          cards + quizzes (chat grounding)      │
-   │                                                                │
-   │  ModelManager ── download / verify / state machine             │
-   │  SyncCoordinator ── periodic + connectivity-triggered sync     │
-   │  TelemetryManager ── OpenTelemetry spans (optional)            │
-   │  OnDeviceTranslator ── ML Kit BN↔EN                            │
-   │  microcoaching.db (Room) ── chat, events, modules, cache       │
+   │  AnswerModeResolver ── ONLINE / ON_DEVICE_ASSISTED / DIRECT   │
+   │        │                                                      │
+   │        ├─ ChatBackendAnswerer ── POST /coaching/rag-query     │
+   │        └─ ChatLocalAnswerer ── BM25 → ServeDecision →         │
+   │                                LiteRT-LM (Qwen3, downloaded)  │
+   │                                                               │
+   │  ModuleKnowledgeIndex ── BM25 retrieval over synced module    │
+   │                          cards (chat grounding, EN + BN)      │
+   │                                                               │
+   │  ModelManager ── consent-gated download / state machine       │
+   │  SyncCoordinator ── 15-min periodic + triggered sync          │
+   │  TelemetryManager ── OpenTelemetry spans (optional)           │
+   │  OnDeviceTranslator ── ML Kit BN↔EN                           │
+   │  microcoaching.db (Room, v35) ── modules, events, chat, state │
    └──────────────────────────────────────────────────────────────┘
 ```
 
-Two hard rules shape every internal: **no online LLM fallback** (inference is on-device Gemma only, with a retrieval-only degrade path on low-RAM devices), and the SDK's `microcoaching.db` is **fully separate** from the host's database.
+Two hard rules shape every internal: **offline chat never serves ungrounded LLM output** (`ServeDecision` gates every on-device answer before any LLM call, degrading to clinician-authored card text on low-RAM or model-less devices), and the SDK's `microcoaching.db` is **fully separate** from the host's database.
