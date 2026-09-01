@@ -180,10 +180,9 @@ private suspend fun SyncApi.pushBatch(
                 if (rejectedDigitalIds.isNotEmpty()) db.digitalProficiencyEventDao().incrementRetryCount(rejectedDigitalIds)
 
                 // Move rows that just hit the retry cap to `failed` so they stop
-                // being re-batched on every subsequent run. Applied symmetrically
-                // to all three outbound tables — previously only coaching_event
-                // capped, which meant permanently malformed traces / digital rows
-                // cycled forever (caught in code review).
+                // being re-batched on every subsequent run. Must apply to all three
+                // outbound tables — cap only one and permanently malformed rows in
+                // the others cycle forever.
                 if (rejectedEventIds.isNotEmpty()) {
                     val exhausted = db.coachingEventDao().getRetryCounts(rejectedEventIds)
                         .filter { it.retryCount >= MAX_OUTBOUND_RETRIES }

@@ -53,7 +53,6 @@ private val ChatHeaderHorizontalPadding = 16.dp
 
 /**
  * Header row for the chat sheet — avatar, title, online dot, optional close icon.
- * Matches `docs/designs/ai-coach.png`.
  */
 @Composable
 fun ChatSheetHeader(

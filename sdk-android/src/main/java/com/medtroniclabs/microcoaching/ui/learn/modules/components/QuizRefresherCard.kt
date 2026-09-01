@@ -32,8 +32,7 @@ import com.medtroniclabs.microcoaching.ui.components.swipeToDismiss
  * question from the highest-priority morning module (same module shown in
  * [MorningCard] on the home screen — both use [MicroCoachingSDK.getSelectedMorningModule]).
  *
- * Renamed from `QuickLearnCard` (v0.3.2). Tap opens [RefresherBottomSheet]
- * (its phases follow the refresher's kind).
+ * Tap opens [RefresherBottomSheet] (its phases follow the refresher's kind).
  *
  * Dormant since the sub-tab split.
  *
@@ -46,7 +45,7 @@ import com.medtroniclabs.microcoaching.ui.components.swipeToDismiss
  * @param dismissKey Identity of the shown question; resets the swipe offset when
  *   the banner advances to a different module.
  */
-@Deprecated("Dormant: the featured refresher banner is gone from the coaching tab (and the host home banner was removed) — refreshers now surface in the Practice Zone (RefresherSubTab) — see docs/_coaching/01_navigation_and_screens.md")
+@Deprecated("Dormant: refreshers surface in the Practice Zone (RefresherSubTab) instead")
 @Composable
 fun QuizRefresherCard(
     questionText: String,

@@ -25,8 +25,7 @@ import com.medtroniclabs.microcoaching.R
 
 /**
  * The blue "why this matters" explanation box shown under a quiz answer. Shared by
- * [AnswerFeedbackOverlay] and [InlineAnswerFeedback] (previously a byte-identical private copy
- * in each).
+ * [AnswerFeedbackOverlay] and [InlineAnswerFeedback].
  */
 @Composable
 internal fun WhyThisMattersBox(explanation: String) {

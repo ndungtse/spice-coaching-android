@@ -22,7 +22,7 @@ data class ChatMessage(
      * grounding chunk IDs, refusal outcome (one of `refused_scope` / `refused_no_ground`
      * / `refused_unsafe` / `served_grounded`), and similar tuning signals. Not persisted —
      * a future TTS layer can read this to announce "module reference: …" before the body
-     * but the field gracefully degrades to null if no TTS consumer is wired (chat_plan.md §B6).
+     * but the field gracefully degrades to null if no TTS consumer is wired.
      */
     val meta: ChatMessageMeta? = null,
     /**

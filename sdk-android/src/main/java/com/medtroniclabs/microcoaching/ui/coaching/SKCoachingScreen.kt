@@ -75,9 +75,9 @@ fun SKCoachingScreen(
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             when (selectedTab) {
                 TAB_COACHING -> {
-                    // onShowQuickLearn / onSeeAllKnowledge are no longer forwarded — the banner and the
-                    // knowledge see-all entry died with the sub-tab split; params kept so the LearnNavGraph
-                    // wiring stays untouched.
+                    // onShowQuickLearn / onSeeAllKnowledge are deliberately not forwarded: neither
+                    // the banner nor the knowledge see-all entry exists under the sub-tab layout.
+                    // The params stay so the LearnNavGraph wiring needs no change.
                     CoachingTab(
                         uiState = uiState,
                         chwId = chwId,

@@ -31,8 +31,8 @@ import com.medtroniclabs.microcoaching.ui.common.SectionState
 /**
  * ViewModel for the v3 module → lesson → quiz → result flow.
  *
- * Module-only. The scenario-cache fallback was removed in 0.3.0; all rendering
- * now comes from `module_cache` rows synced via `/sync/modules`. Per-CHW
+ * Module-only: all rendering comes from `module_cache` rows synced via
+ * `/sync/modules`. Per-CHW
  * completion state is held in memory for the session and also persisted:
  * `finishQuiz` calls `sdk.onModuleQuizCompleted`, which upserts a
  * [com.medtroniclabs.microcoaching.data.db.entity.ChwModuleCompletionEntity] row.

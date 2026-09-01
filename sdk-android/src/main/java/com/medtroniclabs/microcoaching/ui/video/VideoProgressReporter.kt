@@ -15,8 +15,7 @@ import java.util.TimeZone
 /**
  * Turns raw player progress callbacks into (a) monotonic local progress writes
  * (so the card + resume anchor update immediately) and (b) throttled
- * `video_progress_updated` telemetry, following the cadence in
- * docs/_events/video.md:
+ * `video_progress_updated` telemetry on this cadence:
  *
  *  - checkpoint every ~10 s **or** on a ≥5% progress delta,
  *  - a forced emit on pause / screen-exit,
@@ -104,7 +103,7 @@ internal class VideoProgressReporter(
         const val MIN_PERCENT_DELTA = 5.0
 
         /**
-         * The throttle decision from docs/_events/video.md, extracted pure so it's
+         * The throttle decision, extracted pure so it's
          * unit-testable: emit on a forced event (pause / exit / completion), on the
          * first checkpoint ([lastEmittedPercent] < 0), on a ≥[MIN_PERCENT_DELTA]
          * advance, or once [MIN_INTERVAL_MS] has elapsed since the last emit.

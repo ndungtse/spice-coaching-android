@@ -32,8 +32,8 @@ import com.medtroniclabs.microcoaching.R
  * source as `MicroCoachingSDK.morningModules`).
  *
  * @param questionText The question to preview on the banner.
- * @param participantCount Static count placeholder ("12 ASHAs answered today"
- *   — backend count endpoint is not in scope for v0.3.2).
+ * @param participantCount Static count placeholder ("12 ASHAs answered today") —
+ *   there is no backend count endpoint.
  * @param xpReward XP label shown in the right pill — display only, no scoring.
  * @param onClick Open the QuickLearnBottomSheet.
  */

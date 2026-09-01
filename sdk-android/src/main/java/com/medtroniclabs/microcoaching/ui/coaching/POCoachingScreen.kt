@@ -88,9 +88,9 @@ fun POCoachingScreen(
                     onSeeAllTraining = onSeeAllTraining,
                     knowledgeState = knowledgeState,
                     onKnowledgeDocSelect = onKnowledgeDocSelect,
-                    // onSeeAllKnowledge is no longer forwarded — the knowledge see-all entry
-                    // died with the sub-tab split; param kept so the LearnNavGraph wiring
-                    // stays untouched.
+                    // onSeeAllKnowledge is deliberately not forwarded: no knowledge see-all
+                    // entry exists under the sub-tab layout. The param stays so the
+                    // LearnNavGraph wiring needs no change.
                     cachedDocIds = cachedDocIds,
                     onRefresherStart = onRefresherStart,
                     onShowRefresherQuiz = onShowRefresherQuiz,

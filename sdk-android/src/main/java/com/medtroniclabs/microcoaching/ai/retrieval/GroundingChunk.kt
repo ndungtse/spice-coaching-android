@@ -2,10 +2,10 @@ package com.medtroniclabs.microcoaching.ai.retrieval
 
 /**
  * One piece of curriculum content surfaced by [ModuleKnowledgeIndex] as evidence
- * for the LLM's answer (B1 of chat_plan.md).
+ * for the LLM's answer.
  *
  * Chunks are built from module cards only. The carrier is intentionally untyped
- * beyond [source] so the validator and refusal layers (B4) can treat them
+ * beyond [source] so the validator and refusal layers can treat them
  * uniformly. Both language halves are retained: [referenceText] feeds the LLM
  * prompt (preferring the English side, falling back to Bengali), and the
  * refusal/fallback path serves the card body in the SDK language, translating the

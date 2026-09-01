@@ -17,18 +17,15 @@ import com.medtroniclabs.microcoaching.MicroCoachingSDK
  * it observes from [com.medtroniclabs.microcoaching.MicroCoachingSDK.modelManager]:
  *
  *   - **Model ready** → chat surface (message list, input, suggestion chips)
- *   - **Model missing** → "Download AI Model" CTA with the ~600 MB size warning
- *     (effectively the confirm dialog — the CHW must explicitly tap to start)
- *   - **Download in flight** → progress UI (chat_plan.md §D)
+ *   - **Model missing** → "Download AI Model" CTA carrying the active variant's
+ *     size (from [com.medtroniclabs.microcoaching.ai.model.ModelCatalog]); the CHW
+ *     must explicitly tap to start
+ *   - **Download in flight** → progress UI
  *
- * Why a single entry point? Before this lived in two places: SPICE's
- * `HomeScreenFragment` (Dialog + Toast) and the SDK's coaching-flow FAB
- * (Toast only). Both should converge so the chat sheet is the *only* place
- * where download progress is visible — removing the "tap Download → see Toast
- * → tap FAB again → see Download button with no progress" race called out in
- * QA. Chat no longer waits on the model, so opening mid-download is not a race;
- * this controller just makes sure every entry point arrives at the right
- * surface.
+ * Why a single entry point? The chat sheet is the *only* place download progress
+ * is visible, so every entry point must arrive there rather than at a Toast or a
+ * dialog of its own. Chat itself does not wait on the model, so opening
+ * mid-download is not a race.
  */
 object ChatLaunchController {
 

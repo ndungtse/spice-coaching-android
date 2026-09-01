@@ -31,8 +31,7 @@ import com.medtroniclabs.microcoaching.ui.theme.CoachingTheme
  * Horizontally-scrolled card used in the Training row (module_type ==
  * "digital_proficiency"). Width 240.dp, height 220.dp per the design.
  *
- * Hero is a gradient placeholder block until real assets ship — see the
- * v0.3.2 plan's "Out of scope" section.
+ * Hero is a gradient placeholder block until real assets ship.
  *
  * @param title Module title to display, two-line ellipsis if long.
  * @param meta Pre-formatted meta line ("4 min · 3 questions").

@@ -64,7 +64,7 @@ class OutputValidator {
         REFUSE_OUT_OF_SCOPE_SENTINEL in response
 
     /**
-     * L4 validator for chat responses (chat_plan.md §B4).
+     * Guardrail layer L4 for chat responses.
      *
      * Stricter than [validateText] because the response is produced under a
      * hardened "use only the Reference content" directive. We accept drugs and

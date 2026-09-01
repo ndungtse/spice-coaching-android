@@ -18,14 +18,14 @@ import kotlinx.coroutines.launch
 
 /**
  * Builds and maintains the in-memory BM25 [ModuleKnowledgeIndex] over the on-device module
- * corpus (B1–B2 of docs/v3/chat_plan.md), used by the chat answer paths to ground responses.
+ * corpus, used by the chat answer paths to ground responses.
  *
  * The index is deferred from SDK init — a launch-to-home session that never opens chat pays
  * neither the full-corpus JSON parse nor the retained index. [ensure] starts the maintaining
  * collector once (idempotent); the facade calls it when a chat surface opens.
  *
- * Extracted verbatim from `MicroCoachingSDK` (behaviour-preserving). Collaborators are passed
- * as providers so nothing forces the facade's lazy service graph at construction.
+ * Collaborators are passed as providers so nothing forces the facade's lazy service graph
+ * at construction.
  */
 internal class ChatKnowledgeIndexBootstrap(
     private val scope: CoroutineScope,

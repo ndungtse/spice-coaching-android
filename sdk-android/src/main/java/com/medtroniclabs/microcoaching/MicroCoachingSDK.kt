@@ -611,13 +611,12 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
         // before chat opens. Needed in both languages (BN for the Gemma round-trip,
         // EN to translate chat to/from the bn-only backend).
         sdkScope.launch { translator.ensureModelReady() }
-        // The Bengali STT (voice) download is no longer kicked off here. It now
-        // starts when the chat opens — ChatViewModel.autoStartOnDevicePacks() —
-        // so the pack downloads in parallel with the AI model on the coaching
-        // setup screen instead of only after the model reaches Ready. The trigger
-        // is idempotent (SttModelManager.triggerBengaliDownload no-ops when the
-        // pack is present/in-flight), and the mic-tap fallback in
-        // ChatVoiceInputController still covers first-dictation.
+        // The Bengali STT (voice) pack is deliberately NOT started here — it starts
+        // when chat opens (ChatViewModel.autoStartOnDevicePacks) so it downloads in
+        // parallel with the AI model rather than queueing behind it. That trigger is
+        // idempotent (SttModelManager.triggerBengaliDownload no-ops when the pack is
+        // present or in flight), and the mic-tap fallback in ChatVoiceInputController
+        // still covers first-dictation.
 
         // The chat BM25 index is NOT built here — deferred to first chat open
         // (ensureChatKnowledgeIndex). Eager build meant a full-corpus parse +

@@ -11,8 +11,7 @@ import android.util.Log
  * Emits a single logcat line describing the current network state at trigger /
  * schedule / work boundaries so QA can correlate "download didn't start" reports
  * with the active network type, transport flags, and metering status at the moment
- * the SDK saw the request. Previously duplicated verbatim in `ModelManager` and
- * `ModelDownloadWorker`.
+ * the SDK saw the request.
  */
 internal object NetworkDiagnostics {
 

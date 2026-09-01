@@ -20,9 +20,9 @@ import com.medtroniclabs.microcoaching.MicroCoachingSDK
 import com.medtroniclabs.microcoaching.ui.chat.SuggestedQuestion
 
 /**
- * Horizontally scrollable suggestion chip row pinned above the input. Replaces
- * the prior in-list vertical chip stack to match `ai-coach.png` and to keep
- * suggestions reachable without losing scroll position in the message list.
+ * Horizontally scrollable suggestion chip row pinned above the input. Pinned rather
+ * than placed in the message list so suggestions stay reachable without losing
+ * scroll position.
  */
 @Composable
 fun SuggestionRow(

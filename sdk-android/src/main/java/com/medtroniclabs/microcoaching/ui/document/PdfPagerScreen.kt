@@ -67,11 +67,6 @@ import kotlin.coroutines.cancellation.CancellationException
  * In-app PDF preview backed by the platform [android.graphics.pdf.PdfRenderer]
  * (API 21+, zero bundled native libraries).
  *
- * Previously backed by the pdfium-based `android-pdf-viewer` fork, which shipped
- * ~7.7 MB/ABI of native `.so` files (libpdfium, libicuuc, chromium libc++/zlib).
- * `PdfRenderer` is part of the OS, so removing that dependency drops those libs
- * from the SDK with no runtime download.
- *
  * The PDF is supplied as an already-downloaded local [file] (resolved by
  * [DocumentPreviewActivity] via the durable `AssetCache`, so it works offline).
  * `PdfRenderer` gives us per-page [Bitmap]s only — scroll, zoom and page-jump are
@@ -79,9 +74,9 @@ import kotlin.coroutines.cancellation.CancellationException
  *  - Vertical page scroll via [LazyColumn]; each page rendered fit-width, lazily,
  *    as it enters the viewport (bounded memory — see [PdfDocumentSession]).
  *  - Pinch + double-tap zoom via a `graphicsLayer` transform over the list.
- *    (`PdfRenderer` cannot re-rasterise on zoom the way pdfium did, so pages are
- *    rendered at container width and the transform upscales — mild softening at
- *    high zoom is the accepted trade-off for dropping the native dependency.)
+ *    (`PdfRenderer` cannot re-rasterise on zoom, so pages are rendered at
+ *    container width and the transform upscales — mild softening at high zoom is
+ *    the accepted trade-off for shipping no native PDF library.)
  *  - Initial page jump from [startPage] (1-indexed) via the list's initial index.
  *  - Single-page mode: when [selectedPage] (1-indexed) is supplied, ONLY that page
  *    is rendered — the rest of the document is neither shown nor reachable (no page

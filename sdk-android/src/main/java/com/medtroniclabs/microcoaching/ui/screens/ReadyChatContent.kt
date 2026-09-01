@@ -255,9 +255,9 @@ internal fun ReadyChatContent(
             item { Spacer(modifier = Modifier.height(8.dp)) }
         }
 
-        // Suggestion chips live above the input (per ai-coach.png) — NOT inside
-        // the message list anymore. They surface for as long as the source data
-        // has chips to offer; ChatViewModel decides when to refresh them.
+        // Suggestion chips live above the input, not inside the message list, so they
+        // stay reachable without losing scroll position. They surface for as long as
+        // the source data has chips to offer; ChatViewModel decides when to refresh.
         if (uiState.suggestedQuestions.isNotEmpty() && !uiState.isGenerating) {
             SuggestionRow(
                 questions = uiState.suggestedQuestions,
@@ -349,9 +349,9 @@ internal fun ReadyChatContent(
 
 
 /**
- * Single date marker between the header and the message list — matches the
- * "Today" pill in `ai-coach.png`. Real day-boundary logic (split history by
- * date) is a follow-up; the design only shows one pill.
+ * Single "Today" date marker between the header and the message list. Real
+ * day-boundary logic (split history by date) is a follow-up; the design only
+ * calls for one pill.
  */
 @Composable
 private fun TodayPill() {

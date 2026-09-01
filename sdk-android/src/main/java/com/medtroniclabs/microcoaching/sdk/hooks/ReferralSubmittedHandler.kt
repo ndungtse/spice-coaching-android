@@ -188,8 +188,7 @@ internal fun MicroCoachingSDK.handleReferralSubmitted(
                     // Genuinely no divergence to report → emit the single positive
                     // `spice_action_observed` row (gap_id = null) so the supervisor
                     // "correct referral" tile sees a correct data point. This is the
-                    // only place a `correctReferral = true` row originates now that
-                    // the assessment hook no longer fabricates one.
+                    // only place a `correctReferral = true` row originates.
                     recorder.recordSpiceActionObserved(
                         patientIdHash = patientIdHash,
                         patientVisitId = visitId,

@@ -48,8 +48,8 @@ import java.util.concurrent.atomic.AtomicBoolean
  *   - One instance of this engine per SDK; survives chat-fragment recreation.
  *   - Call [destroy] from the SDK teardown path.
  *
- * Sherpa-onnx offline fallback for Bengali is a separate engine; see the
- * STT plan in `docs/v3/chat/sherpa.md`.
+ * Sherpa-onnx offline fallback for Bengali is a separate engine — see
+ * [OfflineSttEngine].
  */
 internal class AndroidSpeechRecognizerEngine(
     private val appContext: Context,

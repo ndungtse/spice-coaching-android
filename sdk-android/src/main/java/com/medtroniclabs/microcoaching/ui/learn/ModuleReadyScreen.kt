@@ -50,15 +50,15 @@ import java.util.Locale
  * - [LearnUiState.Loading] → spinner
  * - [LearnUiState.Error] → error message
  * - [LearnUiState.ModuleList] → scrollable list of scenario cards (gap-prioritised)
- *   or the v0.3.2 [ModulesScreen] when [chwId] is set
+ *   or [ModulesScreen] when [chwId] is set
  *
- * [LearnUiState.ModuleReady] is no longer rendered here — the nav graph skips
- * directly to [ModuleDetailScreen] when a module is tapped (Fix 1).
+ * [LearnUiState.ModuleReady] is not rendered here — the nav graph skips straight to
+ * [ModuleDetailScreen] when a module is tapped.
  *
  * Pre-existing legacy chain: [LearnFragment] is this screen's only host; the
  * live `ModuleReady` route renders `CoachingHomeHost` instead.
  */
-@Deprecated("Legacy embeddable learn surface; not reachable from CoachingFlowActivity — see docs/_coaching/01_navigation_and_screens.md")
+@Deprecated("Legacy embeddable learn surface; not reachable from CoachingFlowActivity")
 // Dormant-to-dormant: this legacy body still composes the deprecated ModulesScreen.
 @Suppress("DEPRECATION")
 @OptIn(ExperimentalMaterial3Api::class)

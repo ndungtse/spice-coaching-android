@@ -17,8 +17,6 @@ import kotlinx.serialization.json.jsonArray
  * both snake_case (backend payload) and camelCase (ProseMirror canonical), and
  * unrecognised types fall through to [RichBlock.Unknown] preserving their children
  * so no authored content is silently lost.
- *
- * See `docs/v3/rich-body.json` for the shape this targets.
  */
 private val lenientJson = com.medtroniclabs.microcoaching.util.LenientJson
 

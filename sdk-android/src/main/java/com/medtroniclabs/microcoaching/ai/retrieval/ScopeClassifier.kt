@@ -8,7 +8,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 
 /**
- * L1 of chat_plan.md §B4 — cheap pre-LLM gate that rejects out-of-domain queries
+ * Guardrail layer L1 — cheap pre-LLM gate that rejects out-of-domain queries
  * before any retrieval or inference cost is incurred.
  *
  * Implementation: a static allow-list of clinical / SPICE-workflow terms in both

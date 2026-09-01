@@ -314,7 +314,7 @@ private const val ANSWER_CHAR_CAP = 320
 private const val MAX_ANSWER_SNIPPETS = 2
 
 /**
- * Hardened system prompt used when grounding is present (L3 in chat_plan.md §B4).
+ * Hardened system prompt used when grounding is present (guardrail layer L3).
  * Strong directives against fabrication; structured refusal sentinel so the output
  * validator can intercept off-source answers without parsing free text.
  */

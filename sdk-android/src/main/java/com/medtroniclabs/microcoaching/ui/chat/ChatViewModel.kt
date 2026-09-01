@@ -248,7 +248,7 @@ class ChatViewModel(
      * Mirrors [ModelManager.state] into the chat state so the mode bar reflects the model's
      * lifecycle without the user refreshing anything.
      *
-     * Only ever updates a [ChatUiState.Ready]: chat no longer waits on the model, so there is
+     * Only ever updates a [ChatUiState.Ready]: chat never waits on the model, so there is
      * no separate screen to drive and no state where a download transition needs to move the
      * user somewhere. The one side effect is loading the engine when a download completes
      * mid-session, which is what lets an opt-in take effect without reopening chat.

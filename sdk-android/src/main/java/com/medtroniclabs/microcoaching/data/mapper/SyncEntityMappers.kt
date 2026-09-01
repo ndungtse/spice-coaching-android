@@ -31,9 +31,6 @@ import java.time.Instant
 /**
  * Extension functions mapping v3 backend `*SyncPayload` types to their Room
  * counterparts. Used by [com.medtroniclabs.microcoaching.sync.SyncApi].
- *
- * (Formerly `ScenarioBundleMapper.kt` — the scenario layer was removed in 0.3.0 and the file
- * is now named for what it actually does.)
  */
 
 private val bundleJson = com.medtroniclabs.microcoaching.util.LenientJson

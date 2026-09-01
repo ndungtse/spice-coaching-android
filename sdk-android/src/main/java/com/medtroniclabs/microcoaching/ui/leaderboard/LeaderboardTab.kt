@@ -27,7 +27,7 @@ import com.medtroniclabs.microcoaching.ui.leaderboard.components.TimeFilterTabs
  *
  * Dormant since the sub-tab split.
  */
-@Deprecated("Dormant: replaced by BadgesTab on the SK home. Package retained pending the final leaderboard decision — see docs/_coaching/01_navigation_and_screens.md")
+@Deprecated("Dormant: replaced by BadgesTab on the SK home. Package retained pending the final leaderboard decision")
 @Composable
 fun LeaderboardTab(
     uiState: LeaderboardUiState,

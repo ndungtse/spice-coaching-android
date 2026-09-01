@@ -8,12 +8,9 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonPrimitive
 
 /**
- * Canonical encode/decode helpers for the SDK's JSON-blob columns.
- *
- * Previously each of [com.medtroniclabs.microcoaching.data.repository.ChatRepositoryImpl]
- * and [com.medtroniclabs.microcoaching.data.db.entity.ModuleEntity] reimplemented the
- * same "encode to `[]` when empty, decode tolerantly (empty on malformed), drop blanks"
- * logic. These are the single source of truth.
+ * Canonical encode/decode helpers for the SDK's JSON-blob columns — the single source
+ * of truth for "encode to `[]` when empty, decode tolerantly (empty on malformed),
+ * drop blanks".
  *
  * Semantics are intentionally tolerant — malformed input yields an empty list rather than
  * throwing, matching the forward-compatible skip-and-warn design for cached blobs.

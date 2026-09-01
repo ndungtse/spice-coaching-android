@@ -7,9 +7,9 @@ import java.io.File
  * directory (rather than the platform `SpeechRecognizer`). The orchestrator
  * uses this to pick the right engine for offline Bengali.
  *
- * The concrete sherpa-onnx impl (`SherpaBengaliEngine`) lands in the next
- * change set — see `docs/v3/chat/sherpa.md` for the integration plan. Hosts
- * may also supply their own impl by passing a factory to
+ * The bundled impl is `SherpaBengaliEngine` in the optional `sdk-android-sherpa`
+ * module, which hosts opt into separately. Hosts may also supply their own impl
+ * by passing a factory to
  * [com.medtroniclabs.microcoaching.MicroCoachingSDK.offlineSttEngineFactory].
  */
 interface OfflineSttEngine : VoiceInputController {

@@ -108,7 +108,7 @@ fun MessageBubble(
                             },
                             onClick = {},
                         ),
-                    // Drop shadow on assistant bubbles for a flatter, ai-coach.png look.
+                    // Assistant bubbles sit flat; no drop shadow.
                     // User bubbles keep a subtle elevation so the conversation hierarchy stays legible.
                     shadowElevation = if (isUser) 1.dp else 0.dp,
                 ) {

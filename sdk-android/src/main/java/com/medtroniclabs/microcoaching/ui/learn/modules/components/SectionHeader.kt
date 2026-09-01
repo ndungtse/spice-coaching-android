@@ -15,7 +15,7 @@ import androidx.compose.ui.unit.dp
 
 /**
  * Section heading used by Refreshers / Training / Knowledge rows on the
- * v0.3.2 modules screen. Optional right-aligned "See all" link.
+ * modules screen. Optional right-aligned "See all" link.
  */
 @Composable
 fun SectionHeader(

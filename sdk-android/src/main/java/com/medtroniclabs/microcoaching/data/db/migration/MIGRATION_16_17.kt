@@ -25,14 +25,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  *    module family for the message, used at render time to resolve the chip
  *    label (`{module title} — SA N`) in the active SDK locale.
  *
- * Earlier drafts of the gap branch also created a `facility_cache` table
- * for a `FacilityDao` lookup path. That layer was removed when we settled
- * on Path A — SPICE writes the picked facility's tier directly into the
- * SDK map as `picked_facility_type`, so the SDK no longer needs to look up
- * tiers via a local facility cache. Any pre-release device that picked up
- * the early `facility_cache` table can leave it in place: it's an unused
- * SQLite table; `fallbackToDestructiveMigration` will clean it up at the
- * next schema bump.
+ * A pre-release device may carry a stray `facility_cache` table from an early
+ * draft of the gap branch. It can stay: nothing reads it (SPICE writes the
+ * picked facility's tier straight into the SDK map as `picked_facility_type`),
+ * and `fallbackToDestructiveMigration` clears it at the next schema bump.
  */
 val MIGRATION_16_17 = object : Migration(16, 17) {
     override fun migrate(db: SupportSQLiteDatabase) {

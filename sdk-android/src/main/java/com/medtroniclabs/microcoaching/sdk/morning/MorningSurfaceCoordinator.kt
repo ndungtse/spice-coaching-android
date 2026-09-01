@@ -7,16 +7,14 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
 /**
- * Owns the morning-surface orchestration the facade used to repeat inline: the
- * `resolver.refresh(chwId)` → `store.invalidate()` triad, the "PO has no refreshers" no-op,
- * and the "clear cached cards on CHW switch" rule. The comment around the second invalidate
- * after home-refresh documented a prior path that forgot it and went stale — centralising the
- * order here removes that drift class.
+ * Single owner of the morning-surface orchestration: the `resolver.refresh(chwId)` →
+ * `store.invalidate()` triad, the "PO has no refreshers" no-op, and the "clear cached
+ * cards on CHW switch" rule. Centralising the order here is the point — a caller that
+ * skips the second invalidate after a home-refresh serves stale cards.
  *
- * Extracted verbatim from `MicroCoachingSDK` (behaviour-preserving). Collaborators are passed as
- * providers so this never forces the facade's lazy service graph at construction; [flush] and
- * [onMorningResolved] are callbacks for the facade-owned telemetry flush and `_latestModule`
- * update the two paths still need.
+ * Collaborators are passed as providers so this never forces the facade's lazy service
+ * graph at construction; [flush] and [onMorningResolved] are callbacks for the
+ * facade-owned telemetry flush and `_latestModule` update the two paths still need.
  */
 internal class MorningSurfaceCoordinator(
     private val scope: CoroutineScope,

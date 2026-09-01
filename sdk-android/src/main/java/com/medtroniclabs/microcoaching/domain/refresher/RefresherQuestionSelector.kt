@@ -38,8 +38,8 @@ internal fun refresherQuestionCount(total: Int, ratio: Float, min: Int, max: Int
  *
  * - **If the CHW has wrong questions** ([wrong] non-empty): return **all of them**, in
  *   authored order, **ignoring [k]** — the whole point of the refresher is to re-drill
- *   exactly what was missed (3 wrong → 3 questions). This is the [k]-cap fix: the count
- *   no longer collapses to ~2 regardless of how many were wrong.
+ *   exactly what was missed (3 wrong → 3 questions). Capping by [k] here would collapse
+ *   the count regardless of how many were actually wrong.
  * - **Otherwise** (never-attempted / fully-mastered — no wrong history): present a
  *   [k]-sized, [daySeed]-rotating nudge so the sheet still has content. Stable within a
  *   day; rotates across days.

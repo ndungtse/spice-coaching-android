@@ -401,16 +401,15 @@ class EventRecorder(
     }
 
     /**
-     * Records a `video_progress_updated` event (see docs/_events/video.md) — the
-     * CHW's watch progress for an assigned training video. Backend family:
-     * `coaching`. Replaces the removed `PUT /sync/video-progress` route; the row
-     * is written to the outbound queue and shipped on the next telemetry flush,
-     * so progress survives offline and is merged **monotonically** server-side.
+     * Records a `video_progress_updated` event — the CHW's watch progress for an
+     * assigned training video. Backend family: `coaching`. The row is written to
+     * the outbound queue and shipped on the next telemetry flush, so progress
+     * survives offline and is merged **monotonically** server-side.
      *
      * [sourceDocumentId] is the canonical video id. Callers should emit on the
-     * throttled cadence in video.md (every 10–15 s or ≥5% delta, on pause /
-     * background / screen-exit, and a final completion event with
-     * [percentWatched] = 100 and [completed] = true).
+     * throttled cadence `VideoProgressReporter` implements (every 10–15 s or ≥5%
+     * delta, on pause / background / screen-exit, and a final completion event
+     * with [percentWatched] = 100 and [completed] = true).
      */
     suspend fun recordVideoProgress(
         sourceDocumentId: String,

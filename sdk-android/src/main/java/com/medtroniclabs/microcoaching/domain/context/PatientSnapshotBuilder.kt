@@ -6,8 +6,8 @@ import java.security.MessageDigest
 /**
  * Builds a [PatientSnapshot] from the raw assessment data map passed by SPICE hooks.
  *
- * All SPICE field names are marked TEAM-CONFIRM (see TIMELINE_v2.md Q2).
- * Build now with nullable stubs; replace key names once SPICE sandbox access is confirmed.
+ * Every SPICE field name here is a nullable stub, unconfirmed against a live SPICE
+ * environment — replace the key names once that is available.
  *
  * Never logs or stores the raw patient ID — SHA-256 hash only.
  */

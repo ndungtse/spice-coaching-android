@@ -5,8 +5,8 @@ import java.security.MessageDigest
 /**
  * One-way patient identifier hasher.
  *
- * The privacy contract for the SDK (per `docs/UseCases_v2.md` §"Privacy & Data
- * Rules", line 508) is that **raw SPICE patient IDs never leave the device**.
+ * The SDK's privacy contract is that **raw SPICE patient IDs never leave the
+ * device**.
  * Every event row that carries a patient reference stores the SHA-256 hex
  * digest of the raw ID in `patient_id_hash` instead.
  *

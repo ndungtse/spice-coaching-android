@@ -20,8 +20,7 @@ import java.util.Locale
 /**
  * Real [PODashboardDataSource] backed by the `dashboard/…` endpoints on
  * [CoachingApiService]. Fetches the wire DTOs and delegates all shaping to the
- * pure mappers in PODashboardMappers.kt. See
- * `docs/dashboads_and_leaderboard/dashboard_apis.md`.
+ * pure mappers in PODashboardMappers.kt.
  *
  * The `team-activity` endpoint is the spine — one call feeds the KPI cards, the
  * My-SKs list, the module-completion pivot, and the refresher rows. It identifies

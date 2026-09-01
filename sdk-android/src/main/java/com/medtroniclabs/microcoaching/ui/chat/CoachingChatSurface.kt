@@ -92,8 +92,7 @@ fun CoachingChatSurface(
 
     // ── STT state ─────────────────────────────────────────────────────────────
     // Hoisted to this composable so transcription callbacks can mutate the
-    // chat input field. The reference impl
-    // (gemma-2b-kotlin/.../SpeechScreen.kt) follows the same shape.
+    // chat input field.
     val inputState = rememberChatInputState()
     var isRecording by rememberSaveable { mutableStateOf(false) }
 

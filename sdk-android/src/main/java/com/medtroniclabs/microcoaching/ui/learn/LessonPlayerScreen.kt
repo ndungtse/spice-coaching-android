@@ -55,7 +55,7 @@ import com.medtroniclabs.microcoaching.ui.theme.CoachingTheme
  * Card-by-card lesson player. Renders each [LessonCard] in sequence with a
  * dark-blue gradient header and a numbered list body content area.
  *
- * Layout matches `docs/v3/designs/module_content_1.png` and `module_content_2.png`:
+ * Layout:
  * - Dark-blue gradient header: back arrow, "Learning X of N", bold white title,
  *   decorative semi-transparent circle blob top-right.
  * - White rounded content card: body text split on `\n` → numbered items in red,
@@ -72,8 +72,8 @@ import com.medtroniclabs.microcoaching.ui.theme.CoachingTheme
  *   (no quiz path) and [onFinishReading] is invoked instead of [onStartQuiz].
  *   Driven by `QuizRetryGate.isRetryWindowClosed(module)` — see
  *   [com.medtroniclabs.microcoaching.ui.flow.CoachingNavGraph]'s `readOnly`
- *   computation. Completion alone no longer triggers read-only mode;
- *   passed modules within the 7-day publication window remain re-quizzable.
+ *   computation. Completion alone does not trigger read-only mode — passed
+ *   modules within the publication window remain re-quizzable.
  * @param onFinishReading Invoked when [readOnly] is true and the CHW taps the
  *   primary CTA on the last card. Defaults to [onStartQuiz] for callers that
  *   don't supply it — the [readOnly] guard prevents that fallback from

@@ -4,8 +4,7 @@ package com.medtroniclabs.microcoaching.ui.leaderboard
  * Source of leaderboard rankings.
  *
  * TODO(P2-backend): replace [StubLeaderboardDataSource] with a real implementation
- * once the backend leaderboard endpoint exists — see
- * docs/dashboads_and_leaderboard/04_implementation_plan.md (backend dependencies).
+ * once the backend leaderboard endpoint exists.
  */
 interface LeaderboardDataSource {
     suspend fun load(chwId: String, period: LeaderboardPeriod): LeaderboardSnapshot
