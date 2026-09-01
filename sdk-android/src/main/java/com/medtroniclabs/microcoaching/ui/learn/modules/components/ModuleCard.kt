@@ -36,8 +36,7 @@ import com.medtroniclabs.microcoaching.ui.theme.CoachingTheme
  * single-column list inside [ModuleReadyScreen].
  *
  * @param module The module to display.
- * @param onClick Tap handler — pass null to render a non-clickable card
- *   (e.g. when displayed inside [FocusedModuleContent]).
+ * @param onClick Tap handler — pass null to render a non-clickable card.
  */
 @Composable
 fun ModuleCard(

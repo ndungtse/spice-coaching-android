@@ -91,7 +91,8 @@ internal fun NavGraphBuilder.learnGraph(
         CoachingHomeHost(
             uiState = uiState,
             onModuleSelected = { module ->
-                // Fix 1: skip FocusedModuleContent — go straight to ModuleDetailScreen.
+                // Module taps go straight to ModuleDetailScreen — there is no
+                // intermediate focused-module surface.
                 // whenSettled: a double-tap otherwise stacks two LessonContent
                 // entries (VM flip + navigate ×2) — extra back presses + the
                 // double-pop white-screen vector.

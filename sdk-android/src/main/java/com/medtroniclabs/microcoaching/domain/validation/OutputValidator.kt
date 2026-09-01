@@ -11,7 +11,7 @@ import kotlinx.serialization.json.jsonPrimitive
  * Validates AI-generated content before it is displayed to the CHW.
  *
  * Applies to BOTH online (backend Gemini) AND edge (on-device LLM) responses.
- * On failure, [FallbackSelector] serves the pre-authored Bangla card instead.
+ * On failure the caller serves the pre-authored Bangla card instead.
  */
 class OutputValidator {
 

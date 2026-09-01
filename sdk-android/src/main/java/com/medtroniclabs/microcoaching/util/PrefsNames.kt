@@ -1,11 +1,10 @@
 package com.medtroniclabs.microcoaching.util
 
 /**
- * Single registry of every `SharedPreferences` file name used by the SDK.
- *
- * Historically these names were scattered as per-file `PREFS_NAME` constants under three
- * inconsistent prefixes (`micro_coaching_*`, `microcoaching_*`, `mc_coaching_*`). Centralising
- * them here makes the naming visible in one place and surfaces the collision noted below.
+ * Single registry of every `SharedPreferences` file name used by the SDK. The prefixes are
+ * inconsistent (`micro_coaching_*`, `microcoaching_*`, `mc_coaching_*`) because the names
+ * are load-bearing for existing installs; keeping them in one place is what surfaces the
+ * collision below.
  *
  * ⚠️ [ONBOARDING] and [REMINDER] currently resolve to the **same physical file**. They are kept
  * identical here to preserve existing installs' stored state — splitting them requires a data

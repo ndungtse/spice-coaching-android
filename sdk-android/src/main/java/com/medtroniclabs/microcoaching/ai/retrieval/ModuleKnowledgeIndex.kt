@@ -33,8 +33,9 @@ import kotlinx.serialization.json.contentOrNull
  * indexed; it rides query expansion ([ClinicalSynonymMap]) instead.
  *
  * Two languages stay fully separate (EN query never scores against BN tokens).
- * Build cost is ≪ 100 ms for ~200 chunks. Rebuild on app start and after every
- * successful inbound module sync — never per query.
+ * Built once on the first chat open and rebuilt after each successful inbound
+ * module sync (see [com.medtroniclabs.microcoaching.sdk.chat.ChatKnowledgeIndexBootstrap])
+ * — never per query.
  */
 class ModuleKnowledgeIndex private constructor(
     private val chunks: List<GroundingChunk>,

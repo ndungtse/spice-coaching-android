@@ -316,10 +316,9 @@ internal class AndroidSpeechRecognizerEngine(
 
     /**
      * Ask the platform to download its on-device speech pack for [language]
-     * (API 33+ [SpeechRecognizer.triggerModelDownload]). This is the missing
-     * half of "make sure the language is downloaded before going offline": the
-     * SDK manages its own sherpa Bengali model, but Google's platform packs were
-     * never requested — only probed. Fire-and-forget (progress callbacks exist
+     * (API 33+ [SpeechRecognizer.triggerModelDownload]). Probing support alone
+     * never makes a pack appear, so this is what gets the language onto the
+     * device before it goes offline. Fire-and-forget (progress callbacks exist
      * only on API 34+); once per language per process, online only (the download
      * itself needs network). If it lands, the next offline tap recognises
      * on-device instead of failing with LANGUAGE_UNAVAILABLE.
