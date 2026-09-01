@@ -15,11 +15,8 @@ import kotlinx.coroutines.launch
  *
  * The shared mutable session state these functions drive (`activeModule`,
  * `activeQuestions`, the quiz counters, `_uiState`, `telemetry`) is *not* moved —
- * it stays owned by [LearnViewModel] (the lesson methods that remain there read
- * the same fields) and is widened to `internal` so these extensions can reach it.
- * Every function below is a byte-for-byte relocation of the former member; call
- * sites (`QuizNavGraph`, the quiz screens, the refresher sheets) are unchanged
- * apart from an added import.
+ * it stays owned by [LearnViewModel] (the lesson methods there read the same fields)
+ * and is widened to `internal` so these extensions can reach it.
  */
 
 /**

@@ -29,8 +29,8 @@ private const val TAB_BADGES = 1
 /**
  * SK (CHW) home: "Personalised Coaching" header with Coaching | Badges tabs.
  * Coaching reuses the full refresher/training/knowledge surface (plus a streak banner);
- * Badges shows learning achievements (stub-backed). Replaces the former Leaderboard tab;
- * `ui/leaderboard/` stays in-tree, dormant and annotated `@Deprecated` as such.
+ * Badges shows learning achievements (stub-backed). There is no Leaderboard tab —
+ * `ui/leaderboard/` stays in-tree, dormant and annotated `@Deprecated`.
  */
 @Composable
 fun SKCoachingScreen(
