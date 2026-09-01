@@ -20,8 +20,8 @@ import com.medtroniclabs.microcoaching.ui.common.CoachingBadge
 /**
  * Coaching FAB with a numeric badge indicating pending modules.
  *
- * The FAB is green (brand colour). The badge is red. In Phase 0.5 the badge
- * count is hardcoded to 1; Phase 3 will drive it from a ViewModel.
+ * The FAB is green (brand colour); the badge is red. [badgeCount] is supplied by the
+ * caller — [com.medtroniclabs.microcoaching.ui.fab.CoachingFabView] passes a fixed 1.
  *
  * @param badgeCount Number of pending modules. Pass 0 to hide the badge.
  * @param onClick Invoked when the FAB is tapped.

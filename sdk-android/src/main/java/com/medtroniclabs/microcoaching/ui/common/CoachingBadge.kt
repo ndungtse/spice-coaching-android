@@ -17,8 +17,8 @@ import androidx.compose.ui.unit.sp
 /**
  * Red numeric badge overlaid on the coaching FAB.
  *
- * Shows [count] inside a filled circle. Hidden when [count] is 0.
- * Phase 3 will wire [count] to the real pending-module count from Room.
+ * Shows [count] inside a filled circle. Hidden when [count] is 0. The count comes
+ * from the caller; nothing in the SDK derives it from a pending-module query.
  *
  * @param count Number of pending items to show. Pass 0 to hide.
  */

@@ -7,7 +7,7 @@ package com.medtroniclabs.microcoaching.ai.retrieval
  *
  * To add a new concept as scope grows: add one entry to [GROUPS]. Both
  * [ScopeClassifier.buildFrom] (via [allTerms]) and [ModuleKnowledgeIndex.search]
- * (via [expandQuery]) benefit automatically — no other code changes needed.
+ * (via [expandQueryWeighted]) benefit automatically — no other code changes needed.
  */
 object ClinicalSynonymMap {
 
@@ -125,17 +125,16 @@ object ClinicalSynonymMap {
      *  - single-word Bangla alias          → prefix match, so the agglutinated form
      *    "বুকের" still matches the "বুক" stem (Bangla inflects by suffix).
      *
-     * Why this is strict: the previous version matched bidirectional substrings
-     * (`token in alias || alias in token`). The stop-word "to" is a substring of
-     * "loose stool", so EVERY English query containing "to" pulled the entire
-     * diarrhoea group into the BM25 query — silently grounding unrelated questions
-     * (e.g. "low BP 90/60") on diarrhoea content. Likewise "anc" is a substring of
-     * "advance"/"chance". Restricting English aliases to exact word matches and
-     * Bangla aliases to prefix matches removes that whole class of false positive
-     * while preserving BN↔EN coverage.
+     * Why this is strict: a bidirectional substring match
+     * (`token in alias || alias in token`) would make the stop-word "to" — a substring
+     * of "loose stool" — pull the whole diarrhoea group into any English query
+     * containing it, silently grounding an unrelated question ("low BP 90/60") on
+     * diarrhoea content. "anc" sits inside "advance"/"chance" the same way. Exact
+     * word matches for English and prefix matches for Bangla remove that whole class
+     * of false positive while preserving BN↔EN coverage.
      *
-     * Consumed by [ModuleKnowledgeIndex.search] to widen BM25 token coverage across
-     * BN↔EN vocabulary boundaries without requiring stemming or embeddings.
+     * Retrieval uses [expandQueryWeighted] instead; this unweighted form has no
+     * callers left and is kept only for its tests.
      */
     fun expandQuery(tokens: List<String>): List<String> {
         val lower = tokens.map { it.lowercase() }

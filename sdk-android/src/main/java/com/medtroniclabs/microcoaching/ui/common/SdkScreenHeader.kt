@@ -29,8 +29,7 @@ import com.medtroniclabs.microcoaching.R
  * Consistent blue top-bar used across the coaching module flow:
  * modules list, module detail, lesson player, and quiz screens.
  *
- * Mirrors the style of the `ModulesScreenHeader` composable inside
- * [ModuleReadyScreen] so all screens share the same visual language.
+ * One header for all of them, so the flow shares a single visual language.
  *
  * @param title Centred title text. Pass an empty string to show only the back arrow.
  * @param subtitle Optional smaller line rendered directly below the [title]

@@ -153,11 +153,13 @@ class OutputValidator {
      * The sentinel-based no-ground check (rule 2 of the hardened prompt) only
      * works when the model *recognises* the references don't cover the question.
      * When the references are thematically adjacent (newborn care vs breast
-     * engorgement — the verified failure), a 1B model answers fluently from
-     * pre-training instead; that answer scores near zero here, while a genuine
-     * rephrasing of reference facts scores high (the reference vocabulary
-     * survives paraphrase). Caller decides the floor — [ChatViewModel] refuses
-     * below `GROUNDEDNESS_FLOOR` and traces the score on every grounded turn.
+     * engorgement), a small model answers fluently from pre-training instead; that
+     * answer scores near zero here, while a genuine rephrasing of reference facts
+     * scores high (the reference vocabulary survives paraphrase). The caller picks
+     * the floor: `ChatLocalAnswerer` compares this against
+     * [com.medtroniclabs.microcoaching.ChatTuning.strongRetrievalGroundednessFloor] or
+     * [com.medtroniclabs.microcoaching.ChatTuning.groundednessFloor] depending on
+     * retrieval confidence, and traces the score on every grounded turn.
      *
      * Returns 1.0 for responses with fewer than [MIN_CONTENT_WORDS] content words
      * — too little signal to judge, and short confirmations shouldn't refuse.

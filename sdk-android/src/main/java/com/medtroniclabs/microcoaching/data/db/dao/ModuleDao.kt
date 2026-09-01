@@ -70,9 +70,9 @@ interface ModuleDao {
 
     /**
      * Just the `source_documents_json` column — for consumers that only need
-     * source-document references (e.g. thumbnail refresh). Loading the full
-     * entity pulled every module's cards/quiz JSON blobs into memory to read
-     * one small column.
+     * source-document references (e.g. thumbnail refresh). Loading the full entity
+     * would drag every module's cards/quiz JSON blobs through memory to read one
+     * small column.
      */
     @Query("SELECT source_documents_json FROM module_cache")
     suspend fun allSourceDocumentsJson(): List<String>

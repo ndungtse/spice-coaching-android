@@ -29,9 +29,8 @@ import com.medtroniclabs.microcoaching.ui.theme.MicroCoachingTheme
  * detail → quiz.
  *
  * The optional [badgeCount] surfaces pending modules in the corner of the FAB;
- * pass 0 to hide. In Phase 3 the count is host-driven (host observes
- * `MicroCoachingSDK` learning paths and computes the count); a future phase
- * may move this into a SDK-driven StateFlow.
+ * pass 0 to hide. The count is host-driven — the SDK exposes no flow for it, so the
+ * host computes it from `MicroCoachingSDK`.
  *
  * **Host integration:**
  * ```kotlin

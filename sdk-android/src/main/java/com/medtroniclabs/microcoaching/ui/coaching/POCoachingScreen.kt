@@ -28,9 +28,9 @@ private const val TAB_DASHBOARD = 1
 
 /**
  * PO (Program Officer) home: Coaching | Dashboard tabs. Coaching reuses the shared
- * surface — Practice Zone included, since POs now work refreshers like SKs; Dashboard
- * is a placeholder until P4. The rich PO profile header (name · location · SK count)
- * arrives with the dashboard work — for now the header shows "Personalised Coaching".
+ * surface — Practice Zone included, since POs work refreshers like SKs; Dashboard
+ * renders [com.medtroniclabs.microcoaching.ui.podashboard.PODashboardTab]. The header
+ * is the shared "Personalised Coaching" one, not a PO profile header.
  */
 @Composable
 fun POCoachingScreen(

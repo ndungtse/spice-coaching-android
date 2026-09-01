@@ -11,15 +11,13 @@ import com.medtroniclabs.microcoaching.ui.SdkLocaleHelper
 /**
  * Speech-to-text controller for the chat mic button.
  *
- * Phase 3 ships this as a public interface with a no-op default impl. The mic
- * icon is rendered in [com.medtroniclabs.microcoaching.ui.common.ChatInputBar]
- * regardless — it telegraphs the upcoming feature to CHWs and lets hosts
- * preview the chrome without committing to a real STT engine.
- *
- * Phase 6 of the SDK roadmap (voice I/O) plugs in a real implementation
- * (Bangla Whisper / on-device STT). Hosts may also supply their own impl —
- * register via `MicroCoachingSDK.Builder.voiceInputController(...)` once the
- * builder method exists; until then, the SDK uses [NoOpVoiceInputController].
+ * With `MicroCoachingSDK.Builder.enableVoice(true)` the SDK installs
+ * [com.medtroniclabs.microcoaching.ai.voice.ChatVoiceInputController], which routes
+ * through the platform `SpeechRecognizer` and, when the host opts into the
+ * `sdk-android-sherpa` module, an offline Bengali engine. Hosts can substitute their
+ * own via `MicroCoachingSDK.Builder.voiceInputController(...)`.
+ * [NoOpVoiceInputController] is the fallback when voice is left disabled — the mic
+ * icon still renders so the chrome is consistent.
  *
  * **Lifecycle:** the controller is invoked from the Compose mic IconButton
  * tap handler. Implementations are responsible for permission acquisition,
