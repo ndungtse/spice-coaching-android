@@ -9,9 +9,9 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  * **Module thumbnail caching** — three columns on `module_cache`:
  *  - `has_thumbnail` — set from the `/sync/modules` payload; flags which module
  *    versions to request presigned thumbnail URLs for.
- *  - `thumbnail_url` — the resolved presigned GET URL, populated separately by
- *    thumbnail sync (`POST /sync/modules/presigned-thumbnails`). Nullable;
- *    re-fetched once `thumbnail_expires_at_epoch_sec` passes.
+ *  - `thumbnail_url` — the presigned GET URL, delivered inline on the
+ *    `/sync/modules` payload. Nullable; refreshed on the sync that follows
+ *    `thumbnail_expires_at_epoch_sec` passing.
  *  - `thumbnail_expires_at_epoch_sec` — absolute expiry (epoch seconds) of the
  *    cached URL. Null means "needs fetch".
  *

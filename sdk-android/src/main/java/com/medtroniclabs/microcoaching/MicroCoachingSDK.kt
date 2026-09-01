@@ -860,8 +860,9 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
 
     /**
      * Persist a module-quiz outcome locally and update [ChwModuleCompletionEntity].
-     * Telemetry is emitted by the caller (the Learn flow already records
-     * `quiz_completed` via [EventRecorder]).
+     * Telemetry is emitted by the caller: the Learn flow already records one
+     * `module_quiz_attempted` per question via [EventRecorder], and an
+     * attempt-level roll-up here would be double-counted.
      */
     fun onModuleQuizCompleted(
         moduleFamilyId: String,

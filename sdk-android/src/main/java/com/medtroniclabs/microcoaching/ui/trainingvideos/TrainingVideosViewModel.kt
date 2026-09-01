@@ -27,10 +27,10 @@ import kotlinx.coroutines.withContext
 
 /**
  * Drives the Training sub-tab. Reactively reads the CHW's assigned videos from
- * [AssignedVideoDao] (the durable mirror of `GET /sync/assigned-videos`) so both
- * pull-to-refresh (which re-runs inbound sync) and live watch-progress writes
- * re-render the list. Layers per-video offline-download state on top and owns the
- * download / remove-download action.
+ * [AssignedVideoDao] — the audio/video subset of the `GET /sync/source-documents`
+ * catalogue, reconciled there — so both pull-to-refresh (which re-runs inbound
+ * sync) and live watch-progress writes re-render the list. Layers per-video
+ * offline-download state on top and owns the download / remove-download action.
  */
 class TrainingVideosViewModel(
     private val chwId: String,
