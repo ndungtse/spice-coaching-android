@@ -204,7 +204,7 @@ internal suspend fun ChatViewModel.serveGroundingFallbackOrRefuse(
 
 /**
  * Serve clinician-authored module text as the chat reply (L4 fallback).
- * Used when the validator rejects Gemma's free-form answer but a retrieved
+ * Used when the validator rejects the model's free-form answer but a retrieved
  * grounding chunk carries trustworthy source text. [fallbackKind] is the
  * `ChatMessageMeta.outcome` key — `fallback_quiz_explanation` for QUIZ
  * chunks, `fallback_card_body` for CARD chunks.

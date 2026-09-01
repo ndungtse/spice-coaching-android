@@ -8,7 +8,7 @@ import androidx.room.PrimaryKey
 /**
  * Append-only coaching interaction event.
  *
- * Schema follows DataDesign v1.1 §4.1 exactly. One row per CHW–coaching system interaction.
+ * One row per CHW–coaching system interaction.
  * Written offline-first to Room, then synced to the MicroCoaching backend by SyncWorker.
  *
  * SPICE accesses pending events via [CoachingDataRepository.getPendingCoachingEvents]

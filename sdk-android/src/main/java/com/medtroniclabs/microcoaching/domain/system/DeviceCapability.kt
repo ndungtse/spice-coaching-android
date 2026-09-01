@@ -26,8 +26,8 @@ import android.util.Log
 object DeviceCapability {
 
     /**
-     * Minimum total system RAM (bytes) required to run the on-device Gemma
-     * model alongside SPICE's own footprint. Anything below falls back to
+     * Minimum total system RAM (bytes) required to run the on-device model
+     * alongside SPICE's own footprint. Anything below falls back to
      * retrieval-only chat.
      */
     const val MIN_RAM_BYTES_FOR_FULL_MODE: Long = 3L * 1024L * 1024L * 1024L

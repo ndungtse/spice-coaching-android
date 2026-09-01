@@ -21,7 +21,7 @@ import java.util.concurrent.TimeUnit
 /**
  * Downloads a sherpa-onnx STT model archive and extracts it into the configured
  * output directory. Foreground-service worker so the OS keeps it alive when the host
- * app is backgrounded — same pattern as the Gemma
+ * app is backgrounded — same pattern as the LLM
  * [com.medtroniclabs.microcoaching.ai.model.ModelDownloadWorker]. Generic over URL +
  * output dir (Bengali is the only archive today).
  *
@@ -31,7 +31,7 @@ import java.util.concurrent.TimeUnit
  *   3. Extract via Commons Compress (BZip2 → Tar)
  *   4. Verify the four required files exist (encoder/decoder/joiner/tokens)
  *   5. Delete the archive and return success ([SttModelManager] writes the ready flag
- *      on the observed SUCCEEDED — unlike the Gemma worker, this one doesn't persist it)
+ *      on the observed SUCCEEDED — unlike the LLM worker, this one doesn't persist it)
  *
  * An incomplete archive is removed by [ResumableHttpDownloader] for a clean retry; a
  * complete archive that fails extraction is kept, and re-extraction is idempotent.

@@ -6,10 +6,9 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 
 /**
- * Audit record for every LLM inference call (online Gemini or edge Gemma).
- *
- * Schema follows DataDesign v1.1 §4.2. One row per inference attempt, linked
- * to the parent [CoachingEventEntity] via [coachingEventId].
+ * Audit record for every LLM inference call (online Gemini or the on-device LLM).
+ * One row per inference attempt, linked to the parent [CoachingEventEntity] via
+ * [coachingEventId].
  *
  * Enables observability: validator pass-rate, latency, fallback frequency,
  * and token usage — without storing any prompt or response text in plain form.

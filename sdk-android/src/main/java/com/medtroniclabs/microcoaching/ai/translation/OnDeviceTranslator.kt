@@ -35,7 +35,7 @@ sealed class TranslationModelState {
  * Two [com.google.mlkit.nl.translate.Translator] clients share the same on-disk
  * language pack — one for EN→BN (post-translating LLM output for the CHW) and
  * one for BN→EN (pre-translating CHW input before sending to the English-dominant
- * Gemma model).
+ * on-device model).
  *
  * The pack (~20 MB) downloads once and is cached. [ensureModelReady] should be
  * called at SDK init time so the pack is in place before the first card or chat

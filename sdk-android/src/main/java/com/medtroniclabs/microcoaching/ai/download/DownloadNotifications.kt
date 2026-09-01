@@ -13,8 +13,8 @@ import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.ui.SdkLocaleHelper
 
 /**
- * Shared foreground-service download-notification plumbing, used by both the Gemma
- * model notifier and the STT model notifier.
+ * Shared foreground-service download-notification plumbing, used by both the LLM
+ * notifier and the STT model notifier.
  *
  * Channel id / notification id / title + channel strings vary per download and are passed
  * in; the MB-and-percent body format is shared (both downloads deliberately use the same

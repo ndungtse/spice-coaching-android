@@ -128,9 +128,9 @@ class ScopeClassifier(private val terms: Set<String>) {
         /**
          * Hard out-of-scope terms. A query matching ANY of these is rejected
          * before the LLM is consulted — both in Strict and ExtendedClinical
-         * modes. Maintained as a small, surgical list of categories the
-         * Gemma-3 1B model repeatedly leaked into ("Tell me about coding"
-         * answered with a JavaScript explainer, etc.).
+         * modes. Maintained as a small, surgical list of categories the models
+         * at this size leak into — "Tell me about coding" otherwise draws a
+         * JavaScript explainer.
          *
          * Keep entries SHORT and unambiguous (single tokens that don't collide
          * with clinical text). "code" was rejected for collision with ICD-10

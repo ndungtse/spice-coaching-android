@@ -8,7 +8,7 @@ import com.medtroniclabs.microcoaching.ai.download.DownloadNotifications
 /**
  * Foreground-service notification builder for [SttModelDownloadWorker].
  *
- * Distinct from the Gemma [com.medtroniclabs.microcoaching.ai.model.ModelDownloadNotifier]
+ * Distinct from the LLM [com.medtroniclabs.microcoaching.ai.model.ModelDownloadNotifier]
  * — different channel id (`coaching_stt_download`), different title, but the same
  * MB / percent body format so the UI feels consistent. Shared plumbing lives in
  * [DownloadNotifications]; STT adds an "extracting" body state.

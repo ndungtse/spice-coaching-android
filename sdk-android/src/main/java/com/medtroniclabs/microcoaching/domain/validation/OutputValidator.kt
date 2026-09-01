@@ -10,10 +10,8 @@ import kotlinx.serialization.json.jsonPrimitive
 /**
  * Validates AI-generated content before it is displayed to the CHW.
  *
- * Applies to BOTH online (backend Gemini) AND edge (on-device Gemma) responses.
+ * Applies to BOTH online (backend Gemini) AND edge (on-device LLM) responses.
  * On failure, [FallbackSelector] serves the pre-authored Bangla card instead.
- *
- * Block-list rules follow DDD v2 Section 7.9.
  */
 class OutputValidator {
 
@@ -47,7 +45,7 @@ class OutputValidator {
     }
 
     /**
-     * L3 sentinel that the hardened chat system prompt asks Gemma to emit when it
+     * L3 sentinel that the hardened chat system prompt asks the model to emit when it
      * cannot answer from the Reference content. Intercepted client-side so we serve
      * the canned BN refusal instead of leaking the sentinel to the CHW.
      */
@@ -55,7 +53,7 @@ class OutputValidator {
         REFUSE_NO_GROUND_SENTINEL in response
 
     /**
-     * Sentinel the open-scope system prompt asks Gemma to emit when the question
+     * Sentinel the open-scope system prompt asks the model to emit when the question
      * falls outside SPICE's clinical scope (weather, sports, etc.). Intercepted
      * client-side so the CHW sees the same canned scope-refusal copy used by the
      * L1 keyword classifier in Strict mode.
@@ -72,8 +70,8 @@ class OutputValidator {
      * — that's the per-query allow-list. Anything outside the candidate set is
      * treated as fabricated.
      *
-     * Length cap is enforced at the word level on the English Gemma output —
-     * verbose replies are the strongest hallucination signal at 1B parameters.
+     * Length cap is enforced at the word level on the English model output —
+     * verbose replies are the strongest hallucination signal at these model sizes.
      */
     fun validateChatResponse(
         response: String,

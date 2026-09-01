@@ -21,7 +21,7 @@ import java.io.FileOutputStream
 import java.util.concurrent.TimeUnit
 
 /**
- * WorkManager worker that downloads the on-device Gemma model, trying each configured
+ * WorkManager worker that downloads the on-device model, trying each configured
  * [ModelProvider] in order and falling back to the next on failure.
  *
  * **Provider fallback order** (default): Backend → HuggingFace → Kaggle

@@ -953,7 +953,7 @@ class ChatViewModel(
         chatResponseJson.encodeToString(RagQueryResponse.serializer(), resp)
 
     /**
-     * The canonical response object for an OFFLINE turn (on-device Gemma, BM25
+     * The canonical response object for an OFFLINE turn (on-device LLM, BM25
      * fallback, refusal), matching the online RAG shape. Only [answer] and — when
      * known — the grounding [moduleId] are filled; retrieval/source/suggestion
      * fields stay empty so the object is structurally identical to an online one.
@@ -1267,7 +1267,7 @@ class ChatViewModel(
          * (add `ChatViewModel:D ModuleKnowledgeIndex:I OnDeviceTranslator:D` for
          * the lower-level operational logs). Every turn opens with a `──── turn ────`
          * line that names the route actually taken, so it is unambiguous whether a
-         * message hit the backend RAG endpoint or the on-device Gemma/BM25 pipeline.
+         * message hit the backend RAG endpoint or the on-device LLM/BM25 pipeline.
          */
         internal const val TRACE_TAG = "ChatTrace"
 

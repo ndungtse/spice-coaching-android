@@ -10,7 +10,7 @@ import androidx.room.Entity
  * `chw_behavioural_gap_state` table. Written locally on every quiz answer and
  * overwritten on `/sync/gaps` inbound sync (authoritative source).
  *
- * Gap classification rules (DataDesign v1.1 §4.4.1):
+ * Gap classification rules:
  *   knowledge gap      : wrongCount ≥ 2 AND counsellingUseRate < 0.20
  *   skill_application  : quizScorePct ≥ 70 AND counsellingUseRate < 0.20
  *   resolved           : consecutiveCorrect ≥ 2 AND cardsUsed ≥ 1

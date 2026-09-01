@@ -10,7 +10,6 @@ import java.util.UUID
 /**
  * Repository for coaching event persistence and exposure via [CoachingDataRepository].
  *
- * Schema follows DataDesign v1.1 §4.1.
  */
 open class CoachingEventRepositoryImpl(
     private val dao: CoachingEventDao,

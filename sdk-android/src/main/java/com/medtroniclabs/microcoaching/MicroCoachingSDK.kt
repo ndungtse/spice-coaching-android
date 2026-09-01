@@ -120,10 +120,9 @@ data class SdkHealthReport(
  */
 class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
 
-    // CoroutineExceptionHandler: an uncaught exception in SDK background work
-    // must never take the HOST app down. Without it, a transient failure in an
-    // init-block collector (e.g. a DB read racing a sync delete) propagated as
-    // a fatal crash on a worker thread — an SDK is a guest in the host process.
+    // The handler is load-bearing: an SDK is a guest in the host process, so an
+    // uncaught exception in background work (e.g. a DB read racing a sync delete)
+    // must not reach the host as a fatal worker-thread crash.
     internal val sdkScope = CoroutineScope(
         SupervisorJob() + Dispatchers.IO +
             CoroutineExceptionHandler { _, throwable ->
@@ -139,7 +138,7 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
     val coachingSessionId: String = UUID.randomUUID().toString()
 
     /**
-     * `true` below the 3 GB-RAM threshold: too small for the on-device Gemma model,
+     * `true` below the 3 GB-RAM threshold: too small for the on-device model,
      * so chat runs retrieval-only (BM25 over the module corpus, no LLM). Probed once
      * via [DeviceCapability]; overridable with [MicroCoachingConfig.forceLowEndMode] (QA).
      */
@@ -159,7 +158,7 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
     /** Change language at runtime without rebuilding. Applies to LLM prompts now, UI on next screen open. */
     fun setLanguage(language: Language) {
         this.language = language
-        // The EN↔BN pack is needed in both languages (BN for the Gemma round-trip,
+        // The EN↔BN pack is needed in both languages (BN for the LLM round-trip,
         // EN to translate chat to/from the bn-only backend), so ensure it either way.
         sdkScope.launch { translator.ensureModelReady() }
     }
@@ -316,7 +315,7 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
         loadTodaysVisits = { loadTodaysVisits() },
     )
 
-    /** 4-tier morning-module resolution, extracted from this class (F9). */
+    /** 4-tier morning-module resolution. */
     internal val morningModuleResolver: MorningModuleResolver by lazy {
         MorningModuleResolver(
             database = database,
@@ -399,8 +398,8 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
     /**
      * Per-`rule_type` gap dispatcher with the four pilot evaluators. Only
      * [WrongFacilityTierEvaluator] is wired end-to-end today; the other three are
-     * skeletons returning null. Gated by [MicroCoachingConfig.enableGapDetection]
-     * — when false, [onAssessmentSubmitted] keeps its single-event emission.
+     * skeletons returning null. Driven from [onReferralSubmitted], gated by
+     * [MicroCoachingConfig.enableGapDetection].
      */
     internal val gapRuleDispatcher: GapRuleDispatcher = GapRuleDispatcher(
         gapDao = database.behaviouralGapDao(),
@@ -412,7 +411,7 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
         ),
     )
 
-    /** TP-7 — visit-close handler. See [onVisitCompleted]. */
+    /** Visit-close handler. See [onVisitCompleted]. */
     private val visitCompletedHandler: VisitCompletedHandler =
         VisitCompletedHandler(coachingEventDao = database.coachingEventDao())
 
@@ -608,7 +607,7 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
         }
         // EN↔BN pack: a background download CHECK (the model only loads on first
         // translate()), kept in init because the inbound FAQ bn→en backfill needs it
-        // before chat opens. Needed in both languages (BN for the Gemma round-trip,
+        // before chat opens. Needed in both languages (BN for the LLM round-trip,
         // EN to translate chat to/from the bn-only backend).
         sdkScope.launch { translator.ensureModelReady() }
         // The Bengali STT (voice) pack is deliberately NOT started here — it starts
@@ -711,8 +710,8 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
 
     /**
      * Call when the CHW opens the home screen. Stores [chwId], surfaces cached
-     * modules immediately, then fetches morning cards in the background. Resolution:
-     * `morning_card_cache` join → else [TriggerEvaluator] rows → else empty.
+     * modules immediately, then re-resolves in the background via
+     * [MorningModuleResolver] (see its KDoc for the tier order).
      */
     fun onHomeScreenShown(chwId: String) {
         // Detect a CHW switch (different user signed in on this device) before we
@@ -812,8 +811,8 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
     }
 
     /**
-     * Call when the CHW opens the morning routine. Re-runs the 3-tier morning
-     * resolution (same as [onHomeScreenShown]) and updates [latestModule].
+     * Call when the CHW opens the morning routine. Re-runs the same morning
+     * resolution as [onHomeScreenShown] and updates [latestModule].
      */
     fun onMorningOpen() {
         val chwId = currentCHWId ?: return
@@ -832,9 +831,8 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
     }
 
     /**
-     * Fire-and-forget morning refilter on the SDK scope — for UI call-sites (e.g. a
-     * sheet's dismiss) whose lifecycle ends before the refilter completes, so the
-     * work survives the surface (an ad-hoc `MainScope()` per call leaked).
+     * Fire-and-forget morning refilter on the SDK scope, so the work survives UI
+     * call-sites (e.g. a sheet's dismiss) whose lifecycle ends before it completes.
      */
     fun refilterMorningModulesAsync(chwId: String) = morningCoordinator.refilterAsync(chwId)
 
@@ -1242,7 +1240,11 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
         fun modelPath(path: String) = apply { modelPath = path }
         fun modelDownloadStrategy(strategy: ModelDownloadStrategy) = apply { modelDownloadStrategy = strategy }
         fun wifiOnlyModelDownload(wifiOnly: Boolean) = apply { wifiOnlyModelDownload = wifiOnly }
-        /** Override provider priority or disable a provider entirely. Default: Backend → HuggingFace → Kaggle. */
+        /**
+         * Override provider priority or disable a provider entirely. Default order is
+         * Backend → HuggingFace → Kaggle, but only HuggingFace can currently serve a
+         * model: Backend offers a `.task` no bundled engine loads, and Kaggle is a stub.
+         */
         fun modelProviders(providers: List<ModelProvider>) = apply { modelProviders = providers }
         /** HuggingFace Hub token for gated model downloads. Set HUGGING_FACE_TOKEN in local.properties for dev. */
         fun huggingFaceToken(token: String) = apply { huggingFaceToken = token }
@@ -1297,7 +1299,7 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
          * SDK probe total RAM (< 3 GB → low-end, retrieval-only chat). Pass
          * `true` to force the retrieval-only path on capable hardware (QA), or
          * `false` to force the LLM path on a low-RAM device (only safe when an
-         * external runtime guarantees the Gemma model can load).
+         * external runtime guarantees the model can load).
          */
         fun forceLowEndMode(force: Boolean?) = apply { forceLowEndMode = force }
         fun enableChat(enabled: Boolean) = apply { enableChat = enabled }

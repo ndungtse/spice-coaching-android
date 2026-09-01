@@ -23,7 +23,7 @@ import java.io.File
 
 /**
  * Manages the on-device Bengali STT model lifecycle (download / extract /
- * present / failed). Parallel to the Gemma
+ * present / failed). Parallel to the LLM
  * [com.medtroniclabs.microcoaching.ai.model.ModelManager] but Bengali-only and
  * much simpler: there's a single source (the sherpa-onnx Bengali Zipformer
  * release archive), so no provider fallback chain.
@@ -36,7 +36,7 @@ import java.io.File
  *   - `bpe.model` (extra, ignored by sherpa runtime)
  *   - `_archive.tar.bz2` (transient — deleted on successful extraction)
  *
- * Ready-state persistence mirrors the Gemma flow — a [PREFS_NAME] boolean is
+ * Ready-state persistence mirrors the LLM flow — a [PREFS_NAME] boolean is
  * flipped after extraction so subsequent process starts can short-circuit the
  * worker observation.
  */
