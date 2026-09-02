@@ -37,7 +37,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.domain.decision.AnswerMode
-import com.medtroniclabs.microcoaching.ui.theme.MutedText
 
 /**
  * Where the CHW chooses how answers are found, and manages the optional on-device model.
@@ -213,7 +212,7 @@ private fun AnswerStyleSection(
     Text(
         text = stringResource(R.string.answering_sheet_style_title),
         style = MaterialTheme.typography.labelLarge,
-        color = MutedText,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
     Spacer(Modifier.height(8.dp))
 
@@ -383,7 +382,7 @@ private fun ModeRow(
         if (icon != null) {
             Column {
                 Spacer(Modifier.height(2.dp))
-                icon(if (selected) MaterialTheme.colorScheme.primary else MutedText)
+                icon(if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Spacer(Modifier.size(width = 8.dp, height = 0.dp))
         }
@@ -396,7 +395,7 @@ private fun ModeRow(
             Text(
                 text = subtitle,
                 style = MaterialTheme.typography.labelSmall,
-                color = MutedText,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }

@@ -5,7 +5,6 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.medtroniclabs.microcoaching.ChatScopeStrictness
 import com.medtroniclabs.microcoaching.Language
 import com.medtroniclabs.microcoaching.MicroCoachingSDK
 import com.medtroniclabs.microcoaching.ui.chat.ChatMessage
@@ -18,8 +17,6 @@ import com.medtroniclabs.microcoaching.ai.retrieval.ChatRefusal
 import com.medtroniclabs.microcoaching.ai.retrieval.GroundingChunk
 import com.medtroniclabs.microcoaching.ai.retrieval.GroundingSelector
 import com.medtroniclabs.microcoaching.ai.retrieval.ModuleKnowledgeIndex
-import com.medtroniclabs.microcoaching.ai.retrieval.OffTopicGuard
-import com.medtroniclabs.microcoaching.ai.retrieval.ScopeClassifier
 import com.medtroniclabs.microcoaching.ai.voice.CoachingTtsHelper
 import com.medtroniclabs.microcoaching.network.RagQueryRequest
 import com.medtroniclabs.microcoaching.network.SourceDocumentRef

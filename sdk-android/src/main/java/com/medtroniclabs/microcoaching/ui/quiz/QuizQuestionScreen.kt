@@ -40,7 +40,6 @@ import com.medtroniclabs.microcoaching.ui.common.InlineAnswerFeedback
 import com.medtroniclabs.microcoaching.ui.common.SdkScreenHeader
 import com.medtroniclabs.microcoaching.ui.common.XpRewardBurst
 import com.medtroniclabs.microcoaching.ui.learn.LearnUiState
-import com.medtroniclabs.microcoaching.ui.theme.SurfaceBackground
 
 /**
  * Single quiz question screen with animated answer reveal and a consistent
@@ -85,7 +84,7 @@ fun QuizQuestionScreen(
         // white whenever both the live and cached state were unavailable (e.g.
         // an exotic restore the nav-graph entry guard didn't cover).
         Box(
-            modifier = Modifier.fillMaxSize().background(SurfaceBackground),
+            modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface),
             contentAlignment = Alignment.Center,
         ) {
             CircularProgressIndicator()
@@ -120,7 +119,7 @@ fun QuizQuestionScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(SurfaceBackground),
+            .background(MaterialTheme.colorScheme.surface),
     ) {
         SdkScreenHeader(
             title = if (moduleTitle.isNotBlank()) moduleTitle
@@ -256,7 +255,7 @@ private fun CaseSetupBox(caseSetup: String) {
         modifier = Modifier
             .fillMaxWidth()
             .background(
-                color = com.medtroniclabs.microcoaching.ui.theme.SpiceBlueContainer,
+                color = MaterialTheme.colorScheme.primaryContainer,
                 shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp),
             )
             .padding(12.dp),
@@ -264,7 +263,7 @@ private fun CaseSetupBox(caseSetup: String) {
         Text(
             text = stringResource(R.string.quiz_case_context_label),
             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-            color = com.medtroniclabs.microcoaching.ui.theme.SpiceBlue,
+            color = MaterialTheme.colorScheme.primary,
         )
         Spacer(Modifier.height(4.dp))
         Text(

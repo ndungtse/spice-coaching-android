@@ -16,7 +16,7 @@ private const val TAG = "QuizJsonParser"
 /**
  * Parse the raw `quiz_json` blob stored on `module_cache.quiz_json` into a
  * typed [QuizQuestion] list. Used by both [LearnViewModel] (full quiz flow)
- * and the v0.3.2 Quick learn banner (single-question taste).
+ * and the Quick learn banner (single-question taste).
  *
  * @param lang ISO-639-1 code for the preferred language ("bn" or "en").
  *   Reads nested locale maps (`question: {bn, en}`) first, then legacy

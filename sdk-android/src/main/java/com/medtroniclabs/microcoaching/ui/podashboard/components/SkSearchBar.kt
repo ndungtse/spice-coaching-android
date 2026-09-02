@@ -27,10 +27,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.medtroniclabs.microcoaching.R
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlue
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueContainer
 
-private val SearchBorder = Color(0xFFD1D5DB)
 private val ControlHeight = 44.dp
 
 /** Compact search field driving client-side filtering, with an optional (decorative) filter affordance. */
@@ -48,8 +45,8 @@ fun SkSearchBar(
                 .weight(1f)
                 .height(ControlHeight)
                 .clip(RoundedCornerShape(percent = 50))
-                .background(Color.White)
-                .border(1.dp, SearchBorder, RoundedCornerShape(percent = 50))
+                .background(MaterialTheme.colorScheme.surface)
+                .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(percent = 50))
                 .padding(horizontal = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -64,7 +61,7 @@ fun SkSearchBar(
                     onValueChange = onQueryChange,
                     singleLine = true,
                     textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onBackground),
-                    cursorBrush = SolidColor(SpiceBlue),
+                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
@@ -73,10 +70,10 @@ fun SkSearchBar(
             Spacer(Modifier.width(8.dp))
             // Decorative filter affordance — no filter menu yet.
             Box(
-                modifier = Modifier.size(ControlHeight).clip(RoundedCornerShape(12.dp)).background(SpiceBlueContainer),
+                modifier = Modifier.size(ControlHeight).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.primaryContainer),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Filled.Tune, contentDescription = null, tint = SpiceBlue, modifier = Modifier.size(20.dp))
+                Icon(Icons.Filled.Tune, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
             }
         }
     }

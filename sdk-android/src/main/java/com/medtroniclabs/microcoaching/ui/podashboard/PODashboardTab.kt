@@ -44,7 +44,6 @@ import com.medtroniclabs.microcoaching.ui.podashboard.components.ShowAllRow
 import com.medtroniclabs.microcoaching.ui.podashboard.components.SkListRow
 import com.medtroniclabs.microcoaching.ui.podashboard.components.TopQueriesCard
 import com.medtroniclabs.microcoaching.ui.podashboard.components.poCard
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlue
 import com.medtroniclabs.microcoaching.util.shortDateTimeLabel
 
 /**
@@ -354,7 +353,7 @@ private fun DocumentUsageStat(label: String, value: Int, modifier: Modifier = Mo
     ) {
         Text(
             text = "$value",
-            color = SpiceBlue,
+            color = MaterialTheme.colorScheme.primary,
             fontWeight = FontWeight.Bold,
             style = MaterialTheme.typography.titleLarge,
         )

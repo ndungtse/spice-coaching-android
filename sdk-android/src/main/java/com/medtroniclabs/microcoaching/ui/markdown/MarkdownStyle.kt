@@ -10,9 +10,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlue
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueContainer
-import com.medtroniclabs.microcoaching.ui.theme.SpiceNavy
+import com.medtroniclabs.microcoaching.ui.theme.CoachingTheme
 
 /**
  * Visual configuration for [MarkdownText]. Pull defaults from [MarkdownDefaults.style]
@@ -46,21 +44,21 @@ object MarkdownDefaults {
     @Composable
     fun style(
         textStyle: TextStyle = MaterialTheme.typography.bodyMedium,
-        textColor: Color = Color(0xFF344054),
+        textColor: Color = CoachingTheme.colors.textBody,
         h1: TextStyle = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
         h2: TextStyle = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
         h3: TextStyle = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
         h4: TextStyle = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
         h5: TextStyle = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
         h6: TextStyle = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-        headingColor: Color = SpiceNavy,
-        linkColor: Color = SpiceBlue,
+        headingColor: Color = MaterialTheme.colorScheme.onSurface,
+        linkColor: Color = MaterialTheme.colorScheme.primary,
         codeStyle: TextStyle = textStyle.copy(fontFamily = FontFamily.Monospace),
-        codeBackground: Color = Color(0xFFF2F4F7),
-        blockQuoteAccent: Color = SpiceBlue,
-        blockQuoteBackground: Color = SpiceBlueContainer.copy(alpha = 0.4f),
-        tableHeaderBackground: Color = SpiceBlueContainer,
-        tableBorderColor: Color = Color(0xFFD0D5DD),
+        codeBackground: Color = MaterialTheme.colorScheme.surfaceContainerLow,
+        blockQuoteAccent: Color = MaterialTheme.colorScheme.primary,
+        blockQuoteBackground: Color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
+        tableHeaderBackground: Color = MaterialTheme.colorScheme.primaryContainer,
+        tableBorderColor: Color = MaterialTheme.colorScheme.outline,
         tableCellPadding: PaddingValues = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
         listIndent: Dp = 20.dp,
         blockSpacing: Dp = 12.dp,

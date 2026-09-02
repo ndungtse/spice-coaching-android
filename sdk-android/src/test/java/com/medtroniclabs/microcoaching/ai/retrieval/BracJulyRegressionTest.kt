@@ -122,14 +122,15 @@ class BracJulyRegressionTest {
         )
         val clinicalTerms = setOf("nutrition", "diet", "পুষ্টি", "খাদ্য")
 
-        assertTrue(
-            OffTopicGuard.bestFallbackHit(
-                query = "How do I cook chicken biryani?",
-                hits = listOf(weakHit),
-                clinicalTerms = clinicalTerms,
-                minScore = 20f,
-            ) == null,
+        val decision = ServeDecision.decide(
+            query = "How do I cook chicken biryani?",
+            hits = listOf(weakHit),
+            clinicalTerms = clinicalTerms,
+            tuning = com.medtroniclabs.microcoaching.ServeTuning(),
+            isBanglaTurn = false,
         )
+        val fallbackHit = (decision as? ServeDecision.Decision.Serve)?.hit?.takeIf { it.score >= 20f }
+        assertTrue(fallbackHit == null)
     }
 
     @Test
@@ -291,11 +292,13 @@ class BracJulyRegressionTest {
             bodyBn = "উপজেলা স্বাস্থ্য কমপ্লেক্স ও জেলা হাসপাতালে ইনজেকশন ও আইইউডি পাওয়া যায়।",
             score = 229.61f,
         )
-        val selected = OffTopicGuard.selectLowEndServeHit(
+        val decision = ServeDecision.decide(
             query = "কনডর্ ও খাবাি বয়ি রকাথাি পাওিা যাি? — what are the key steps?",
             hits = listOf(accessCondoms, accessInjections),
             clinicalTerms = setOf("condom", "oral", "pill", "কনডোম", "পিল"),
+            tuning = com.medtroniclabs.microcoaching.ServeTuning(),
+            isBanglaTurn = true,
         )
-        assertEquals(4, selected?.positionalId)
+        assertEquals(4, (decision as? ServeDecision.Decision.Serve)?.hit?.positionalId)
     }
 }

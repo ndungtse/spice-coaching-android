@@ -26,16 +26,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.ui.components.swipeToDismiss
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlue
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueDark
 
 /**
  * Quiz refresher card shown on the modules screen. Displays the first quiz
  * question from the highest-priority morning module (same module shown in
  * [MorningCard] on the home screen — both use [MicroCoachingSDK.getSelectedMorningModule]).
  *
- * Renamed from `QuickLearnCard` (v0.3.2). Tap opens [RefresherBottomSheet]
- * (its phases follow the refresher's kind).
+ * Tap opens [RefresherBottomSheet] (its phases follow the refresher's kind).
  *
  * Dormant since the sub-tab split.
  *
@@ -48,7 +45,7 @@ import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueDark
  * @param dismissKey Identity of the shown question; resets the swipe offset when
  *   the banner advances to a different module.
  */
-@Deprecated("Dormant: the featured refresher banner is gone from the coaching tab (and the host home banner was removed) — refreshers now surface in the Practice Zone (RefresherSubTab) — see docs/_coaching/01_navigation_and_screens.md")
+@Deprecated("Dormant: refreshers surface in the Practice Zone (RefresherSubTab) instead")
 @Composable
 fun QuizRefresherCard(
     questionText: String,
@@ -65,7 +62,7 @@ fun QuizRefresherCard(
             .padding(horizontal = 16.dp, vertical = 8.dp)
             .swipeToDismiss(onDismiss = onDismiss, resetKey = dismissKey)
             .clip(RoundedCornerShape(20.dp))
-            .background(Brush.linearGradient(listOf(SpiceBlue, SpiceBlueDark)))
+            .background(Brush.linearGradient(listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.onPrimaryContainer)))
             .clickable(onClick = onClick)
             .padding(20.dp),
     ) {
@@ -108,7 +105,7 @@ private fun RefresherPill(text: String) {
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(50))
-            .background(Color.White.copy(alpha = 0.18f))
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.18f))
             .padding(PaddingValues(horizontal = 14.dp, vertical = 8.dp)),
     ) {
         Text(text = text, color = Color.White,

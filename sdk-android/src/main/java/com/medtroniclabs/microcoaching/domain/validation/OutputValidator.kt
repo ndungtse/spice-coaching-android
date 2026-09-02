@@ -10,10 +10,8 @@ import kotlinx.serialization.json.jsonPrimitive
 /**
  * Validates AI-generated content before it is displayed to the CHW.
  *
- * Applies to BOTH online (backend Gemini) AND edge (on-device Gemma) responses.
- * On failure, [FallbackSelector] serves the pre-authored Bangla card instead.
- *
- * Block-list rules follow DDD v2 Section 7.9.
+ * Applies to BOTH online (backend Gemini) AND edge (on-device LLM) responses.
+ * On failure the caller serves the pre-authored Bangla card instead.
  */
 class OutputValidator {
 
@@ -47,7 +45,7 @@ class OutputValidator {
     }
 
     /**
-     * L3 sentinel that the hardened chat system prompt asks Gemma to emit when it
+     * L3 sentinel that the hardened chat system prompt asks the model to emit when it
      * cannot answer from the Reference content. Intercepted client-side so we serve
      * the canned BN refusal instead of leaking the sentinel to the CHW.
      */
@@ -55,7 +53,7 @@ class OutputValidator {
         REFUSE_NO_GROUND_SENTINEL in response
 
     /**
-     * Sentinel the open-scope system prompt asks Gemma to emit when the question
+     * Sentinel the open-scope system prompt asks the model to emit when the question
      * falls outside SPICE's clinical scope (weather, sports, etc.). Intercepted
      * client-side so the CHW sees the same canned scope-refusal copy used by the
      * L1 keyword classifier in Strict mode.
@@ -64,7 +62,7 @@ class OutputValidator {
         REFUSE_OUT_OF_SCOPE_SENTINEL in response
 
     /**
-     * L4 validator for chat responses (chat_plan.md §B4).
+     * Guardrail layer L4 for chat responses.
      *
      * Stricter than [validateText] because the response is produced under a
      * hardened "use only the Reference content" directive. We accept drugs and
@@ -72,8 +70,8 @@ class OutputValidator {
      * — that's the per-query allow-list. Anything outside the candidate set is
      * treated as fabricated.
      *
-     * Length cap is enforced at the word level on the English Gemma output —
-     * verbose replies are the strongest hallucination signal at 1B parameters.
+     * Length cap is enforced at the word level on the English model output —
+     * verbose replies are the strongest hallucination signal at these model sizes.
      */
     fun validateChatResponse(
         response: String,
@@ -155,11 +153,13 @@ class OutputValidator {
      * The sentinel-based no-ground check (rule 2 of the hardened prompt) only
      * works when the model *recognises* the references don't cover the question.
      * When the references are thematically adjacent (newborn care vs breast
-     * engorgement — the verified failure), a 1B model answers fluently from
-     * pre-training instead; that answer scores near zero here, while a genuine
-     * rephrasing of reference facts scores high (the reference vocabulary
-     * survives paraphrase). Caller decides the floor — [ChatViewModel] refuses
-     * below `GROUNDEDNESS_FLOOR` and traces the score on every grounded turn.
+     * engorgement), a small model answers fluently from pre-training instead; that
+     * answer scores near zero here, while a genuine rephrasing of reference facts
+     * scores high (the reference vocabulary survives paraphrase). The caller picks
+     * the floor: `ChatLocalAnswerer` compares this against
+     * [com.medtroniclabs.microcoaching.ChatTuning.strongRetrievalGroundednessFloor] or
+     * [com.medtroniclabs.microcoaching.ChatTuning.groundednessFloor] depending on
+     * retrieval confidence, and traces the score on every grounded turn.
      *
      * Returns 1.0 for responses with fewer than [MIN_CONTENT_WORDS] content words
      * — too little signal to judge, and short confirmations shouldn't refuse.

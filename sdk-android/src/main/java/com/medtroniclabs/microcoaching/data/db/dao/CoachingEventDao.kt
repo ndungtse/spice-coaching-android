@@ -126,9 +126,10 @@ interface CoachingEventDao {
     ): List<String>
 
     /**
-     * Emits whenever any row in `coaching_event` changes. Used by [LearnViewModel.observeModules]
-     * as a re-trigger so refresher tile counts (which depend on event history) refresh
-     * immediately after the CHW completes a refresher quiz.
+     * Emits whenever any row in `coaching_event` changes. Collected by
+     * [com.medtroniclabs.microcoaching.domain.refresher.CoachingModuleStore] and the SDK's
+     * morning refilter as a re-trigger, so refresher tile counts (which depend on event
+     * history) refresh immediately after the CHW completes a refresher quiz.
      */
     @Query("SELECT COUNT(*) FROM coaching_event")
     fun getEventCountFlow(): Flow<Int>

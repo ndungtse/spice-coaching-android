@@ -2,10 +2,10 @@ package com.medtroniclabs.microcoaching.ai.retrieval
 
 /**
  * One piece of curriculum content surfaced by [ModuleKnowledgeIndex] as evidence
- * for the LLM's answer (B1 of chat_plan.md).
+ * for the LLM's answer.
  *
  * Chunks are built from module cards only. The carrier is intentionally untyped
- * beyond [source] so the validator and refusal layers (B4) can treat them
+ * beyond [source] so the validator and refusal layers can treat them
  * uniformly. Both language halves are retained: [referenceText] feeds the LLM
  * prompt (preferring the English side, falling back to Bengali), and the
  * refusal/fallback path serves the card body in the SDK language, translating the
@@ -36,6 +36,18 @@ data class GroundingChunk(
      */
     val explanationEn: String? = null,
     val explanationBn: String? = null,
+    /**
+     * The card's authored `search_metadata` retrieval hints + questions, carried on
+     * the chunk so the serve decision can weigh title/hint evidence without an
+     * index handle. High-precision fields: an author wrote these as the questions
+     * this card answers, so a topical match here outranks body-keyword density.
+     * Empty for legacy cards without metadata. Lists are shared by reference
+     * through the per-search `copy(score = …)`, so carrying them is free.
+     */
+    val hintsBn: List<String> = emptyList(),
+    val hintsEn: List<String> = emptyList(),
+    val questionsBn: List<String> = emptyList(),
+    val questionsEn: List<String> = emptyList(),
 ) {
     enum class Source { CARD, QUIZ }
 

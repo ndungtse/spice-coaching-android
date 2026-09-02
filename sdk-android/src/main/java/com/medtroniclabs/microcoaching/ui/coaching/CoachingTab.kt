@@ -80,8 +80,8 @@ fun CoachingTab(
             selectedIndex = selectedSubTab,
             onSelect = { selectedSubTab = it },
         )
-        // A refresh that only partly landed used to report success silently — say so once,
-        // above the sub-tabs, since the affected content may be in any of them.
+        // A refresh that only partly landed must say so rather than read as success.
+        // Announced once above the sub-tabs, since the affected content may be in any.
         if (manualSync.lastResult?.anyFailure == true) {
             NoticeBanner(stringResource(R.string.coaching_sync_partial_notice))
         }

@@ -8,8 +8,7 @@ import androidx.room.PrimaryKey
 /**
  * Local cache of the v3.3 behavioural-gap taxonomy synced from the backend.
  *
- * Source: `GET /sync/v3/gaps` — see `serialise_gap()` in
- * `coaching-platform/services/platform/src/platform_service/services/sync_bundle_serialiser.py`.
+ * Source: `GET /sync/gaps`.
  *
  * This is the *catalogue* of gaps the backend knows about (e.g.
  * `missed_hypertension_referral_threshold`). It is distinct from

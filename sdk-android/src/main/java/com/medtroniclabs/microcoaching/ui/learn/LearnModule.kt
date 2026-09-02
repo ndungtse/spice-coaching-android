@@ -32,12 +32,10 @@ data class LearnModule(
     val quizIds: List<String> = emptyList(),
     val status: String = "assigned",
     /**
-     * Quiz questions inlined with the module bundle (v3.3 module_cache origin).
-     *
-     * When non-null, [com.medtroniclabs.microcoaching.ui.learn.LearnViewModel.startQuiz]
-     * uses these directly instead of querying [quizIds] against the legacy
-     * `quiz_question_cache`. Modules from the v3.3 pipeline ship cards and quiz
-     * together — there's no separate quiz table.
+     * Quiz questions inlined with the module bundle, which is where every quiz now
+     * comes from: modules ship cards and quiz together and there is no separate quiz
+     * table. [com.medtroniclabs.microcoaching.ui.learn.startQuiz] reads this and has
+     * no other source — a null here means the module has no quiz.
      */
     val inlineQuestions: List<QuizQuestion>? = null,
     /** Version-specific module UUID (Module.id). Null until backend exposes it in the sync bundle. */
@@ -238,8 +236,7 @@ data class LearnModule(
 }
 
 /**
- * UI model for a single quiz question (backed by [QuizQuestionCacheEntity]).
- *
+ * UI model for a single quiz question.
  *
  * @param id Stable question ID from the backend.
  * @param questionText The question shown to the CHW (Bangla).

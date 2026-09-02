@@ -10,7 +10,7 @@ import org.junit.Test
 /**
  * Offline pipeline eval harness. It cannot run Gemma (native MediaPipe), so it
  * exercises the deterministic parts that govern the two field failures — retrieval
- * (right card / honest miss), the [OffTopicGuard] backstop, and source attribution
+ * (right card / honest miss), the [ServeDecision] backstop, and source attribution
  * (exact doc + page). Run after any retrieval/gate change:
  *   ./gradlew :sdk-android:testDebugUnitTest --tests '*ChatPipelineEvalTest*'
  * and read the printed `falseRefusals=… falseServes=… attributionMisses=…` line.
@@ -102,12 +102,17 @@ class ChatPipelineEvalTest {
 
         for (case in cases) {
             val hits = index.search(case.query, k = 3)
-            val top = hits.firstOrNull()
-            val served = top != null && !OffTopicGuard.isClearlyUnanswerable(
+            // Floors zeroed: this small inline corpus produces single-digit BM25
+            // scores; the eval exercises scope/attribution, not score calibration.
+            val decision = ServeDecision.decide(
                 query = case.query,
                 hits = hits,
                 clinicalTerms = scope.scopeTerms(),
+                tuning = com.medtroniclabs.microcoaching.ServeTuning(bnScoreFloor = 0f, enScoreFloor = 0f),
+                isBanglaTurn = true,
             )
+            val top = (decision as? ServeDecision.Decision.Serve)?.hit
+            val served = top != null
 
             if (case.expectFamily == null) {
                 if (served) falseServes++
@@ -165,9 +170,16 @@ class ChatPipelineEvalTest {
             language = ModuleKnowledgeIndex.Lang.BN,
         )
         assertTrue("expected the anemia card to be retrieved at all", hits.isNotEmpty())
+        val decision = ServeDecision.decide(
+            query = "গর্ভবতী মহিলা প্রতিদিন কী খাবার খাবেন",
+            hits = hits,
+            clinicalTerms = emptySet(),
+            tuning = com.medtroniclabs.microcoaching.ServeTuning(bnScoreFloor = 0f, enScoreFloor = 0f),
+            isBanglaTurn = true,
+        )
         assertFalse(
             "a card sharing only গর্ভবতী/মহিলা must not be served",
-            OffTopicGuard.sharesTopicalTerm("গর্ভবতী মহিলা প্রতিদিন কী খাবার খাবেন", hits.first()),
+            decision is ServeDecision.Decision.Serve,
         )
     }
 }

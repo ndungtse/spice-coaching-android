@@ -50,7 +50,7 @@ import com.medtroniclabs.microcoaching.ui.learn.modules.components.TrainingRow
 private val REFRESHER_SECTION_HEIGHT = 232.dp
 
 /**
- * Orchestrator composable for the v0.3.2 modules screen. Renders, top to
+ * Orchestrator composable for the modules screen. Renders, top to
  * bottom: [QuickLearnCard] · [RefresherList] · [TrainingGrid] · [KnowledgeRow].
  *
  * Dormant since the sub-tab split.
@@ -86,7 +86,7 @@ private val REFRESHER_SECTION_HEIGHT = 232.dp
  * @param cachedDocIds Source-document IDs already on disk — drives the per-card
  *   download vs "view" (eye) affordance in [KnowledgeRow].
  */
-@Deprecated("Dormant: superseded by the Coaching sub-tabs (RefresherSubTab / KnowledgeSubTab / TrainingVideosSubTab) — see docs/_coaching/01_navigation_and_screens.md")
+@Deprecated("Dormant: superseded by the Coaching sub-tabs (RefresherSubTab / KnowledgeSubTab / TrainingVideosSubTab)")
 // Dormant-to-dormant: this body still composes the deprecated QuizRefresherCard banner.
 @Suppress("DEPRECATION")
 @Composable
@@ -223,9 +223,8 @@ fun ModulesScreen(
             )
             CardRowSkeleton()
         } else if (training.isEmpty()) {
-            // Loaded, but the CHW has no assigned modules. Show the message on BOTH
-            // the SK (row) and PO (grid) surfaces — we no longer fall back to the
-            // full catalogue when nothing is assigned.
+            // Loaded, but the CHW has no assigned modules. Shown on BOTH the SK (row)
+            // and PO (grid) surfaces; there is no fall back to the full catalogue.
             SectionHeader(
                 title = stringResource(R.string.modules_section_training),
                 seeAllLabel = null,

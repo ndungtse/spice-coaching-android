@@ -225,9 +225,9 @@ class EventRecorder(
      * top retrieval score, chunk IDs) so downstream tuning can mine refusal
      * patterns without a separate event family.
      *
-     * @param inferenceMode `"edge"` for on-device Gemma, `"online"` for the
+     * @param inferenceMode `"edge"` for the on-device LLM, `"online"` for the
      *   backend RAG path, `"cached"` for pre-authored fallback.
-     * @param validatorStatus `"pass"` | `"fail"` | `null` — output of the B4
+     * @param validatorStatus `"pass"` | `"fail"` | `null` — output of the L4
      *   validator. Null when validation didn't run (e.g. L1 scope refusal).
      * @param fallbackUsed `true` when L4 fell back to a quiz `explanation_bn`
      *   or any other pre-authored Bangla string in place of LLM output.
@@ -401,16 +401,15 @@ class EventRecorder(
     }
 
     /**
-     * Records a `video_progress_updated` event (see docs/_events/video.md) — the
-     * CHW's watch progress for an assigned training video. Backend family:
-     * `coaching`. Replaces the removed `PUT /sync/video-progress` route; the row
-     * is written to the outbound queue and shipped on the next telemetry flush,
-     * so progress survives offline and is merged **monotonically** server-side.
+     * Records a `video_progress_updated` event — the CHW's watch progress for an
+     * assigned training video. Backend family: `coaching`. The row is written to
+     * the outbound queue and shipped on the next telemetry flush, so progress
+     * survives offline and is merged **monotonically** server-side.
      *
      * [sourceDocumentId] is the canonical video id. Callers should emit on the
-     * throttled cadence in video.md (every 10–15 s or ≥5% delta, on pause /
-     * background / screen-exit, and a final completion event with
-     * [percentWatched] = 100 and [completed] = true).
+     * throttled cadence `VideoProgressReporter` implements (every 10–15 s or ≥5%
+     * delta, on pause / background / screen-exit, and a final completion event
+     * with [percentWatched] = 100 and [completed] = true).
      */
     suspend fun recordVideoProgress(
         sourceDocumentId: String,

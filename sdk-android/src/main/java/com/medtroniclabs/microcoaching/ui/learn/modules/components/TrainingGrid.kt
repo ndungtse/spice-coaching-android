@@ -12,9 +12,9 @@ import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.ui.learn.LearnModule
 
 /**
- * Responsive grid of training-type modules. Replaces the former horizontal
- * `TrainingRow`: lays cards out in a [ModuleGrid] whose column count adapts to
- * screen width (min 2 — see [moduleGridColumns]), each card filling its cell.
+ * Responsive grid of training-type modules: cards in a [ModuleGrid] whose column
+ * count adapts to screen width (min 2 — see [moduleGridColumns]), each filling
+ * its cell.
  *
  * Shows only the first [maxItems] modules; when there are more and [onSeeAll]
  * is supplied, a "See all" link in the [SectionHeader] opens the full

@@ -36,9 +36,9 @@ import kotlinx.coroutines.flow.update
  * [selectedMorningCard] / [refresherModules] from here, so they cannot disagree.
  *
  * Pipeline (all reactive, all on [scope]):
- *  1. [allModules]    — every active module enriched into a [LearnModule]
- *                       (the former `LearnViewModel.mapModules`), recomputed on
- *                       any module / coaching_event change or [invalidate].
+ *  1. [allModules]    — every active module enriched into a [LearnModule],
+ *                       recomputed on any module / coaching_event change or
+ *                       [invalidate].
  *  2. [refresherModules] / [trainingModules] — [ModuleCategorizer.categorize]
  *                       partitions. A refresher is a selector-surfaced module that
  *                       still has something to ask (see [refresherKindOf]).
@@ -338,8 +338,8 @@ internal fun orderRefresherQueue(refreshers: List<LearnModule>): List<LearnModul
  * The featured-pick rule. Pure so it is unit-testable
  * without constructing the store (the test source set has no coroutine/Room
  * harness). The first refresher the CHW hasn't skipped this session that also
- * carries a quiz — mirrors the former `ModulesScreen.featured`. Skipping a
- * family advances to the next; null when every refresher is skipped.
+ * carries a quiz. Skipping a family advances to the next; null when every
+ * refresher is skipped.
  */
 internal fun selectFeatured(refreshers: List<LearnModule>, skipped: Set<String>): LearnModule? =
     refreshers.firstOrNull { it.moduleFamilyId !in skipped && it.questionCount > 0 }
@@ -357,8 +357,8 @@ internal fun selectFeatured(refreshers: List<LearnModule>, skipped: Set<String>)
  *    than [ActionGapLink.lastWrongReferralAt]). Fail-open when the mistake time is
  *    unknown or the module ships no quiz to re-pass — never silently hide a live
  *    mistake.
- *  - **No link**: plain catalogue check (a gap bound directly to the module's morning
- *    card, e.g. once `/sync/triggers` ships the binding) — ungated, prior behaviour.
+ *  - **No link**: plain catalogue check, ungated (a gap bound directly to the
+ *    module's morning card, e.g. once `/sync/triggers` ships the binding).
  */
 internal fun isActionGapStillActive(
     link: ActionGapLink?,

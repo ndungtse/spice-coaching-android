@@ -1,10 +1,12 @@
 # 04 — Workflow Hooks & Data
 
-**Version:** 0.3.8-SNAPSHOT · **Date:** 2026-06-03 · **Status:** Draft
+**Version:** 0.6.0-SNAPSHOT · **Date:** 2026-08-31 · **Status:** Draft
 
 How SPICE feeds clinical-workflow events into the SDK, and how it reads SDK-owned data back out. The SDK keeps its own `microcoaching.db` Room database fully separate from SPICE's database — these hooks and interfaces are the entire data boundary.
 
 > **Note:** all hooks are no-ops if the SDK is not initialised. Guard with `if (!MicroCoachingSDK.isInitialized()) return`. The SDK wraps event recording in `runCatching`, so a telemetry failure never blocks your host flow.
+
+> **Important:** `onHomeScreenShown(chwId)` is the **only** call that sets the current CHW id. Every other hook starts by resolving that id and silently no-ops when it is absent — so if hooks, badges, or morning cards appear to do nothing, check that `onHomeScreenShown` has run first.
 
 ---
 
@@ -16,19 +18,22 @@ Call these from the matching points in your clinical workflow. All are on `Micro
 |---|---|---|
 | `onHomeScreenShown` | `(chwId: String)` | Home screen shown. Sets the current CHW id and refreshes morning modules. |
 | `onPatientSelected` | `(patientId: String)` | CHW opens a patient. |
-| `onAssessmentSubmitted` | `(encounterId: String, patientId: String, assessmentData: Map<String, Any> = emptyMap())` | An assessment is saved. Primary UC-2/UC-3 trigger. |
+| `onAssessmentSubmitted` | `(encounterId: String, patientId: String, assessmentData: Map<String, Any> = emptyMap())` | An assessment is saved. Primary UC-2/UC-3 trigger (workflow signals — referral correctness lives in `onReferralSubmitted`). |
+| `onReferralSubmitted` | `(encounterId: String, patientId: String, referralData: Map<String, Any> = emptyMap())` | The CHW commits a referral (picks + confirms a destination). Referral-correctness evaluation happens here. See [below](#forwarding-referral-data--onreferralsubmitted). |
 | `onVisitCompleted` | `(encounterId: String)` | A visit/encounter closes (backfills the visit id). |
+| `onTodaysVisitsUpdated` | `(visits: List<TodaysVisit>)` | Today's scheduled visits changed — push a PII-free projection (see below). |
 | `onMorningOpen` | `()` | The morning coaching surface opens. |
 | `onFormSubmitted` | `(formId: String, payload: Map<String, String> = emptyMap())` | A SPICE form is submitted. |
 | `onRuleFired` | `(ruleId: String, payload: Map<String, String> = emptyMap())` | A SPICE clinical rule fires. |
 | `onRiskFlagObserved` | `(riskLevel: String, patientId: String? = null)` | A risk flag is raised. |
 | `onEquipmentAnomaly` | `(detail: String)` | A device/equipment anomaly is detected. |
 | `onModuleQuizCompleted` | `(moduleFamilyId: String, moduleId: String?, scoreFraction: Float, passed: Boolean)` | A learning quiz finishes. |
+| `onModuleCardsCompleted` | `(moduleFamilyId: String, moduleId: String?)` | A module's learning cards are finished (no quiz). |
 | `onCHWContextUpdated` | `(chwWorkContext: CHWWorkContext)` | CHW work context changes (see below). |
 | `onConnectivityRestored` | `()` | Network came back — flush telemetry + sync. |
 | `flushTelemetryNow` | `()` | Force an immediate telemetry flush. |
 
-> **Note:** you don't have to wire every hook. SPICE today wires `onHomeScreenShown`, `onAssessmentSubmitted`, and `onConnectivityRestored`. The rest are available for richer telemetry as the integration grows.
+> **Note:** you don't have to wire every hook — all of them no-op safely. SPICE today wires `onHomeScreenShown`, `onTodaysVisitsUpdated`, `onAssessmentSubmitted`, `onReferralSubmitted`, and `onConnectivityRestored`. The rest are available for richer telemetry as the integration grows.
 
 ---
 
@@ -64,7 +69,7 @@ private fun notifyCoachingSdkOnConnectivityRestored() {
 
 ## Forwarding assessment data
 
-`onAssessmentSubmitted` is the most important hook — it drives the UC-2/UC-3 coaching signals and gap detection. The richer the `assessmentData` map, the better the SDK can compute referral correctness.
+`onAssessmentSubmitted` fires at assessment **save** and drives the UC-2/UC-3 coaching signals (resolving the best coaching card, workflow telemetry). It does **not** evaluate referral correctness — that happens in [`onReferralSubmitted`](#forwarding-referral-data--onreferralsubmitted), which fires later when the CHW actually commits a referral destination. The richer the `assessmentData` map, the better the coaching-card match.
 
 The recommended pattern (used by SPICE) is a small **mapping extension** that turns your assessment entity into the `Map<String, Any>` the SDK expects, then a guarded hook call on a background thread.
 
@@ -147,8 +152,8 @@ All optional; missing keys degrade gracefully (the SDK falls back to a `risk_lev
 | `assessment_type` | Card-type routing. |
 | `risk_level`, `cvd_risk_level` | Risk-based fallback + `risk_flag_observed`. |
 | `is_referred`, `referral_status`, `referred_reason` | The CHW's actual referral action/outcome. |
-| `system_referral_status`, `system_referral_reasons` | What the system prescribed — enables 3-axis referral-correctness. |
-| `referralFacilityType` / `childReferralFacilityType`, `picked_facility_type` | `wrong_facility_tier` gap rule. |
+| `system_referral_status`, `system_referral_reasons` | What the system prescribed. |
+| `referralFacilityType` / `childReferralFacilityType`, `picked_facility_type` | Facility-tier context (the compliance comparison itself runs in `onReferralSubmitted`). |
 | `age`, `gender`, `bmi`, `avg_systolic`, `avg_diastolic`, `fbs_value` | Clinical vitals. |
 | `is_pregnant`, `is_htn_diagnosis`, `is_diabetes_diagnosis` | Clinical flags. |
 | `behavioural_gap_id`, `spice_event_code` | Gap-rule dispatch. |
@@ -157,9 +162,43 @@ All optional; missing keys degrade gracefully (the SDK falls back to a `risk_lev
 
 ---
 
+## Forwarding referral data — `onReferralSubmitted`
+
+Call `onReferralSubmitted(encounterId, patientId, referralData)` when the CHW **commits a referral** — picks and confirms a destination. This is the moment the "what the CHW actually did" side of the data exists, so referral-correctness evaluation runs here (not in `onAssessmentSubmitted`, which fires earlier at save time).
+
+The `referralData` map carries two nested branches the synced compliance rules resolve paths into:
+
+| Branch | Carries | Example keys |
+|---|---|---|
+| `recommended.*` | The rule-engine recommendation, nested as your rule engine produced it. | `recommended.isReferred` (Boolean), `recommended.referredReason` (List<String>), deeper paths like `recommended.assessmentDetails.anc.summary.highRiskPregnantWoman.URGENT` |
+| `actual.*` | What the CHW actually did. | `actual.didRefer` (Boolean), `actual.referralReasons` (List<String>), `actual.isUrgent` (Boolean), `actual.destinationTier` (String) |
+
+Top-level keys `spice_event_code`, `assessment_type`, `patient_track_id`, `village_id`, `upazila_id` may accompany the branches for dispatch and geo tagging. The path contract lives in `SpiceReferralComplianceEvaluator` (`domain/gaps/SpiceReferralComplianceEvaluator.kt`).
+
+```kotlin
+fun AssessmentEntity.toComplianceState(): Map<String, Any> = buildMap {
+    put("recommended", buildRecommendedBranch())   // your rule engine's structured output
+    put("actual", buildActualBranch())             // didRefer, destinationTier, …
+    put("assessment_type", assessmentType)
+    villageId?.let { put("village_id", it) }
+}
+```
+
+**Fail-safe by design:** missing paths resolve to null and the rule operators treat that as "no value" — a rule whose data isn't available simply doesn't fire. An absent `actual.*` branch means "can't tell", never a false positive. Malformed or unknown rule nodes evaluate to false.
+
+**SPICE reference** — `AssessmentActivity.notifyMicroCoachingSDK(entity, asReferral = true)` calls this hook with `entity.toComplianceState(...)` from `microcoaching/AssessmentEntityExt.kt`, on `Dispatchers.IO`, snapshotting mutable view-model fields first (same pattern as the assessment hook above).
+
+---
+
 ## Gap detection
 
-When `enableGapDetection = true` (the default), `onAssessmentSubmitted` iterates the synced gap-detection rules and emits one `spice_action_observed` per fired gap (tagged with its `behavioural_gap_id`). When `false`, the SDK falls back to a single referral-only emission — useful as a kill switch if a rule evaluator misbehaves in the field.
+Gap detection is **fully internal to the SDK and always on** — there is nothing for a host to wire, enable, disable, or implement:
+
+- There is **no Builder flag**: `enableGapDetection` exists on the config data class but has no setter and cannot be changed by a host.
+- There is **no registration API**: the gap evaluators are constructed inside the SDK; hosts cannot add or replace them.
+- `onAssessmentSubmitted` **does not run gap rules** — it only emits workflow signals. Referral-correctness gaps are evaluated inside [`onReferralSubmitted`](#forwarding-referral-data--onreferralsubmitted), which emits one gap-tagged `spice_action_observed` per fired gap.
+
+The host's entire contribution is data shape: forward a well-formed `referralData` map (above) and the synced rules do the rest.
 
 See [docs/gaps/GAP_DETECTION_SDK.md](../gaps/GAP_DETECTION_SDK.md) for the rule model and [docs/gaps/GAPS_TEST.md](../gaps/GAPS_TEST.md) for the test plan.
 
@@ -248,6 +287,28 @@ val ctx = MicroCoachingSDK.getInstance().loadCHWContext()   // read back the las
 ```
 
 Both `CHWWorkContext` and `RecentPatientSummary` are `@Serializable`. Only de-identified, aggregate context is stored — no patient names.
+
+---
+
+## Today's visits
+
+Push a PII-free projection of the CHW's visits due **today** — the SDK matches them against synced trigger bindings to pick cold-start refresher modules:
+
+```kotlin
+MicroCoachingSDK.getInstance().onTodaysVisitsUpdated(
+    visitsDueToday.map {
+        TodaysVisit(
+            type = it.appointmentType,          // "HH_VISIT" | "MEDICAL_REVIEW" | "REFERRED" | …
+            encounterType = it.encounterType,   // "ANC" | "MALARIA" | "PNC_MOTHER" | … or null
+            dueDateIso = it.dueDate,            // ISO 8601; the SDK keeps only today's
+            isPregnant = it.isPregnant,         // null = unknown (constraint skipped, not failed)
+            villageId = it.villageId,
+        )
+    },
+)
+```
+
+`TodaysVisit` carries no patient identifiers — only the clinical-type signal needed to pick a module. **SPICE reference**: `HomeScreenFragment.pushTodaysVisits()` maps `FollowUpDao.getVisitsDueOn(today)` rows via a dedicated PII-free projection (`microcoaching/TodaysVisitRow.kt`).
 
 ---
 

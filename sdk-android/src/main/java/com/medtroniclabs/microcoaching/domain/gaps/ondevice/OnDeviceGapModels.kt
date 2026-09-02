@@ -6,8 +6,7 @@ package com.medtroniclabs.microcoaching.domain.gaps.ondevice
  * the plain JUnit source set.
  *
  * The shapes mirror the backend `chw_behavioural_gap_state` row and the
- * telemetry events the gap-escalation worker consumes — see
- * `docs/offline_refresher_generation_plan.md`.
+ * telemetry events the gap-escalation worker consumes.
  */
 
 /** Lifecycle of a per-CHW gap, mirroring the backend status enum. */

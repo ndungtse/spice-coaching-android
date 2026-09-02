@@ -34,14 +34,11 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import com.medtroniclabs.microcoaching.R
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlue
-import com.medtroniclabs.microcoaching.ui.theme.SpiceNavy
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 
-private val FieldBorder = Color(0xFFE0E3EA)
 private val dateFormat = DateTimeFormatter.ofPattern("d MMM yyyy")
 
 private fun formatDate(millis: Long): String =
@@ -163,7 +160,7 @@ private fun DateField(
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(10.dp))
-            .border(1.dp, FieldBorder, RoundedCornerShape(10.dp))
+            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(10.dp))
             .clickable(enabled = enabled, onClick = onClick)
             .alpha(if (enabled) 1f else 0.5f)
             .padding(horizontal = 12.dp, vertical = 8.dp),
@@ -177,10 +174,10 @@ private fun DateField(
             Icon(
                 imageVector = Icons.Outlined.CalendarMonth,
                 contentDescription = null,
-                tint = SpiceBlue,
+                tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(16.dp),
             )
-            Text(text = formatDate(millis), style = MaterialTheme.typography.bodyMedium, color = SpiceNavy)
+            Text(text = formatDate(millis), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
         }
     }
 }

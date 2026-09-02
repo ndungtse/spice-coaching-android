@@ -26,9 +26,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.medtroniclabs.microcoaching.R
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlue
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueContainer
-import com.medtroniclabs.microcoaching.ui.theme.SpiceNavy
 import com.medtroniclabs.microcoaching.ui.trainingvideos.TrainingVideo
 
 /**
@@ -48,7 +45,7 @@ fun TrainingVideoRow(
         onClick = onClick,
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
     ) {
         Row(
@@ -74,7 +71,7 @@ fun TrainingVideoRow(
                                 .matchParentSize()
                                 .background(
                                     Brush.linearGradient(
-                                        colors = listOf(SpiceBlueContainer, SpiceBlue.copy(alpha = 0.3f)),
+                                        colors = listOf(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)),
                                     ),
                                 ),
                         )
@@ -97,9 +94,8 @@ fun TrainingVideoRow(
                 Text(
                     text = video.title,
                     style = MaterialTheme.typography.titleSmall,
-                    fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = SpiceNavy,
+                    color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -108,7 +104,7 @@ fun TrainingVideoRow(
                         text = description,
                         style = MaterialTheme.typography.bodySmall,
                         fontSize = 12.sp,
-                        color = Color(0xFF6B7280),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -119,7 +115,7 @@ fun TrainingVideoRow(
                         text = meta,
                         style = MaterialTheme.typography.bodySmall,
                         fontSize = 12.sp,
-                        color = Color(0xFF6B7280),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }

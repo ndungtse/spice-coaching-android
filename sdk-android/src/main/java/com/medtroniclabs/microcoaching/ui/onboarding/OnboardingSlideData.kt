@@ -5,8 +5,7 @@ import com.medtroniclabs.microcoaching.Language
 /**
  * Content for a single onboarding slide.
  *
- * [illustrationEmoji] is used in Phase 0.5 as a placeholder illustration.
- * Phase 3 will replace it with a proper drawable resource.
+ * [illustrationEmoji] stands in for an illustration; there is no drawable behind it.
  */
 data class OnboardingSlide(
     val title: String,
@@ -14,7 +13,7 @@ data class OnboardingSlide(
     val illustrationEmoji: String,
 )
 
-/** Hardcoded onboarding slides for Phase 0.5. Replaced by CMS content in Phase 3. */
+/** The onboarding slides, authored in-code — no CMS or sync feeds them. */
 object OnboardingSlideData {
 
     const val SLIDE_COUNT = 3

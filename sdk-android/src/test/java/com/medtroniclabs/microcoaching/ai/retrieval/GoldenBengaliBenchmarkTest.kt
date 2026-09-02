@@ -103,7 +103,7 @@ class GoldenBengaliBenchmarkTest {
             val rank = hits.indexOfFirst { key(it) == q.expected }
             val top = hits.firstOrNull()
             val margin = if (hits.size > 1 && hits[1].score > 0f) hits[0].score / hits[1].score else Float.NaN
-            val wouldRefuse = OffTopicGuard.shouldRefuseLowEnd(q.questionBn, hits.take(3), scope.scopeTerms())
+            val wouldRefuse = serveDecide(q.questionBn, hits.take(3), scope) !is ServeDecision.Decision.Serve
             if (wouldRefuse) refused++
 
             when {
@@ -164,7 +164,7 @@ class GoldenBengaliBenchmarkTest {
         println("   recall@3      : ${pct(r1 + r3)}")
         println("   recall@10     : ${pct(r1 + r3 + r10)}")
         println("   not in top-10 : ${pct(absent)}")
-        println("   would refuse  : ${pct(refused)}   (OffTopicGuard on the low-end path)")
+        println("   would refuse  : ${pct(refused)}   (ServeDecision on the low-end path)")
         if (strictTotal > 0) {
             println("   recall@1 on unambiguously-labelled subset: $r1Strict/$strictTotal " +
                 "(%.0f%%)".format(100.0 * r1Strict / strictTotal))
@@ -367,16 +367,13 @@ class GoldenBengaliBenchmarkTest {
             )
             val grounding = sel.hits
             if (grounding.isEmpty()) { lPreRefuse++; continue }
-            if (OffTopicGuard.shouldRefuseLowEnd(q.questionBn, grounding, scope.scopeTerms())) { lPreRefuse++; continue }
-            val top = OffTopicGuard.selectLowEndServeHit(q.questionBn, grounding, scope.scopeTerms())
-                ?: grounding.first()
-            val correct = key(top) == q.expected
-            val related = OffTopicGuard.sharesTopicalTerm(q.questionBn, top)
-            when {
-                correct && related -> lRight++
-                correct && !related -> lFalseRefuse++
-                !correct && !related -> lStopWrong++
-                else -> lWrongServed++
+            when (val decision = serveDecide(q.questionBn, grounding, scope)) {
+                is ServeDecision.Decision.Refuse ->
+                    // A refusal that hid the right rank-1 card is the gate's cost;
+                    // one that stopped a wrong card is its benefit.
+                    if (key(grounding.first()) == q.expected) lFalseRefuse++ else lStopWrong++
+                is ServeDecision.Decision.Serve ->
+                    if (key(decision.hit) == q.expected) lRight++ else lWrongServed++
             }
         }
         println("\n── LOW-END PATH with the topical gate (production simulation)")
@@ -398,7 +395,12 @@ class GoldenBengaliBenchmarkTest {
         for (q in questions) {
             val hits = index.search(q.questionBn, k = 10, scoreThreshold = 1.5f, language = ModuleKnowledgeIndex.Lang.BN)
             val top = hits.firstOrNull() ?: continue
-            val related = OffTopicGuard.sharesTopicalTerm(q.questionBn, top)
+            // Floors zeroed to isolate the evidence gate itself from score calibration.
+            val related = ServeDecision.decide(
+                q.questionBn, listOf(top), scope.scopeTerms(),
+                com.medtroniclabs.microcoaching.ServeTuning(bnScoreFloor = 0f, enScoreFloor = 0f),
+                isBanglaTurn = true,
+            ) is ServeDecision.Decision.Serve
             val correct = key(top) == q.expected
             when {
                 correct && related -> gKeepRight++
@@ -597,6 +599,13 @@ class GoldenBengaliBenchmarkTest {
     }
 
     private fun key(c: GroundingChunk) = "${c.moduleFamilyId.take(8)}:${c.positionalId}"
+
+    /** The production serve/refuse decision with default tuning (Bangla turn). */
+    private fun serveDecide(query: String, hits: List<GroundingChunk>, scope: ScopeClassifier) =
+        ServeDecision.decide(
+            query, hits, scope.scopeTerms(),
+            com.medtroniclabs.microcoaching.ServeTuning(), isBanglaTurn = true,
+        )
 
     /** Token overlap between two card bodies — detects duplicate content across families. */
     private fun bodyOverlap(a: GroundingChunk, b: GroundingChunk): Float {

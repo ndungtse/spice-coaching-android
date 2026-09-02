@@ -3,9 +3,8 @@ package com.medtroniclabs.microcoaching.ui.podashboard
 /**
  * Source of PO dashboard data.
  *
- * Production uses [ApiPODashboardDataSource] (the `dashboard/…` endpoints — see
- * docs/dashboads_and_leaderboard/dashboard_apis.md). [StubPODashboardDataSource]
- * is retained for @Preview and unit tests.
+ * Production uses [ApiPODashboardDataSource] (the `dashboard/…` endpoints).
+ * [StubPODashboardDataSource] is retained for @Preview and unit tests.
  */
 interface PODashboardDataSource {
     suspend fun loadDashboard(chwId: String, range: DateRange): PoDashboard

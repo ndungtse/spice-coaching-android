@@ -79,8 +79,8 @@ sealed class ChatUiState {
     /**
      * Chat could not be opened at all — a database failure, not a missing model.
      *
-     * Rare by construction: retrieval-only answering needs no model and no network, so the
-     * states that used to land here now open chat in [Ready] instead.
+     * Rare by construction: retrieval-only answering needs no model and no network, so a
+     * missing model or a dead connection still opens chat in [Ready].
      */
     data class Error(val message: String) : ChatUiState()
 }

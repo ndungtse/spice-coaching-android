@@ -38,7 +38,7 @@ import com.medtroniclabs.microcoaching.ui.flow.CoachingFlowActivity
  * and itself has no call sites. Host apps should embed the coaching flow via
  * [CoachingFlowActivity] instead.
  */
-@Deprecated("Legacy embeddable learn surface; not reachable from CoachingFlowActivity — see docs/_coaching/01_navigation_and_screens.md")
+@Deprecated("Legacy embeddable learn surface; not reachable from CoachingFlowActivity")
 class LearnFragment : Fragment() {
 
     private lateinit var viewModel: LearnViewModel

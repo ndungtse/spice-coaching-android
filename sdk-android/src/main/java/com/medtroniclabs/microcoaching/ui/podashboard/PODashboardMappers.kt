@@ -215,7 +215,7 @@ internal fun mapSkDetail(
         .maxByOrNull { it.completedAt ?: "" }
     return SkDetail(
         id = skId,
-        // Geography + streak are not in team-activity (backend gaps — see dashboard_apis.md).
+        // Geography + streak are not in the team-activity response.
         location = "",
         name = row.name,
         status = row.isActive.toSkStatus(),

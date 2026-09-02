@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.sp
 import com.medtroniclabs.microcoaching.MicroCoachingSDK
 import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.ui.common.OnboardingDotIndicator
+import com.medtroniclabs.microcoaching.ui.theme.CoachingTheme
 
 /**
  * Three-slide onboarding carousel.
@@ -75,13 +76,13 @@ fun OnboardingSlideScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFFF8F8F8)),
+            .background(MaterialTheme.colorScheme.surfaceContainerLow),
     ) {
         // ── "X of Y" counter — top right ─────────────────────────────────────
         Text(
             text = stringResource(R.string.onboarding_page_counter, pagerState.currentPage + 1, slides.size),
             style = MaterialTheme.typography.labelMedium,
-            color = Color(0xFF888888),
+            color = CoachingTheme.colors.textDisabled,
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .padding(top = 20.dp, end = 24.dp),
@@ -136,8 +137,7 @@ fun OnboardingSlideScreen(
             TextButton(onClick = onSkip) {
                 Text(
                     text = stringResource(R.string.onboarding_skip),
-                    color = Color(0xFF888888),
-                    fontSize = 14.sp,
+                    color = CoachingTheme.colors.textDisabled,
                 )
             }
         }
@@ -160,7 +160,7 @@ private fun SlideContent(slide: OnboardingSlide) {
             modifier = Modifier
                 .size(160.dp)
                 .background(
-                    color = Color(0xFFF0F0F0),
+                    color = MaterialTheme.colorScheme.outlineVariant,
                     shape = RoundedCornerShape(24.dp),
                 ),
             contentAlignment = Alignment.Center,
@@ -179,7 +179,7 @@ private fun SlideContent(slide: OnboardingSlide) {
                 fontWeight = FontWeight.Bold,
             ),
             textAlign = TextAlign.Center,
-            color = Color(0xFF1A1A1A),
+            color = CoachingTheme.colors.textStrong,
         )
 
         Spacer(Modifier.height(12.dp))
@@ -188,7 +188,7 @@ private fun SlideContent(slide: OnboardingSlide) {
             text = slide.body,
             style = MaterialTheme.typography.bodyMedium,
             textAlign = TextAlign.Center,
-            color = Color(0xFF666666),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             lineHeight = 22.sp,
         )
     }

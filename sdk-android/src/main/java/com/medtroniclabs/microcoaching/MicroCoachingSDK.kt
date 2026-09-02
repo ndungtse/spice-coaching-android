@@ -1,6 +1,7 @@
 package com.medtroniclabs.microcoaching
 
 import android.content.Context
+import androidx.compose.material3.Typography
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
@@ -25,6 +26,8 @@ import com.medtroniclabs.microcoaching.progress.moduleIdList
 import com.medtroniclabs.microcoaching.progress.buildModuleCompletion
 import com.medtroniclabs.microcoaching.sdk.chat.ChatKnowledgeIndexBootstrap
 import com.medtroniclabs.microcoaching.sdk.context.ChwContextStore
+import com.medtroniclabs.microcoaching.ui.theme.CoachingColors
+import com.medtroniclabs.microcoaching.ui.theme.coachingTypography
 import com.medtroniclabs.microcoaching.sdk.hooks.handleAssessmentSubmitted
 import com.medtroniclabs.microcoaching.sdk.hooks.handleReferralSubmitted
 import com.medtroniclabs.microcoaching.sdk.morning.MorningSurfaceCoordinator
@@ -89,6 +92,7 @@ import com.medtroniclabs.microcoaching.domain.validation.OutputValidator
 import  com.medtroniclabs.microcoaching.ai.voice.stt.SttModelManager
 import com.medtroniclabs.microcoaching.ai.voice.VoiceInputController
 import com.medtroniclabs.microcoaching.ai.retrieval.ModuleKnowledgeIndex
+import com.medtroniclabs.microcoaching.ai.retrieval.ScopeClassifier
 import com.medtroniclabs.microcoaching.ai.retrieval.RetrievalHintOverlay
 import com.medtroniclabs.microcoaching.ai.translation.TranslationModelState
 import com.medtroniclabs.microcoaching.ai.voice.OfflineSttEngine
@@ -116,10 +120,9 @@ data class SdkHealthReport(
  */
 class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
 
-    // CoroutineExceptionHandler: an uncaught exception in SDK background work
-    // must never take the HOST app down. Without it, a transient failure in an
-    // init-block collector (e.g. a DB read racing a sync delete) propagated as
-    // a fatal crash on a worker thread — an SDK is a guest in the host process.
+    // The handler is load-bearing: an SDK is a guest in the host process, so an
+    // uncaught exception in background work (e.g. a DB read racing a sync delete)
+    // must not reach the host as a fatal worker-thread crash.
     internal val sdkScope = CoroutineScope(
         SupervisorJob() + Dispatchers.IO +
             CoroutineExceptionHandler { _, throwable ->
@@ -135,7 +138,7 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
     val coachingSessionId: String = UUID.randomUUID().toString()
 
     /**
-     * `true` below the 3 GB-RAM threshold: too small for the on-device Gemma model,
+     * `true` below the 3 GB-RAM threshold: too small for the on-device model,
      * so chat runs retrieval-only (BM25 over the module corpus, no LLM). Probed once
      * via [DeviceCapability]; overridable with [MicroCoachingConfig.forceLowEndMode] (QA).
      */
@@ -155,7 +158,7 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
     /** Change language at runtime without rebuilding. Applies to LLM prompts now, UI on next screen open. */
     fun setLanguage(language: Language) {
         this.language = language
-        // The EN↔BN pack is needed in both languages (BN for the Gemma round-trip,
+        // The EN↔BN pack is needed in both languages (BN for the LLM round-trip,
         // EN to translate chat to/from the bn-only backend), so ensure it either way.
         sdkScope.launch { translator.ensureModelReady() }
     }
@@ -312,7 +315,7 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
         loadTodaysVisits = { loadTodaysVisits() },
     )
 
-    /** 4-tier morning-module resolution, extracted from this class (F9). */
+    /** 4-tier morning-module resolution. */
     internal val morningModuleResolver: MorningModuleResolver by lazy {
         MorningModuleResolver(
             database = database,
@@ -395,8 +398,8 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
     /**
      * Per-`rule_type` gap dispatcher with the four pilot evaluators. Only
      * [WrongFacilityTierEvaluator] is wired end-to-end today; the other three are
-     * skeletons returning null. Gated by [MicroCoachingConfig.enableGapDetection]
-     * — when false, [onAssessmentSubmitted] keeps its single-event emission.
+     * skeletons returning null. Driven from [onReferralSubmitted], gated by
+     * [MicroCoachingConfig.enableGapDetection].
      */
     internal val gapRuleDispatcher: GapRuleDispatcher = GapRuleDispatcher(
         gapDao = database.behaviouralGapDao(),
@@ -408,7 +411,7 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
         ),
     )
 
-    /** TP-7 — visit-close handler. See [onVisitCompleted]. */
+    /** Visit-close handler. See [onVisitCompleted]. */
     private val visitCompletedHandler: VisitCompletedHandler =
         VisitCompletedHandler(coachingEventDao = database.coachingEventDao())
 
@@ -466,6 +469,13 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
      * open ([ensureChatKnowledgeIndex]), not at SDK init. `empty()` until then.
      */
     val chatKnowledgeIndex: StateFlow<ModuleKnowledgeIndex> = chatIndexBootstrap.index
+
+    /**
+     * Scope/evidence vocabulary over the same corpus as [chatKnowledgeIndex]. Chat reads
+     * this rather than building one from the morning subset, so the gate knows the
+     * vocabulary of every card retrieval can return.
+     */
+    internal val chatScopeClassifier: StateFlow<ScopeClassifier> = chatIndexBootstrap.scopeClassifier
 
     /**
      * Start (once) the background collector that builds and maintains [chatKnowledgeIndex].
@@ -597,16 +607,15 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
         }
         // EN↔BN pack: a background download CHECK (the model only loads on first
         // translate()), kept in init because the inbound FAQ bn→en backfill needs it
-        // before chat opens. Needed in both languages (BN for the Gemma round-trip,
+        // before chat opens. Needed in both languages (BN for the LLM round-trip,
         // EN to translate chat to/from the bn-only backend).
         sdkScope.launch { translator.ensureModelReady() }
-        // The Bengali STT (voice) download is no longer kicked off here. It now
-        // starts when the chat opens — ChatViewModel.autoStartOnDevicePacks() —
-        // so the pack downloads in parallel with the AI model on the coaching
-        // setup screen instead of only after the model reaches Ready. The trigger
-        // is idempotent (SttModelManager.triggerBengaliDownload no-ops when the
-        // pack is present/in-flight), and the mic-tap fallback in
-        // ChatVoiceInputController still covers first-dictation.
+        // The Bengali STT (voice) pack is deliberately NOT started here — it starts
+        // when chat opens (ChatViewModel.autoStartOnDevicePacks) so it downloads in
+        // parallel with the AI model rather than queueing behind it. That trigger is
+        // idempotent (SttModelManager.triggerBengaliDownload no-ops when the pack is
+        // present or in flight), and the mic-tap fallback in ChatVoiceInputController
+        // still covers first-dictation.
 
         // The chat BM25 index is NOT built here — deferred to first chat open
         // (ensureChatKnowledgeIndex). Eager build meant a full-corpus parse +
@@ -701,8 +710,8 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
 
     /**
      * Call when the CHW opens the home screen. Stores [chwId], surfaces cached
-     * modules immediately, then fetches morning cards in the background. Resolution:
-     * `morning_card_cache` join → else [TriggerEvaluator] rows → else empty.
+     * modules immediately, then re-resolves in the background via
+     * [MorningModuleResolver] (see its KDoc for the tier order).
      */
     fun onHomeScreenShown(chwId: String) {
         // Detect a CHW switch (different user signed in on this device) before we
@@ -802,8 +811,8 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
     }
 
     /**
-     * Call when the CHW opens the morning routine. Re-runs the 3-tier morning
-     * resolution (same as [onHomeScreenShown]) and updates [latestModule].
+     * Call when the CHW opens the morning routine. Re-runs the same morning
+     * resolution as [onHomeScreenShown] and updates [latestModule].
      */
     fun onMorningOpen() {
         val chwId = currentCHWId ?: return
@@ -822,9 +831,8 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
     }
 
     /**
-     * Fire-and-forget morning refilter on the SDK scope — for UI call-sites (e.g. a
-     * sheet's dismiss) whose lifecycle ends before the refilter completes, so the
-     * work survives the surface (an ad-hoc `MainScope()` per call leaked).
+     * Fire-and-forget morning refilter on the SDK scope, so the work survives UI
+     * call-sites (e.g. a sheet's dismiss) whose lifecycle ends before it completes.
      */
     fun refilterMorningModulesAsync(chwId: String) = morningCoordinator.refilterAsync(chwId)
 
@@ -852,8 +860,9 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
 
     /**
      * Persist a module-quiz outcome locally and update [ChwModuleCompletionEntity].
-     * Telemetry is emitted by the caller (the Learn flow already records
-     * `quiz_completed` via [EventRecorder]).
+     * Telemetry is emitted by the caller: the Learn flow already records one
+     * `module_quiz_attempted` per question via [EventRecorder], and an
+     * attempt-level roll-up here would be double-counted.
      */
     fun onModuleQuizCompleted(
         moduleFamilyId: String,
@@ -1202,6 +1211,8 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
         private var enableMeasureModule: Boolean = false
         private var dataCallback: MicroCoachingDataCallback? = null
         private var uiTheme: CoachingUiTheme = CoachingUiTheme.SYSTEM
+        private var themeColors: CoachingColors = CoachingColors.Spice
+        private var themeTypography: Typography = coachingTypography()
         private var forcedMode: CoachingMode? = null
         // Keep in sync with MicroCoachingConfig.minFreeStorageBytes default (512 MB).
         private var minFreeStorageBytes: Long = 512L * 1024 * 1024
@@ -1230,7 +1241,11 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
         fun modelPath(path: String) = apply { modelPath = path }
         fun modelDownloadStrategy(strategy: ModelDownloadStrategy) = apply { modelDownloadStrategy = strategy }
         fun wifiOnlyModelDownload(wifiOnly: Boolean) = apply { wifiOnlyModelDownload = wifiOnly }
-        /** Override provider priority or disable a provider entirely. Default: Backend → HuggingFace → Kaggle. */
+        /**
+         * Override provider priority or disable a provider entirely. Default order is
+         * Backend → HuggingFace → Kaggle, but only HuggingFace can currently serve a
+         * model: Backend offers a `.task` no bundled engine loads, and Kaggle is a stub.
+         */
         fun modelProviders(providers: List<ModelProvider>) = apply { modelProviders = providers }
         /** HuggingFace Hub token for gated model downloads. Set HUGGING_FACE_TOKEN in local.properties for dev. */
         fun huggingFaceToken(token: String) = apply { huggingFaceToken = token }
@@ -1285,7 +1300,7 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
          * SDK probe total RAM (< 3 GB → low-end, retrieval-only chat). Pass
          * `true` to force the retrieval-only path on capable hardware (QA), or
          * `false` to force the LLM path on a low-RAM device (only safe when an
-         * external runtime guarantees the Gemma model can load).
+         * external runtime guarantees the model can load).
          */
         fun forceLowEndMode(force: Boolean?) = apply { forceLowEndMode = force }
         fun enableChat(enabled: Boolean) = apply { enableChat = enabled }
@@ -1306,7 +1321,24 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
         fun enableApplyModule(enabled: Boolean) = apply { enableApplyModule = enabled }
         fun enableMeasureModule(enabled: Boolean) = apply { enableMeasureModule = enabled }
         fun dataCallback(callback: MicroCoachingDataCallback) = apply { dataCallback = callback }
-        /** Set the colour scheme for SDK-owned screens. Default: [CoachingUiTheme.SYSTEM]. */
+        /**
+         * Restyle SDK-owned screens.
+         *
+         * Override only what you need — everything else stays at the SPICE default:
+         *
+         * ```kotlin
+         * .theme(CoachingColors.Spice.copy(primary = Color(0xFF00695C)))
+         * ```
+         *
+         * Chat bubbles, the SK-detail header and progress tracks are derived from
+         * `primary`, so they follow a brand override automatically.
+         */
+        fun theme(colors: CoachingColors) = apply { themeColors = colors }
+
+        /** Set the type scale, e.g. `coachingTypography(fontFamily = MyBrandFont)`. */
+        fun typography(typography: Typography) = apply { themeTypography = typography }
+
+        @Deprecated("Never read by the SDK; dark mode is unsupported. Use theme() instead.")
         fun uiTheme(theme: CoachingUiTheme) = apply { uiTheme = theme }
         /**
          * Force a specific coaching mode regardless of network or RAM state.
@@ -1393,6 +1425,8 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
                 enableApplyModule = enableApplyModule,
                 enableMeasureModule = enableMeasureModule,
                 dataCallback = dataCallback,
+                themeColors = themeColors,
+                themeTypography = themeTypography,
                 uiTheme = uiTheme,
                 forcedMode = forcedMode,
                 minFreeStorageBytes = minFreeStorageBytes,

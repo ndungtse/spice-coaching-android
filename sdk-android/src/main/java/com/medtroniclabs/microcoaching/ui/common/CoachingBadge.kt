@@ -17,8 +17,8 @@ import androidx.compose.ui.unit.sp
 /**
  * Red numeric badge overlaid on the coaching FAB.
  *
- * Shows [count] inside a filled circle. Hidden when [count] is 0.
- * Phase 3 will wire [count] to the real pending-module count from Room.
+ * Shows [count] inside a filled circle. Hidden when [count] is 0. The count comes
+ * from the caller; nothing in the SDK derives it from a pending-module query.
  *
  * @param count Number of pending items to show. Pass 0 to hide.
  */
@@ -34,12 +34,12 @@ fun CoachingBadge(
     Box(
         modifier = modifier
             .size(18.dp)
-            .background(color = Color(0xFFD32F2F), shape = CircleShape),
+            .background(color = MaterialTheme.colorScheme.error, shape = CircleShape),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = label,
-            color = Color.White,
+            color = MaterialTheme.colorScheme.onError,
             fontSize = 10.sp,
             lineHeight = 10.sp,
         )

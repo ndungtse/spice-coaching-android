@@ -31,7 +31,7 @@ import com.medtroniclabs.microcoaching.ui.learn.modules.components.ModuleTileVar
 import com.medtroniclabs.microcoaching.ui.learn.modules.components.moduleTileColumns
 import com.medtroniclabs.microcoaching.ui.learn.modules.components.progressFractionFor
 import com.medtroniclabs.microcoaching.ui.theme.MicroCoachingTheme
-import com.medtroniclabs.microcoaching.ui.theme.SurfaceBackground
+import androidx.compose.material3.MaterialTheme
 
 /** How many shimmer tiles to show while an AllModules list is loading. */
 private const val SKELETON_TILE_COUNT = 6
@@ -87,7 +87,7 @@ fun AllModulesScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(SurfaceBackground),
+            .background(MaterialTheme.colorScheme.surface),
     ) {
         SdkScreenHeader(
             title = stringResource(titleRes),

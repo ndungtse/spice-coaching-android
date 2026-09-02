@@ -80,8 +80,7 @@ class AssetCache(
 
     /**
      * Per-key locks so concurrent requests for the same asset download once.
-     * Bounded LRU — the map previously grew one entry per asset key ever
-     * requested and was never pruned (it outlived even the asset's eviction).
+     * Bounded LRU so the map cannot grow one entry per asset key ever requested.
      * Evicting a rarely-still-held lock is benign: a fresh mutex for the same
      * key can at worst let one asset download twice.
      */

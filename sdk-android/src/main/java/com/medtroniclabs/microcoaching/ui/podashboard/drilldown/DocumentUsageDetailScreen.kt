@@ -43,10 +43,7 @@ import com.medtroniclabs.microcoaching.ui.podashboard.DocumentViewEventItem
 import com.medtroniclabs.microcoaching.ui.podashboard.components.MutedText
 import com.medtroniclabs.microcoaching.ui.podashboard.components.StatusGreen
 import com.medtroniclabs.microcoaching.ui.podashboard.components.poCard
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlue
-import com.medtroniclabs.microcoaching.ui.theme.SurfaceMuted
 
-private val DividerColor = Color(0xFFEFEFF3)
 
 private const val TAB_READERS = 0
 private const val TAB_OPENS = 1
@@ -69,7 +66,7 @@ fun DocumentUsageDetailScreen(
     val state by vm.uiState.collectAsState()
     val networkAvailable by vm.networkAvailable.collectAsState()
 
-    Column(modifier = Modifier.fillMaxSize().background(SurfaceMuted)) {
+    Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainerLow)) {
         val title = (state as? DocumentUsageDetailUiState.Ready)?.detail?.title
             ?: stringResource(R.string.po_section_document_usage)
         SdkScreenHeader(title = title, onBack = onBack, onHome = onHome)
@@ -94,7 +91,7 @@ private fun Content(detail: DocumentUsageDetail) {
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             StatCell(stringResource(R.string.po_document_unique_readers), detail.uniqueUsers, StatusGreen, Modifier.weight(1f))
-            StatCell(stringResource(R.string.po_document_total_opens), detail.totalViews, SpiceBlue, Modifier.weight(1f))
+            StatCell(stringResource(R.string.po_document_total_opens), detail.totalViews, MaterialTheme.colorScheme.primary, Modifier.weight(1f))
         }
 
         Spacer(Modifier.height(16.dp))
@@ -142,7 +139,7 @@ private fun <T> CardList(items: List<T>, empty: String, row: @Composable (T) -> 
     }
     Column(modifier = Modifier.fillMaxWidth().poCard()) {
         items.forEachIndexed { i, item ->
-            if (i > 0) HorizontalDivider(color = DividerColor)
+            if (i > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             row(item)
         }
     }
@@ -189,7 +186,7 @@ private fun ReaderRow(reader: DocumentReaderItem) {
         Column(horizontalAlignment = Alignment.End) {
             Text(
                 text = pluralStringResource(R.plurals.po_document_open_count, reader.opens, reader.opens),
-                color = SpiceBlue,
+                color = MaterialTheme.colorScheme.primary,
                 fontWeight = FontWeight.SemiBold,
                 style = MaterialTheme.typography.labelMedium,
                 maxLines = 1,

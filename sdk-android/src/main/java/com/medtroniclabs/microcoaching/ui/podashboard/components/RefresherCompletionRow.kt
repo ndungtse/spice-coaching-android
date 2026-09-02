@@ -22,9 +22,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.ui.common.AvatarCircle
 import com.medtroniclabs.microcoaching.ui.podashboard.SkSummary
+import com.medtroniclabs.microcoaching.ui.theme.CoachingTheme
+import com.medtroniclabs.microcoaching.ui.theme.trackFor
 
-private val RefresherPurple = Color(0xFF7C3AED)
-private val RefresherPurpleBg = Color(0xFFEDE9FE)
 
 /** Per-SK refresher-completion row (PO-monitoring): avatar · name · x/N · purple bar. */
 @Composable
@@ -34,7 +34,7 @@ fun RefresherCompletionRow(sk: SkSummary, modifier: Modifier = Modifier) {
         modifier = modifier.fillMaxWidth().poCard().padding(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        AvatarCircle(sk.name, size = 40.dp, containerColor = RefresherPurpleBg, contentColor = RefresherPurple)
+        AvatarCircle(sk.name, size = 40.dp, containerColor = CoachingTheme.colors.categoryTags[1].container, contentColor = CoachingTheme.colors.categoryTags[1].onContainer)
         Spacer(Modifier.width(12.dp))
         Text(
             text = sk.name,
@@ -46,7 +46,7 @@ fun RefresherCompletionRow(sk: SkSummary, modifier: Modifier = Modifier) {
         )
         Text(
             text = stringResource(R.string.po_fraction, sk.refreshersDone, sk.refreshersTotal),
-            color = RefresherPurple,
+            color = CoachingTheme.colors.categoryTags[1].onContainer,
             fontWeight = FontWeight.Bold,
             style = MaterialTheme.typography.labelMedium,
         )
@@ -54,8 +54,8 @@ fun RefresherCompletionRow(sk: SkSummary, modifier: Modifier = Modifier) {
         LinearProgressIndicator(
             progress = { fraction },
             modifier = Modifier.width(80.dp).height(6.dp).clip(RoundedCornerShape(50)),
-            color = RefresherPurple,
-            trackColor = ProgressTrack,
+            color = CoachingTheme.colors.categoryTags[1].onContainer,
+            trackColor = trackFor(CoachingTheme.colors.categoryTags[1].onContainer),
         )
     }
 }

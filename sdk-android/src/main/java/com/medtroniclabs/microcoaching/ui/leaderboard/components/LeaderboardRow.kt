@@ -27,13 +27,12 @@ import com.medtroniclabs.microcoaching.ui.common.AvatarCircle
 import com.medtroniclabs.microcoaching.ui.common.StreakChip
 import com.medtroniclabs.microcoaching.ui.common.XpPill
 import com.medtroniclabs.microcoaching.ui.leaderboard.LeaderboardEntry
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlue
 
 /** One ranked row: rank · avatar · name · streak · XP. The current user's row is highlighted. */
 @Composable
 fun LeaderboardRow(entry: LeaderboardEntry, modifier: Modifier = Modifier) {
     val name = if (entry.isCurrentUser) stringResource(R.string.leaderboard_you) else entry.displayName
-    val background = if (entry.isCurrentUser) SpiceBlue else Color.White
+    val background = if (entry.isCurrentUser) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface
     val foreground = if (entry.isCurrentUser) Color.White else MaterialTheme.colorScheme.onBackground
     val shape = RoundedCornerShape(12.dp)
 

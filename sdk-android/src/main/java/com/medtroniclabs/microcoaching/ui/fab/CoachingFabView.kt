@@ -32,8 +32,7 @@ import com.medtroniclabs.microcoaching.ui.theme.MicroCoachingTheme
  * }
  * ```
  *
- * The badge count is hardcoded to `1` in Phase 0.5.
- * Phase 3 will expose `setBadgeCount(count: Int)` driven by a pending-module count.
+ * The badge count is hardcoded to `1`; this view exposes no setter for it.
  */
 class CoachingFabView @JvmOverloads constructor(
     context: Context,
@@ -49,7 +48,7 @@ class CoachingFabView @JvmOverloads constructor(
             setContent {
                 MicroCoachingTheme {
                     CoachingFab(
-                        badgeCount = 1, // Phase 3: drive from LearnRepository
+                        badgeCount = 1, // fixed — no pending-module count is wired up
                         onClick = { clickListener?.invoke() },
                     )
                 }

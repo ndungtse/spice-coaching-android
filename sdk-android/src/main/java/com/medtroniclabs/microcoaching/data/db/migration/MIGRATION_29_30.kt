@@ -6,12 +6,12 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 /**
  * v29 → v30: assigned-video catalogue.
  *
- * Adds the `assigned_video` table — the durable mirror of
- * `GET /sync/assigned-videos?user_id=…` that backs the Training sub-tab. Stores
+ * Adds the `assigned_video` table backing the Training sub-tab, populated from the
+ * audio/video subset of the `GET /sync/source-documents` catalogue. Stores
  * per-video metadata + the inline thumbnail presigned URL (with absolute expiry)
  * and the CHW's watch progress (`last_position_ms`, `percent_watched`,
  * `completed`, `last_watched_at`) for resume + YouTube-style progress bars.
- * Starts empty and populates on the next `/sync/assigned-videos` pull.
+ * Starts empty and populates on the next inbound sync.
  */
 val MIGRATION_29_30 = object : Migration(29, 30) {
     override fun migrate(db: SupportSQLiteDatabase) {

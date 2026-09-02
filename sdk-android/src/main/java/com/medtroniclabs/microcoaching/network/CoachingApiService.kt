@@ -156,7 +156,7 @@ interface CoachingApiService {
      *
      * Used as the primary chat path when the device is online (any device class).
      * On failure the caller falls back to the local path appropriate for the device
-     * (Gemma for normal, BM25 for low-end).
+     * (the on-device LLM for normal, BM25 for low-end).
      */
     @POST("coaching/rag-query")
     suspend fun ragQuery(@Body request: RagQueryRequest): Response<RagQueryResponse>

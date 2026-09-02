@@ -20,7 +20,7 @@ import com.medtroniclabs.microcoaching.ui.learn.KnowledgeDocument
 import com.medtroniclabs.microcoaching.ui.learn.LearnModule
 import com.medtroniclabs.microcoaching.ui.learn.LearnUiState
 import com.medtroniclabs.microcoaching.ui.podashboard.PODashboardTab
-import com.medtroniclabs.microcoaching.ui.theme.SurfaceMuted
+import androidx.compose.material3.MaterialTheme
 
 /** Tab indices for the PO home. */
 private const val TAB_COACHING = 0
@@ -28,9 +28,9 @@ private const val TAB_DASHBOARD = 1
 
 /**
  * PO (Program Officer) home: Coaching | Dashboard tabs. Coaching reuses the shared
- * surface — Practice Zone included, since POs now work refreshers like SKs; Dashboard
- * is a placeholder until P4. The rich PO profile header (name · location · SK count)
- * arrives with the dashboard work — for now the header shows "Personalised Coaching".
+ * surface — Practice Zone included, since POs work refreshers like SKs; Dashboard
+ * renders [com.medtroniclabs.microcoaching.ui.podashboard.PODashboardTab]. The header
+ * is the shared "Personalised Coaching" one, not a PO profile header.
  */
 @Composable
 fun POCoachingScreen(
@@ -61,7 +61,7 @@ fun POCoachingScreen(
     // Coaching tab (hidden on Dashboard).
     val syncedSubtitle = rememberLastSyncedSubtitle()
 
-    Column(modifier = Modifier.fillMaxSize().background(SurfaceMuted)) { // off-white so cards stand out
+    Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainerLow)) { // off-white so cards stand out
         SdkScreenHeader(
             title = stringResource(R.string.modules_screen_title),
             subtitle = syncedSubtitle.takeIf { selectedTab == TAB_COACHING },
@@ -88,9 +88,9 @@ fun POCoachingScreen(
                     onSeeAllTraining = onSeeAllTraining,
                     knowledgeState = knowledgeState,
                     onKnowledgeDocSelect = onKnowledgeDocSelect,
-                    // onSeeAllKnowledge is no longer forwarded — the knowledge see-all entry
-                    // died with the sub-tab split; param kept so the LearnNavGraph wiring
-                    // stays untouched.
+                    // onSeeAllKnowledge is deliberately not forwarded: no knowledge see-all
+                    // entry exists under the sub-tab layout. The param stays so the
+                    // LearnNavGraph wiring needs no change.
                     cachedDocIds = cachedDocIds,
                     onRefresherStart = onRefresherStart,
                     onShowRefresherQuiz = onShowRefresherQuiz,

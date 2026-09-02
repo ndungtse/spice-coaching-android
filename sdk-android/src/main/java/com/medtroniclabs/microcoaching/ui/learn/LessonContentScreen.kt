@@ -26,8 +26,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.medtroniclabs.microcoaching.R
-import com.medtroniclabs.microcoaching.ui.theme.SpiceGreenDark
-import com.medtroniclabs.microcoaching.ui.theme.SurfaceBackground
+import com.medtroniclabs.microcoaching.ui.theme.CoachingTheme
 
 /**
  * Scrollable lesson reference screen.
@@ -57,14 +56,14 @@ fun LessonContentScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(SurfaceBackground)
+            .background(MaterialTheme.colorScheme.surface)
             .verticalScroll(scrollState)
             .padding(24.dp),
     ) {
         Text(
             text = module.title,
             style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
-            color = SpiceGreenDark,
+            color = CoachingTheme.colors.onSuccessContainer,
         )
 
         Spacer(Modifier.height(4.dp))
@@ -72,7 +71,7 @@ fun LessonContentScreen(
         Text(
             text = stringResource(R.string.learn_reference_guide),
             style = MaterialTheme.typography.bodySmall,
-            color = Color(0xFF666666),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
         Spacer(Modifier.height(24.dp))
@@ -144,7 +143,7 @@ private fun ContentCard(content: String) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .border(1.dp, Color(0xFFCCCCCC), RoundedCornerShape(8.dp))
+            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp))
             .padding(16.dp),
     ) {
         content.lines().forEach { line ->
@@ -152,7 +151,7 @@ private fun ContentCard(content: String) {
                 Text(
                     text = line,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Color(0xFF1A1A1A),
+                    color = CoachingTheme.colors.textStrong,
                 )
                 Spacer(Modifier.height(4.dp))
             }
@@ -165,19 +164,19 @@ private fun KeyPoint(title: String, body: String) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color(0xFFEEF7F2), RoundedCornerShape(8.dp))
+            .background(CoachingTheme.colors.successContainer, RoundedCornerShape(8.dp))
             .padding(16.dp),
     ) {
         Text(
             text = title,
             style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
-            color = SpiceGreenDark,
+            color = CoachingTheme.colors.onSuccessContainer,
         )
         Spacer(Modifier.height(4.dp))
         Text(
             text = body,
             style = MaterialTheme.typography.bodySmall,
-            color = Color(0xFF444444),
+            color = CoachingTheme.colors.textBody,
         )
     }
 }

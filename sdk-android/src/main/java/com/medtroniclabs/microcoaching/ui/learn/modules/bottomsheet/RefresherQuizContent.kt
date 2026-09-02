@@ -93,7 +93,7 @@ private fun EmptyQuizView(
         Text(
             text = stringResource(R.string.refresher_quiz_no_questions),
             style = MaterialTheme.typography.bodyMedium,
-            color = Color(0xFF6B7280),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Button(
             onClick = onDismiss,

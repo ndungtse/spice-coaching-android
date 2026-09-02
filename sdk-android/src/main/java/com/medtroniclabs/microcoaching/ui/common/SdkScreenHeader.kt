@@ -24,14 +24,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.medtroniclabs.microcoaching.R
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlue
 
 /**
  * Consistent blue top-bar used across the coaching module flow:
  * modules list, module detail, lesson player, and quiz screens.
  *
- * Mirrors the style of the `ModulesScreenHeader` composable inside
- * [ModuleReadyScreen] so all screens share the same visual language.
+ * One header for all of them, so the flow shares a single visual language.
  *
  * @param title Centred title text. Pass an empty string to show only the back arrow.
  * @param subtitle Optional smaller line rendered directly below the [title]
@@ -59,7 +57,7 @@ fun SdkScreenHeader(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .background(SpiceBlue)
+            .background(MaterialTheme.colorScheme.primary)
             .statusBarsPadding(),
     ) {
         IconButton(
@@ -71,7 +69,7 @@ fun SdkScreenHeader(
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                 contentDescription = stringResource(R.string.common_back),
-                tint = Color.White,
+                tint = MaterialTheme.colorScheme.onPrimary,
             )
         }
         if (title.isNotBlank()) {
@@ -91,7 +89,7 @@ fun SdkScreenHeader(
                     text = title,
                     style = (if (largeTitle) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleMedium)
                         .copy(fontWeight = FontWeight.SemiBold),
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onPrimary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     textAlign = if (titleAtStart) TextAlign.Start else TextAlign.Center,
@@ -100,7 +98,7 @@ fun SdkScreenHeader(
                     Text(
                         text = subtitle,
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.8f),
+                        color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         textAlign = if (titleAtStart) TextAlign.Start else TextAlign.Center,
@@ -119,7 +117,7 @@ fun SdkScreenHeader(
                 Icon(
                     imageVector = Icons.Filled.Home,
                     contentDescription = stringResource(R.string.common_home),
-                    tint = Color.White,
+                    tint = MaterialTheme.colorScheme.onPrimary,
                 )
             }
         }

@@ -1,6 +1,9 @@
 package com.medtroniclabs.microcoaching
 
 import android.content.Context
+import androidx.compose.material3.Typography
+import com.medtroniclabs.microcoaching.ui.theme.CoachingColors
+import com.medtroniclabs.microcoaching.ui.theme.coachingTypography
 import com.medtroniclabs.microcoaching.ai.model.ModelCatalog
 import com.medtroniclabs.microcoaching.ai.model.ModelProvider
 import com.medtroniclabs.microcoaching.ai.model.ModelVariant
@@ -111,7 +114,9 @@ data class MicroCoachingConfig internal constructor(
     /**
      * Ordered list of providers tried when downloading the model.
      * The SDK moves to the next provider if the current one fails.
-     * Default: Backend → HuggingFace → Kaggle
+     * Default: Backend → HuggingFace → Kaggle, though only HuggingFace can
+     * currently serve one — Backend offers a `.task` no bundled engine loads and
+     * Kaggle is an unimplemented stub.
      *
      * Override to change priority or disable a provider:
      * ```kotlin
@@ -121,8 +126,9 @@ data class MicroCoachingConfig internal constructor(
     val modelProviders: List<ModelProvider> = ModelProvider.DEFAULT_ORDER,
     /**
      * HuggingFace Hub access token for downloading gated models. Only needed when the
-     * selected variant's repo is gated ([ModelVariant.requiresAccessToken]) — the catalog
-     * default is non-gated and downloads without one; the 1B variant requires it.
+     * selected variant's repo is gated ([ModelVariant.requiresAccessToken]). The Qwen3
+     * variants — the catalog default among them — are ungated; both Gemma rollback
+     * variants are gated and need a token.
      *
      * Obtain from https://huggingface.co/settings/tokens
      * For the sample app, set `HUGGING_FACE_TOKEN` in `local.properties`.
@@ -158,10 +164,9 @@ data class MicroCoachingConfig internal constructor(
     val maxInferenceTokens: Int = 1536,
     /**
      * LLM sampling temperature. The chat's grounded mode is an *extractive
-     * rephrasing* task — low temperature keeps the model close to the reference
-     * text and makes repeated identical questions produce near-identical answers
-     * (the 0.6 default was the main source of "same question, different answer"
-     * reports). Raise only if responses feel robotic.
+     * rephrasing* task, so a low temperature keeps the model close to the reference
+     * text and makes a repeated question produce a near-identical answer. Raise only
+     * if responses feel robotic.
      */
     val inferenceTemperature: Float = 0.3f,
     /**
@@ -179,17 +184,14 @@ data class MicroCoachingConfig internal constructor(
 
     /**
      * Tunable thresholds for the offline-chat pipeline — the BM25 retrieval gate
-     * and the post-LLM-stream refusal gates. Defaults preserve current behaviour
-     * except the groundedness floor (lowered) and stream cap (raised); see
-     * [ChatTuning] for the rationale of each knob. Set via
+     * and the post-LLM-stream refusal gates. See [ChatTuning] for each knob. Set via
      * `MicroCoachingSDK.Builder.chatTuning(...)`.
      *
-     * Why this exists: on a 270M model the retrieval is usually excellent (the
-     * right card scores high) but the model disregards the references and
-     * hallucinates, so the old fixed 0.25 groundedness floor hard-refused
-     * answerable questions ("I don't have this in my training material"). These
-     * knobs let a confident BM25 match show the model's answer, with the narrow
-     * drug/dosage guards kept on as the only hard safety net.
+     * Why this exists: at these model sizes retrieval is usually good (the right card
+     * scores high) while the model disregards the references, so a single strict
+     * groundedness floor refuses answerable questions. These knobs let a confident
+     * BM25 match show the model's answer, with the narrow drug/dosage guards kept on
+     * as the only hard safety net.
      */
     val chatTuning: ChatTuning = ChatTuning(),
 
@@ -209,7 +211,7 @@ data class MicroCoachingConfig internal constructor(
      * at construction. Set to `true` to force the retrieval-only chat path on
      * capable hardware (useful for QA), or to `false` to force the LLM path on
      * a low-RAM device (only do this when an external runtime guarantees the
-     * Gemma model can load — otherwise the host process will be OOM-killed
+     * model can load — otherwise the host process will be OOM-killed
      * mid-inference).
      */
     val forceLowEndMode: Boolean? = null,
@@ -233,12 +235,13 @@ data class MicroCoachingConfig internal constructor(
     /** Enable telemetry measure module UC-3 (Phase 5 — disabled by default). */
     val enableMeasureModule: Boolean = false,
     /**
-     * Run synced gap-detection rules inside `onAssessmentSubmitted` (GAP_DETECTION_SDK.md).
-     * When true, the SDK iterates `behavioural_gap_cache.detection_rule` rows
-     * and emits one `spice_action_observed` per fired gap (tagged with
-     * `behavioural_gap_id`). When false, the SDK falls back to the legacy
-     * single-event referral-only emission — useful as a kill switch if rule
-     * evaluators misbehave in the field.
+     * Run synced gap-detection rules inside `onReferralSubmitted` (see
+     * `GAP_DETECTION_SDK.md` §4). When true, the SDK iterates
+     * `behavioural_gap_cache.detection_rule` rows and emits one
+     * `spice_action_observed` per fired gap, tagged with `behavioural_gap_id`;
+     * when false the hook returns without emitting anything.
+     *
+     * No Builder setter exposes this, so it is effectively always `true`.
      */
     val enableGapDetection: Boolean = true,
 
@@ -252,9 +255,8 @@ data class MicroCoachingConfig internal constructor(
     val enableIncompleteModuleReminder: Boolean = true,
 
     // ── v3 Behavioural / Trigger thresholds ──────────────────────────────────
-    // Defaults sourced from Implementation Plan v3.3 §W-0. All knobs are
-    // overridable per-module at runtime via the `config_threshold` sync resource;
-    // these values are the fallback when no server-side override is cached.
+    // All knobs are overridable per-module at runtime via the `config_threshold`
+    // sync resource; these values are the fallback when no override is cached.
 
     /** Quiz pass mark, expressed as percent (0–100). */
     val quizPassThreshold: Int = 70,
@@ -284,9 +286,22 @@ data class MicroCoachingConfig internal constructor(
 
     // ── UI ────────────────────────────────────────────────────────────────────
     /**
-     * Controls the colour scheme used by SDK-owned screens (e.g. [CoachingFlowActivity]).
-     * Default: follows the system setting.
+     * Colour tokens for SDK-owned screens. Defaults to the SDK's own SPICE palette.
+     *
+     * Set via [MicroCoachingSDK.Builder.theme]. Init-time only: the SDK owns its own
+     * Compose roots ([CoachingFlowActivity], four bottom-sheet fragments), so a host
+     * cannot supply this through composition from outside.
      */
+    val themeColors: CoachingColors = CoachingColors.Spice,
+
+    /** Type scale for SDK-owned screens. Set via [MicroCoachingSDK.Builder.typography]. */
+    val themeTypography: Typography = coachingTypography(),
+
+    @Deprecated(
+        "Never read by the SDK. Dark mode is not supported: the bottom-sheet fragments " +
+            "force Theme_Material3_Light_BottomSheetDialog and three manifest activities " +
+            "force Theme.AppCompat.Light.NoActionBar. Use themeColors to restyle instead.",
+    )
     val uiTheme: CoachingUiTheme = CoachingUiTheme.SYSTEM,
 
     // ── Data Access ───────────────────────────────────────────────────────────
@@ -311,7 +326,7 @@ data class MicroCoachingConfig internal constructor(
      *
      * Example:
      * ```kotlin
-     * .forceMode(CoachingMode.EDGE)  // always runs Gemma even when Wi-Fi is on
+     * .forceMode(CoachingMode.EDGE)  // always runs on-device even when Wi-Fi is on
      * ```
      * Leave null (default) in production.
      */
@@ -332,8 +347,8 @@ data class MicroCoachingConfig internal constructor(
  * SDK's recommended starting point.
  *
  * The pipeline retrieves grounding cards via BM25, streams an answer from the
- * on-device model, then runs a series of gates. On a small model (Gemma 3 270M) the
- * dominant failure is the model *ignoring* excellent retrieval and answering from
+ * on-device model, then runs a series of gates. At the parameter counts these variants
+ * run at, the dominant failure is the model *ignoring* good retrieval and answering from
  * pre-training. The groundedness gate (L3c) always runs, with a **two-tier floor**:
  * when BM25 retrieval is confident the answer only has to clear a lenient floor;
  * when retrieval is weak it must clear a stricter floor.
@@ -364,12 +379,11 @@ data class MicroCoachingConfig internal constructor(
  *           is replaced by the BM25 card content. Set equal to [groundednessFloor]
  *           for a single uniform floor; set to 0 to always show the model's answer on
  *           strong retrieval.
- * @property minFallbackServeScore Minimum BM25 score required before the Gemma path
+ * @property minFallbackServeScore Minimum BM25 score required before the on-device path
  *           is allowed to serve retrieved clinician-authored text as a fallback.
  *           Prevents weak off-topic hits from turning into confident card-body serves.
  * @property streamCapChars Hard cap on streamed response length before generation is
- *           aborted. Raised from 700 so a complete 2–4 sentence answer isn't cut
- *           mid-sentence (the verified breastfeeding-counselling truncation).
+ *           aborted. Sized so a complete 2–4 sentence answer isn't cut mid-sentence.
  * @property maxResponseWords L4 length cap; responses longer than this are rejected
  *           as a free-styling signal and routed to the card-body fallback.
  * @property enableDosageGuard When true, an answer that introduces a number-adjacent
@@ -395,6 +409,35 @@ data class ChatTuning(
     val enableDosageGuard: Boolean = true,
     val enableDrugGuard: Boolean = true,
     val llmContextCards: Int = 1,
+    val serve: ServeTuning = ServeTuning(),
+)
+
+/**
+ * Score bounds for the offline serve/refuse decision
+ * ([com.medtroniclabs.microcoaching.ai.retrieval.ServeDecision]). Evidence decides
+ * whether a card may be served at all; these decide when a match is too weak to
+ * trust regardless.
+ *
+ * Floors are per-language because BM25 scores are not comparable across them: a
+ * native Bangla query scores far below the same question translated into the index's
+ * language, so one constant cannot gate both without either over-refusing Bangla or
+ * under-refusing English.
+ *
+ * @property bnScoreFloor Minimum score for a hit to be served on a Bangla turn.
+ * @property enScoreFloor Minimum score for a hit to be served on an English turn.
+ * @property promoteRatio A hit may be served ahead of BM25 rank-1 only while it
+ *           retains at least this fraction of rank-1's score.
+ * @property bigramRescueScore Rescue band for mangled input (OCR, mistyped Bangla).
+ *           Such a query matches no term, yet when it is a garbled rendition of a
+ *           card's own words the character-bigram channel drives BM25 far above
+ *           anything a topic mismatch reaches, so rank-1 is served without term
+ *           evidence at or above this score.
+ */
+data class ServeTuning(
+    val bnScoreFloor: Float = 25f,
+    val enScoreFloor: Float = 40f,
+    val promoteRatio: Float = 0.55f,
+    val bigramRescueScore: Float = 250f,
 )
 
 /**
@@ -454,7 +497,11 @@ enum class CoachingPersona {
     UNKNOWN,
 }
 
-/** Controls the colour scheme applied to SDK-owned UI screens. */
+/**
+ * Controls the colour scheme applied to SDK-owned UI screens.
+ *
+ * Retained only for source compatibility. See [MicroCoachingConfig.uiTheme].
+ */
 enum class CoachingUiTheme {
     /** Follow the device system setting (default). */
     SYSTEM,

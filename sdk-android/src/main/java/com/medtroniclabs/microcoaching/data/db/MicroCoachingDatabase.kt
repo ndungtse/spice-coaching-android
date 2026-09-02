@@ -72,77 +72,24 @@ import com.medtroniclabs.microcoaching.data.db.migration.MIGRATION_33_34
 import com.medtroniclabs.microcoaching.data.db.migration.MIGRATION_34_35
 
 /**
- * SDK-owned Room database. Completely separate from SPICE's NCDMergerDatabase.
- *
- * Database name: `microcoaching.db`
- *           v28: module_cache.title_json / description_json — bilingual fields
- *           stored as locale maps (`{"bn":"...","en":"..."}`) replacing flat
- *           title_bn/title_en/description_bn/description_en columns;
- *           v27: assigned_module join table — maps user_id → assigned module
- *           families, populated by the "assigned" /sync/modules call (the one
- *           carrying user_id); the Training Modules screen filters its library to
- *           the current user's rows while the chatbot keeps reading the full
- *           module_cache catalogue;
- *           v26: published_source_document table — durable mirror of the
- *           source-document catalogue; backs the Knowledge section,
- *           which now lists every published source document rather than only
- *           those derived from module_cache;
- *           v22: module_cache.search_metadata_json — raw module-level
- *           search_metadata (curated keywords / search phrases / synonyms /
- *           topic tags / clinical conditions) fed into the per-language BM25
- *           token streams by ModuleKnowledgeIndex so queries match curated
- *           vocabulary absent from the card body;
- *           v21: source_document_thumbnail table — cached presigned thumbnail
- *           URLs for source documents, keyed on source_document_id; v20: chat_messages.start_page — per-message PDF page deep-link
- *           anchor sourced from the BM25-matched card's source_pages field, so
- *           tapping a source-document chip lands the in-app PDF viewer on the
- *           page the card was authored from rather than always page 1;
- *           v19: cached_asset table — metadata for the offline AssetCache
- *           (one row per locally cached remote image/video/PDF);
- *           v18 bundles two module-sync additions: (a) thumbnail columns on
- *           module_cache — has_thumbnail, thumbnail_url,
- *           thumbnail_expires_at_epoch_sec — for cached presigned thumbnail URLs;
- *           (b) rich source-document refs — module_cache.source_documents_json
- *           + chat_messages.source_documents_json, carrying per-document
- *           title/original_filename for chat citation chips;
- *           v17 combines two changes: (a) behavioural_gap_cache.detection_rule
- *           — JSON envelope for SDK-side gap-rule evaluation; (b) source-document
- *           attribution — module_cache.source_document_ids_json,
- *           chat_messages.source_document_ids_json,
- *           chat_messages.grounding_module_family_id — so assistant replies
- *           carry per-message citation pointers into the matched module's
- *           training PDFs;
- *           v16: chw_module_partial_completion table for cross-device CHW
- *           progress recovery via server's authoritative incomplete_quiz_ids;
- *           v15: chat_messages.chw_id + conversation_id; v14: dropped legacy
- *           scenario_id column + index from coaching_event; canonical key is
- *           module_family_id, v3.3 alignment; v13: W5-A — chw_gap_profile_local
- *           primary key column renamed scenario_id → behavioural_gap_id; v12:
- *           morning_card_cache table; v11: behavioural_gap_id on coaching_event;
- *           v10: backend-shape alignment.)
- *
- * Migration strategy: destructive re-creation for pre-release versions.
- *
- * v29: chat_faq table — cached ranked chat-FAQ suggestions from
- *      /sync/chat-faqs, question stored as a localized `{bn, en?}` JSON blob
- *      (English backfilled by on-device translation); backs the chat suggestion
- *      chips with static defaults as the empty-cache fallback.
- * v30: assigned_video table — durable mirror of the assigned audio/video
- *      documents in the source-document catalogue;
- *      backs the Training sub-tab with per-CHW assigned videos, inline thumbnail
- *      presigned URLs, and monotonic watch-progress columns for resume + the
- *      YouTube-style progress bars.
- * v34: badge table — the CHW's achievement badges from /sync/badges (the tenant's
- *      active catalogue unioned with what this CHW has earned), replacing the
- *      hardcoded display stub that backed the Badges tab.
- */
-/**
  * Public schema version, mirrored from [Database.version] so callers (e.g.
  * `MicroCoachingSDK.init`) can detect destructive migrations and reset
  * SharedPreferences-based watermarks accordingly.
  */
 const val MICRO_COACHING_ROOM_VERSION: Int = 35
 
+/**
+ * SDK-owned Room database (`microcoaching.db`), entirely separate from SPICE's
+ * NCDMergerDatabase.
+ *
+ * Every schema version has an explicit `Migration` in
+ * `data.db.migration`, each documenting the change it makes — that package, not this
+ * KDoc, is the per-version record. `fallbackToDestructiveMigration(dropAllTables = true)`
+ * is the backstop for any gap: the tables are a cache of synced backend state, so a wipe
+ * costs a full re-pull rather than data loss. [MICRO_COACHING_ROOM_VERSION] is mirrored
+ * out so callers can notice a destructive migration and clear their sync watermarks —
+ * without that, a prefs watermark outlives the wiped tables and progress never rehydrates.
+ */
 @Database(
     entities = [
         AssignedModuleEntity::class,

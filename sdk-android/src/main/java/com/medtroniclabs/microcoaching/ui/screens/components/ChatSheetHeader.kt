@@ -37,9 +37,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.medtroniclabs.microcoaching.R
-import com.medtroniclabs.microcoaching.ui.theme.MutedText
-import com.medtroniclabs.microcoaching.ui.theme.SpiceGreen
-import com.medtroniclabs.microcoaching.ui.theme.SpiceGreenContainer
 
 // ── Sheet tuning knobs — tweak these to reshape the chat sheet chrome ─────────
 /**
@@ -56,7 +53,6 @@ private val ChatHeaderHorizontalPadding = 16.dp
 
 /**
  * Header row for the chat sheet — avatar, title, online dot, optional close icon.
- * Matches `docs/designs/ai-coach.png`.
  */
 @Composable
 fun ChatSheetHeader(

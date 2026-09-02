@@ -6,8 +6,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlue
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.material3.MaterialTheme
 
 /**
  * Coaching-home top tabs (Coaching | Leaderboard, or Coaching | Dashboard).
@@ -24,15 +24,15 @@ fun CoachingTopTabs(
     TabRow(
         selectedTabIndex = selectedIndex,
         modifier = modifier,
-        containerColor = SpiceBlue,
-        contentColor = Color.White, // drives the default (animated) underline + ripple
+        containerColor = MaterialTheme.colorScheme.primary,
+        contentColor = MaterialTheme.colorScheme.onPrimary, // drives the default (animated) underline + ripple
     ) {
         labels.forEachIndexed { index, label ->
             Tab(
                 selected = selectedIndex == index,
                 onClick = { onSelect(index) },
-                selectedContentColor = Color.White,
-                unselectedContentColor = Color.White.copy(alpha = 0.6f),
+                selectedContentColor = MaterialTheme.colorScheme.onPrimary,
+                unselectedContentColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.6f),
                 text = { 
                     Text(
                         label,

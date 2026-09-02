@@ -22,8 +22,8 @@ import com.medtroniclabs.microcoaching.domain.gaps.evidence.EvidenceBuilder
  *
  * Note on Path A: this evaluator does not depend on any local facility
  * registry. The picked tier comes through as a string in the assessment
- * map. See [docs/gaps/GAPS_TEST.md §F](../../../../../docs/gaps/GAPS_TEST.md)
- * for the SPICE-side wiring that produces `picked_facility_type`.
+ * map. `GAPS_TEST.md` §F covers the SPICE-side wiring that produces
+ * `picked_facility_type`.
  */
 class WrongFacilityTierEvaluator : GapEvaluator {
 

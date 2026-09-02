@@ -24,7 +24,6 @@ import com.medtroniclabs.microcoaching.ai.retrieval.ChatRefusal
 import com.medtroniclabs.microcoaching.ai.retrieval.GroundingChunk
 import com.medtroniclabs.microcoaching.ai.retrieval.GroundingSelector
 import com.medtroniclabs.microcoaching.ai.retrieval.ModuleKnowledgeIndex
-import com.medtroniclabs.microcoaching.ai.retrieval.OffTopicGuard
 import com.medtroniclabs.microcoaching.ai.retrieval.ScopeClassifier
 import com.medtroniclabs.microcoaching.ai.voice.CoachingTtsHelper
 import com.medtroniclabs.microcoaching.ai.voice.TtsState
@@ -249,7 +248,7 @@ class ChatViewModel(
      * Mirrors [ModelManager.state] into the chat state so the mode bar reflects the model's
      * lifecycle without the user refreshing anything.
      *
-     * Only ever updates a [ChatUiState.Ready]: chat no longer waits on the model, so there is
+     * Only ever updates a [ChatUiState.Ready]: chat never waits on the model, so there is
      * no separate screen to drive and no state where a download transition needs to move the
      * user somewhere. The one side effect is loading the engine when a download completes
      * mid-session, which is what lets an opt-in take effect without reopening chat.
@@ -954,7 +953,7 @@ class ChatViewModel(
         chatResponseJson.encodeToString(RagQueryResponse.serializer(), resp)
 
     /**
-     * The canonical response object for an OFFLINE turn (on-device Gemma, BM25
+     * The canonical response object for an OFFLINE turn (on-device LLM, BM25
      * fallback, refusal), matching the online RAG shape. Only [answer] and — when
      * known — the grounding [moduleId] are filled; retrieval/source/suggestion
      * fields stay empty so the object is structurally identical to an online one.
@@ -1268,7 +1267,7 @@ class ChatViewModel(
          * (add `ChatViewModel:D ModuleKnowledgeIndex:I OnDeviceTranslator:D` for
          * the lower-level operational logs). Every turn opens with a `──── turn ────`
          * line that names the route actually taken, so it is unambiguous whether a
-         * message hit the backend RAG endpoint or the on-device Gemma/BM25 pipeline.
+         * message hit the backend RAG endpoint or the on-device LLM/BM25 pipeline.
          */
         internal const val TRACE_TAG = "ChatTrace"
 
@@ -1287,10 +1286,10 @@ class ChatViewModel(
          */
         internal const val GROUNDING_K = 3
 
-        // The groundedness floor and the streamed-response cap are now tunable at
-        // runtime via [com.medtroniclabs.microcoaching.ChatTuning] (groundednessFloor /
-        // streamCapChars), set through MicroCoachingSDK.Builder.chatTuning(...). They
-        // used to be the fixed constants GROUNDEDNESS_FLOOR=0.25 and STREAM_CAP_CHARS=700.
+        // The groundedness floor and the streamed-response cap live in
+        // [com.medtroniclabs.microcoaching.ChatTuning] (groundednessFloor /
+        // streamCapChars), so hosts can set them through
+        // MicroCoachingSDK.Builder.chatTuning(...).
 
         /** Sentence terminators recognised by [trimToCompleteSentence] — EN + Bangla danda. */
         private val SENTENCE_TERMINATORS = charArrayOf('.', '!', '?', '।')

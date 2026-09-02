@@ -21,8 +21,8 @@ package com.medtroniclabs.microcoaching.ai.retrieval
  *     specific fact, not a definition, and is left alone.
  *  2. a candidate is definition-titled and names that topic **as a contiguous phrase**.
  *     Matching the topic's words individually is not enough: "প্রসব পরিকল্পনা কী?" would then
- *     also boost "প্রসব পরবর্তী পরিবার পরিকল্পনা (PPFP) কী?", which contains both words but is
- *     a different subject — a measured regression before this was tightened.
+ *     also boost "প্রসব পরবর্তী পরিবার পরিকল্পনা (PPFP) কী?", which contains both words but
+ *     is a different subject.
  */
 internal object DefinitionQueryBoost {
 

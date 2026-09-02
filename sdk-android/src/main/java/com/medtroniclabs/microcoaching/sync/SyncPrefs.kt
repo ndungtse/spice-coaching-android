@@ -94,9 +94,7 @@ class SyncPrefs(context: Context) {
         get() = prefs.getString(KEY_VIDEO_PROGRESS_WATERMARK, null)
         set(value) = prefs.edit().putString(KEY_VIDEO_PROGRESS_WATERMARK, value).apply()
 
-    // ── Config thresholds (formerly delivered via ScenarioSyncBundle; now defaults
-    //    until the SDK consumes /config/sync — see Phase 3+ in
-    //    docs/spice-2.0/04-integration-timeline.md). ──
+    // ── Config thresholds. Local defaults until the SDK consumes /config/sync. ──
 
     /** Max number of morning briefing cards to show. Default: 5. */
     var morningCardsMax: Int

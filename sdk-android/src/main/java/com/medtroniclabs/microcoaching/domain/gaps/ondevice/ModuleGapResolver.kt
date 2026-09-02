@@ -6,7 +6,7 @@ import com.medtroniclabs.microcoaching.data.db.dao.ModuleDao
  * Builds the [ModuleGapIndex] from the synced **module fields**
  * (`module.primary_gap_id` + `module.behavioural_gap_ids`, from `/sync/modules`) —
  * the SDK-side mirror of the backend's `module_behavioural_gap` junction. Trigger
- * bindings are no longer used for morning generation.
+ * bindings play no part in morning generation.
  *
  * `module_primary_gap_*` placeholder gaps are kept like any other gap: the
  * placeholder is the module's quiz-attribution signal (active only after a failed

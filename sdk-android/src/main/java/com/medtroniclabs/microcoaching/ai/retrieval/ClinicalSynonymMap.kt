@@ -7,7 +7,7 @@ package com.medtroniclabs.microcoaching.ai.retrieval
  *
  * To add a new concept as scope grows: add one entry to [GROUPS]. Both
  * [ScopeClassifier.buildFrom] (via [allTerms]) and [ModuleKnowledgeIndex.search]
- * (via [expandQuery]) benefit automatically — no other code changes needed.
+ * (via [expandQueryWeighted]) benefit automatically — no other code changes needed.
  */
 object ClinicalSynonymMap {
 
@@ -48,19 +48,46 @@ object ClinicalSynonymMap {
             "anc", "antenatal", "antenatal visit", "anc visit", "rounds",
             "এএনসি", "দফা", "গর্ভকালীন সেবা",
         ),
+        // MLKit transliterates edema as "এডিমা"; the authored corpus writes "ইডিমা".
+        // The two share no token, so without this group an English-mode question
+        // about swelling cannot reach the cards that answer it.
+        "edema" to setOf(
+            "edema", "oedema", "swelling",
+            "এডিমা", "ইডিমা", "শোথ", "ফোলা",
+        ),
+        // The corpus splits this vocabulary between প্রসূতি (the mother) and
+        // প্রসব-পরবর্তী (the period), and MLKit emits প্রসবোত্তর for both.
+        "postpartum" to setOf(
+            "postpartum", "postnatal", "pnc", "puerperium",
+            "প্রসূতি", "প্রসবোত্তর", "প্রসবপরবর্তী",
+        ),
+        "vaginal_discharge" to setOf(
+            "discharge", "lochia",
+            "স্রাব", "লকিয়া",
+        ),
+        "umbilical_cord" to setOf(
+            "umbilical", "cord",
+            // Both ই-কার and ঈ-কার spellings circulate; cards write নাভী, CHWs type নাভি.
+            "নাভি", "নাভির", "নাভী", "নাভীর",
+        ),
         // Add new groups here as scope expands — no logic changes needed.
     )
 
     /**
      * Directional abbreviation / vocabulary bridges for query expansion.
      *
-     * PHASE3_RETIRE: delete when backend `synonyms_en` backfills bridge keys (see execution plan §6.4).
+     * Retire a bridge once the backend ships its key in a card's `synonyms_en`, which
+     * reaches retrieval as a per-corpus dynamic bridge and makes the static one dead
+     * weight.
      */
     private val BRIDGES: Map<String, List<String>> = mapOf(
         "pw" to listOf("pregnant", "woman", "pregnancy", "pregnant_woman", "গর্ভবতী", "গর্ভ"),
         "bp" to listOf("blood", "pressure", "blood_pressure", "রক্তচাপ"),
         "বিপি" to listOf("রক্তচাপ", "blood", "pressure", "blood_pressure"),
         "প্রেসার" to listOf("রক্তচাপ", "blood", "pressure", "blood_pressure"),
+        // CHWs also type the শ spelling, which appears in no card body or authored
+        // hint, so without this bridge the word contributes nothing to retrieval.
+        "প্রেশার" to listOf("রক্তচাপ", "blood", "pressure", "blood_pressure"),
         "htn" to listOf("hypertension", "উচ্চ_রক্তচাপ"),
         "hb" to listOf("haemoglobin", "hemoglobin", "হিমোগ্লোবিন"),
         "engorgement" to listOf("breastfeeding", "breast", "স্তন্যপান"),
@@ -98,17 +125,16 @@ object ClinicalSynonymMap {
      *  - single-word Bangla alias          → prefix match, so the agglutinated form
      *    "বুকের" still matches the "বুক" stem (Bangla inflects by suffix).
      *
-     * Why this is strict: the previous version matched bidirectional substrings
-     * (`token in alias || alias in token`). The stop-word "to" is a substring of
-     * "loose stool", so EVERY English query containing "to" pulled the entire
-     * diarrhoea group into the BM25 query — silently grounding unrelated questions
-     * (e.g. "low BP 90/60") on diarrhoea content. Likewise "anc" is a substring of
-     * "advance"/"chance". Restricting English aliases to exact word matches and
-     * Bangla aliases to prefix matches removes that whole class of false positive
-     * while preserving BN↔EN coverage.
+     * Why this is strict: a bidirectional substring match
+     * (`token in alias || alias in token`) would make the stop-word "to" — a substring
+     * of "loose stool" — pull the whole diarrhoea group into any English query
+     * containing it, silently grounding an unrelated question ("low BP 90/60") on
+     * diarrhoea content. "anc" sits inside "advance"/"chance" the same way. Exact
+     * word matches for English and prefix matches for Bangla remove that whole class
+     * of false positive while preserving BN↔EN coverage.
      *
-     * Consumed by [ModuleKnowledgeIndex.search] to widen BM25 token coverage across
-     * BN↔EN vocabulary boundaries without requiring stemming or embeddings.
+     * Retrieval uses [expandQueryWeighted] instead; this unweighted form has no
+     * callers left and is kept only for its tests.
      */
     fun expandQuery(tokens: List<String>): List<String> {
         val lower = tokens.map { it.lowercase() }

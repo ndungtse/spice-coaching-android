@@ -20,7 +20,7 @@ import com.medtroniclabs.microcoaching.ui.common.SectionState
 import com.medtroniclabs.microcoaching.ui.learn.KnowledgeDocument
 import com.medtroniclabs.microcoaching.ui.learn.LearnModule
 import com.medtroniclabs.microcoaching.ui.learn.LearnUiState
-import com.medtroniclabs.microcoaching.ui.theme.SurfaceMuted
+import androidx.compose.material3.MaterialTheme
 
 /** Tab indices for the SK home. */
 private const val TAB_COACHING = 0
@@ -29,8 +29,8 @@ private const val TAB_BADGES = 1
 /**
  * SK (CHW) home: "Personalised Coaching" header with Coaching | Badges tabs.
  * Coaching reuses the full refresher/training/knowledge surface (plus a streak banner);
- * Badges shows learning achievements (stub-backed). Replaces the former Leaderboard tab;
- * `ui/leaderboard/` stays in-tree, dormant and annotated `@Deprecated` as such.
+ * Badges shows learning achievements (stub-backed). There is no Leaderboard tab —
+ * `ui/leaderboard/` stays in-tree, dormant and annotated `@Deprecated`.
  */
 @Composable
 fun SKCoachingScreen(
@@ -55,7 +55,7 @@ fun SKCoachingScreen(
     // Coaching tab (hidden on Badges).
     val syncedSubtitle = rememberLastSyncedSubtitle()
 
-    Column(modifier = Modifier.fillMaxSize().background(SurfaceMuted)) { // off-white so cards stand out
+    Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainerLow)) { // off-white so cards stand out
         SdkScreenHeader(
             title = stringResource(R.string.modules_screen_title),
             subtitle = syncedSubtitle.takeIf { selectedTab == TAB_COACHING },
@@ -75,9 +75,9 @@ fun SKCoachingScreen(
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             when (selectedTab) {
                 TAB_COACHING -> {
-                    // onShowQuickLearn / onSeeAllKnowledge are no longer forwarded — the banner and the
-                    // knowledge see-all entry died with the sub-tab split; params kept so the LearnNavGraph
-                    // wiring stays untouched.
+                    // onShowQuickLearn / onSeeAllKnowledge are deliberately not forwarded: neither
+                    // the banner nor the knowledge see-all entry exists under the sub-tab layout.
+                    // The params stay so the LearnNavGraph wiring needs no change.
                     CoachingTab(
                         uiState = uiState,
                         chwId = chwId,

@@ -22,7 +22,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.medtroniclabs.microcoaching.R
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlue
 
 /**
  * Right-aligned "Show all (N) →" affordance shown under a section capped at 5 items.
@@ -44,7 +43,7 @@ fun ShowAllRow(count: Int, modifier: Modifier = Modifier, onClick: () -> Unit) {
         ) {
             Text(
                 text = stringResource(R.string.po_show_all, count),
-                color = SpiceBlue,
+                color = MaterialTheme.colorScheme.primary,
                 fontWeight = FontWeight.SemiBold,
                 style = MaterialTheme.typography.labelLarge,
             )
@@ -52,7 +51,7 @@ fun ShowAllRow(count: Int, modifier: Modifier = Modifier, onClick: () -> Unit) {
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                 contentDescription = null,
-                tint = SpiceBlue,
+                tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(18.dp),
             )
         }

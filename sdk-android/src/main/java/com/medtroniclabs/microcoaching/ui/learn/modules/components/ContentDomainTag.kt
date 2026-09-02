@@ -12,6 +12,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.medtroniclabs.microcoaching.R
+import com.medtroniclabs.microcoaching.ui.theme.CoachingTheme
 
 /**
  * Content-domain tag (Med-I617) shown on Learning Library & Practice Zone cards.
@@ -49,22 +50,23 @@ private data class ContentDomainStyle(
  * Resolves the pill label + colours for a raw `content_domain` value. Null → the
  * Clinical default; an unknown non-null value → null (tag omitted).
  */
+@Composable
 private fun contentDomainStyle(contentDomain: String?): ContentDomainStyle? =
     when (contentDomain?.trim()?.lowercase() ?: "clinical") {
         "clinical" -> ContentDomainStyle(
             R.string.content_domain_clinical,
-            background = Color(0xFFE3F3FA), // soft blue
-            foreground = Color(0xFF004B87),
+            background = CoachingTheme.colors.categoryTags[0].container,
+            foreground = CoachingTheme.colors.categoryTags[0].onContainer,
         )
         "digital" -> ContentDomainStyle(
             R.string.content_domain_digital,
-            background = Color(0xFFEDE7FB), // soft violet
-            foreground = Color(0xFF4A2A9C),
+            background = CoachingTheme.colors.categoryTags[1].container,
+            foreground = CoachingTheme.colors.categoryTags[1].onContainer,
         )
         "operational" -> ContentDomainStyle(
             R.string.content_domain_operational,
-            background = Color(0xFFFBEEE3), // soft peach
-            foreground = Color(0xFF8A4B12),
+            background = CoachingTheme.colors.categoryTags[2].container,
+            foreground = CoachingTheme.colors.categoryTags[2].onContainer,
         )
         else -> null
     }

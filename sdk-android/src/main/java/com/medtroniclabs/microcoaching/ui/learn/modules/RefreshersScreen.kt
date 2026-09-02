@@ -19,7 +19,7 @@ import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.ui.common.SdkScreenHeader
 import com.medtroniclabs.microcoaching.ui.learn.LearnModule
 import com.medtroniclabs.microcoaching.ui.learn.modules.components.RefresherList
-import com.medtroniclabs.microcoaching.ui.theme.SurfaceBackground
+import androidx.compose.material3.MaterialTheme
 
 /**
  * Full-screen "Practice Zone" list of EVERY active refresher — reached from the
@@ -52,7 +52,7 @@ fun RefreshersScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(SurfaceBackground),
+            .background(MaterialTheme.colorScheme.surface),
     ) {
         SdkScreenHeader(
             title = stringResource(R.string.coaching_section_practice_zone),

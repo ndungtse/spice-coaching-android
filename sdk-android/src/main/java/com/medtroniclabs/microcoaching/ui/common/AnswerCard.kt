@@ -24,15 +24,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import com.medtroniclabs.microcoaching.ui.theme.ErrorRed
-import com.medtroniclabs.microcoaching.ui.theme.ErrorRedContainer
-import com.medtroniclabs.microcoaching.ui.theme.ErrorRedDark
-import com.medtroniclabs.microcoaching.ui.theme.SpiceGreen
-import com.medtroniclabs.microcoaching.ui.theme.SpiceGreenContainer
-import com.medtroniclabs.microcoaching.ui.theme.SpiceGreenDark
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.medtroniclabs.microcoaching.ui.theme.CoachingTheme
 
 /**
  * Visual state of a multiple-choice answer card.
@@ -68,14 +63,14 @@ fun AnswerCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     index: Int = -1,
-    unselectedContainerColor: Color = Color.White,
+    unselectedContainerColor: Color = MaterialTheme.colorScheme.surface,
 ) {
     val containerColor by animateColorAsState(
         targetValue = when (state) {
             AnswerCardState.Unselected -> unselectedContainerColor
             AnswerCardState.Selected -> MaterialTheme.colorScheme.primaryContainer
-            AnswerCardState.CorrectRevealed -> SpiceGreenContainer
-            AnswerCardState.WrongRevealed -> ErrorRedContainer
+            AnswerCardState.CorrectRevealed -> CoachingTheme.colors.successContainer
+            AnswerCardState.WrongRevealed -> MaterialTheme.colorScheme.errorContainer
         },
         animationSpec = tween(durationMillis = 250),
         label = "answer_card_bg",
@@ -83,20 +78,20 @@ fun AnswerCard(
 
     val borderColor by animateColorAsState(
         targetValue = when (state) {
-            AnswerCardState.Unselected -> Color(0xFFDDDDDD)
+            AnswerCardState.Unselected -> MaterialTheme.colorScheme.outline
             AnswerCardState.Selected -> MaterialTheme.colorScheme.primary
-            AnswerCardState.CorrectRevealed -> SpiceGreen
-            AnswerCardState.WrongRevealed -> ErrorRed
+            AnswerCardState.CorrectRevealed -> CoachingTheme.colors.success
+            AnswerCardState.WrongRevealed -> MaterialTheme.colorScheme.error
         },
         animationSpec = tween(durationMillis = 250),
         label = "answer_card_border",
     )
 
     val textColor = when (state) {
-        AnswerCardState.Unselected -> Color(0xFF1A1A1A)
+        AnswerCardState.Unselected -> CoachingTheme.colors.textStrong
         AnswerCardState.Selected -> MaterialTheme.colorScheme.onPrimaryContainer
-        AnswerCardState.CorrectRevealed -> SpiceGreenDark
-        AnswerCardState.WrongRevealed -> ErrorRedDark
+        AnswerCardState.CorrectRevealed -> CoachingTheme.colors.onSuccessContainer
+        AnswerCardState.WrongRevealed -> MaterialTheme.colorScheme.onErrorContainer
     }
 
     Card(
@@ -136,20 +131,20 @@ private fun AnswerLetterBadge(index: Int, state: AnswerCardState) {
     val letter = ('A' + index).toString()
 
     val badgeBg = when (state) {
-        AnswerCardState.CorrectRevealed -> SpiceGreen
-        AnswerCardState.WrongRevealed -> ErrorRed
+        AnswerCardState.CorrectRevealed -> CoachingTheme.colors.success
+        AnswerCardState.WrongRevealed -> MaterialTheme.colorScheme.error
         AnswerCardState.Selected -> MaterialTheme.colorScheme.primary
         AnswerCardState.Unselected -> Color.Transparent
     }
     val badgeBorderColor = when (state) {
-        AnswerCardState.Unselected -> Color(0xFFAAAAAA)
+        AnswerCardState.Unselected -> CoachingTheme.colors.textDisabled
         AnswerCardState.Selected -> MaterialTheme.colorScheme.primary
-        AnswerCardState.CorrectRevealed -> SpiceGreen
-        AnswerCardState.WrongRevealed -> ErrorRed
+        AnswerCardState.CorrectRevealed -> CoachingTheme.colors.success
+        AnswerCardState.WrongRevealed -> MaterialTheme.colorScheme.error
     }
     val letterColor = when (state) {
-        AnswerCardState.Unselected -> Color(0xFF555555)
-        else -> Color.White
+        AnswerCardState.Unselected -> CoachingTheme.colors.textBody
+        else -> MaterialTheme.colorScheme.surface
     }
 
     Box(

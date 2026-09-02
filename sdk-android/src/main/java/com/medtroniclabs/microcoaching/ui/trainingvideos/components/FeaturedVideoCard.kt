@@ -25,8 +25,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlue
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueContainer
 import com.medtroniclabs.microcoaching.ui.trainingvideos.TrainingVideo
 
 /**
@@ -48,7 +46,7 @@ fun FeaturedVideoCard(
         onClick = onClick,
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
@@ -68,7 +66,7 @@ fun FeaturedVideoCard(
                                 .matchParentSize()
                                 .background(
                                     Brush.linearGradient(
-                                        colors = listOf(SpiceBlueContainer, SpiceBlue.copy(alpha = 0.3f)),
+                                        colors = listOf(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)),
                                     ),
                                 ),
                             contentAlignment = Alignment.Center,
@@ -103,7 +101,7 @@ fun FeaturedVideoCard(
                     Text(
                         text = video.metaLabel(),
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFF6B7280),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 4.dp),
                     )
                 }

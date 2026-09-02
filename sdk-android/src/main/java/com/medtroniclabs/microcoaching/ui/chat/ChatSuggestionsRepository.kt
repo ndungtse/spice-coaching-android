@@ -73,10 +73,9 @@ internal class ChatSuggestionsRepository(
 
     /**
      * Persists the English text of a tapped suggestion so it never re-appears.
-     * The set is capped: it previously accumulated full question texts forever.
-     * On hitting the cap it resets to just the newest entry — old suggestions
-     * become eligible again, which beats unbounded prefs growth for a finite
-     * question pool.
+     * The set is capped; on hitting the cap it resets to just the newest entry —
+     * old suggestions become eligible again, which beats unbounded prefs growth
+     * for a finite question pool.
      */
     fun markUsed(suggestion: SuggestedQuestion) {
         if (suggestion.question.isBlank()) return

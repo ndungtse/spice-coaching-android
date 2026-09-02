@@ -33,8 +33,9 @@ import kotlinx.serialization.json.contentOrNull
  * indexed; it rides query expansion ([ClinicalSynonymMap]) instead.
  *
  * Two languages stay fully separate (EN query never scores against BN tokens).
- * Build cost is ≪ 100 ms for ~200 chunks. Rebuild on app start and after every
- * successful inbound module sync — never per query.
+ * Built once on the first chat open and rebuilt after each successful inbound
+ * module sync (see [com.medtroniclabs.microcoaching.sdk.chat.ChatKnowledgeIndexBootstrap])
+ * — never per query.
  */
 class ModuleKnowledgeIndex private constructor(
     private val chunks: List<GroundingChunk>,
@@ -78,7 +79,7 @@ class ModuleKnowledgeIndex private constructor(
      * @param scoreThreshold absolute floor on the combined field-weighted score.
      *   `0f` (used by unit tests) bypasses the gate to isolate "was it indexed?" from
      *   production tuning. The default [DEFAULT_SCORE_THRESHOLD] is deliberately low —
-     *   the semantic backstop is `OffTopicGuard` (clinical-token overlap) plus the
+     *   the semantic backstop is [ServeDecision] (topical evidence) plus the
      *   downstream groundedness gate, not a hand-tuned BM25 magnitude.
      * @param language which per-language index to score against.
      */
@@ -250,12 +251,10 @@ class ModuleKnowledgeIndex private constructor(
         private const val W_KEYWORD = 0.5f
 
         /**
-         * Production retrieval floor on the combined score. Low by design (was an
-         * absolute 3.0 that the metadata-in-body bug de-calibrated): with metadata moved
-         * to its own field the body score is clean again, and the real semantic guards
-         * are `OffTopicGuard` + the groundedness gate. A low floor here cuts false
-         * refusals; it cannot admit hallucination on its own (the model never sees
-         * un-retrieved content).
+         * Production retrieval floor on the combined score. Low by design: the real
+         * semantic guards are [ServeDecision] and the groundedness gate, so a low
+         * floor here cuts false refusals without admitting hallucination — the model
+         * never sees un-retrieved content.
          */
         private const val DEFAULT_SCORE_THRESHOLD = 1.5f
 

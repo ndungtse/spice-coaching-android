@@ -158,7 +158,7 @@ class TelemetryManager(private val config: MicroCoachingConfig) {
      * Start an LLM inference stream span.
      * Parent should be the active chat.session span.
      *
-     * @param modelName File name of the model (e.g. "gemma3-1B-it-int4.task")
+     * @param modelName File name of the model (e.g. "qwen3_0_6b_mixed_int4.litertlm")
      * @param engineName Inference engine identifier (e.g. "litertlm")
      * @param sessionId Active session identifier
      */

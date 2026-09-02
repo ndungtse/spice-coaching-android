@@ -3,7 +3,7 @@ package com.medtroniclabs.microcoaching.domain.decision
 /**
  * Splits a free-text counselling block into 1–[maxPoints] discrete points.
  *
- * The UC-2 spec ([docs/UseCases_v2.md] §Sub-scenario A) shows the card as
+ * The UC-2 spec shows the card as
  * 3 separate counselling statements, each with its own "Done" checkbox. The
  * backend response schema (`patient_message: str ≤500 chars`) and the CACHED
  * scenario `bangla_card.body` field are both *single* strings — so the SDK

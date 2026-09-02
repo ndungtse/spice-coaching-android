@@ -222,8 +222,8 @@ sealed class TtsState {
 
     /**
      * Locale data isn't installed on the device. Read-aloud is unusable until
-     * the user installs it. The helper no longer auto-launches the installer —
-     * callers surface an explicit action wired to [CoachingTtsHelper.installLanguageData].
+     * the user installs it. The helper never auto-launches the installer — callers
+     * surface an explicit action wired to [CoachingTtsHelper.installLanguageData].
      */
     data object LanguageMissing : TtsState()
 

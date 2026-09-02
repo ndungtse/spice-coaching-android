@@ -1,6 +1,6 @@
 # 03 — UI Embedding
 
-**Version:** 0.3.8-SNAPSHOT · **Date:** 2026-06-03 · **Status:** Draft
+**Version:** 0.6.0-SNAPSHOT · **Date:** 2026-08-31 · **Status:** Draft
 
 How to surface the SDK's user-facing screens inside your app. Each surface is shown generically, then with the exact placement used in `spice-2.0-android` (the **SPICE reference**).
 
@@ -15,9 +15,13 @@ All SDK UI is built with Jetpack Compose internally, but every surface is consum
 | `CoachingChatFragment` | `Fragment` | Embed the AI chat inside your own screen/toolbar. | `newInstance(patientId, systemContext)` + `FragmentTransaction`. |
 | `CoachingChatBottomSheet` | `BottomSheetDialogFragment` | Modal chat from a FAB. | `show(fragmentManager)`. |
 | `CoachingFlowActivity` | `Activity` | Full Learn & Grow flow (UC-1: onboarding → modules → quiz). | `launch()` / `launchLearn()` / `launchLearnModule()`. |
-| `ChatFab` | Composable | Floating "open chat" button. | Render into a `ComposeView`. |
+| `CoachingGridTile` | Composable | Self-contained "Coaching" tile for a home menu grid (observes its own badges). | Render into a `ComposeView` — see [below](#coachinggridtile-inside-a-recyclerview). |
+| `ChatFab` / `DraggableChatFab` | Composable | Floating "open chat" button. | Render into a `ComposeView`. |
+| `CoachingFabView` | XML `View` | FAB for non-Compose hosts. | Place in XML + `setOnCoachingFabClickListener { … }`. |
 | `MorningCard` / `LearnCard` | Composable | Home-screen morning-coaching banner. | Render into a `ComposeView`. |
 | `RefresherBottomSheet` | `BottomSheetDialogFragment` | Morning refresher quiz/lesson. | `show(fm, chwId, …)`. |
+
+> **Note:** `LearnFragment` is **deprecated** — launch the learning experience with `CoachingFlowActivity.launchLearnModule(context, chwId)` instead.
 
 Package: chat surfaces are under `com.medtroniclabs.microcoaching.ui.chat`; Compose components under `com.medtroniclabs.microcoaching.ui.components`; the flow activity under `…ui.flow`; theme wrapper `com.medtroniclabs.microcoaching.ui.theme.MicroCoachingTheme`.
 
@@ -99,7 +103,7 @@ Declared in the manifest (internal only, IME resizes the input):
     android:windowSoftInputMode="adjustResize" />
 ```
 
-Reached from the drawer menu item (hidden until login — see [02 — Re-initializing after login](./02-initialization.md#re-initializing-after-login-jwt)):
+Reached from the drawer menu item (hidden until login — see [02 — Refreshing the auth token](./02-initialization.md#refreshing-the-auth-token-after-login)):
 
 ```xml
 <!-- res/menu/activity_landing_menu.xml -->
@@ -132,7 +136,7 @@ CoachingChatBottomSheet.show(
 
 > **Note:** the signature is `show(fm: FragmentManager, patientId: String = "", systemContext: String = ""): String` and it **returns** the tag. There is no `tag` argument to pass.
 
-**SPICE reference** — opened from the home-screen `ChatFab` (see below) via `HomeScreenFragment.launchCoachingChatSheet()`, which first checks model presence and otherwise prompts a download (see [05](./05-model-and-voice.md#driving-a-download-ui)).
+**SPICE reference** — opened from the home-screen `ChatFab` (see below) via `HomeScreenFragment.launchCoachingChatSheet()`, a two-line guard + show. No model check is needed: the model-download consent and progress UI live inside the SDK's chat setup screen (see [05](./05-model-and-voice.md)).
 
 ---
 
@@ -186,7 +190,7 @@ Component signatures:
 | `LearnCard` | `LearnCard(moduleTitle, questionCount, estimatedMinutes, onStart, onSkip, modifier)` |
 | `LearnFab` | `LearnFab(onClick: () -> Unit, modifier: Modifier = Modifier, badgeCount: Int = 0)` |
 
-**SPICE reference** — `HomeScreenFragment.setupCoachingSurfaces()` wires two slots declared in `res/layout/fragment_home_screen.xml` (`@id/coachingCardBanner` above the menu grid, `@id/chatFab` bottom-right):
+**SPICE reference** — `HomeScreenFragment.setupCoachingSurfaces()` today wires exactly one slot (`@id/chatFab`, bottom-right of `res/layout/fragment_home_screen.xml`) plus the two data hooks:
 
 ```kotlin
 private fun setupCoachingSurfaces() {
@@ -194,33 +198,7 @@ private fun setupCoachingSurfaces() {
     val sdk = MicroCoachingSDK.getInstance()
 
     sdk.onHomeScreenShown(chwId)   // see 04 — Hooks & Data
-
-    // Morning-coaching banner — collapses to nothing when there is no module.
-    binding.coachingCardBanner.apply {
-        setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-        setContent {
-            MicroCoachingTheme {
-                val top = sdk.getSelectedMorningModule()
-                val sdkDismissed by sdk.morningRefresherDismissed.collectAsState()
-                // ... resolves title for current language, question count, etc. ...
-                if (top != null /* && not dismissed */) {
-                    if (top.cardCount > 0) {
-                        MorningCard(
-                            moduleTitle = title,
-                            cardCount = top.cardCount,
-                            questionCount = effectiveQuestionCount,
-                            estimatedMinutes = top.estimatedMinutes,
-                            onStart = onStart,   // opens RefresherBottomSheet
-                            onSkip = onSkip,     // sdk.dismissMorningRefresher()
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                        )
-                    } else {
-                        LearnCard(/* moduleTitle, questionCount, estimatedMinutes, onStart, onSkip */)
-                    }
-                }
-            }
-        }
-    }
+    pushTodaysVisits(sdk)          // sdk.onTodaysVisitsUpdated(…) — see 04
 
     // Chat FAB — opens the chat bottom sheet.
     binding.chatFab.apply {
@@ -230,37 +208,41 @@ private fun setupCoachingSurfaces() {
 }
 ```
 
-Key points from the SPICE wiring:
-- `MorningCard` is used when the top module has card content (`cardCount > 0`); `LearnCard` is the fallback for question-only modules.
-- The banner reads `sdk.getSelectedMorningModule()` and collapses when it is `null` or dismissed.
-- `onSkip` calls `sdk.dismissMorningRefresher()`; `onStart` opens `RefresherBottomSheet` (below).
+> **Note:** earlier SPICE versions also mounted `MorningCard`/`LearnCard` in a home-screen banner and opened `RefresherBottomSheet` from it. That wiring was removed — the SDK's own coaching flow ("Practice Zone") now owns refreshers end-to-end. `MorningCard`, `LearnCard`, `LearnFab`, and `RefresherBottomSheet` remain public if you want a host-mounted banner, but the tile + FAB pattern above is the current recommendation.
 
-> **Note (tablets):** the `res/layout-sw600dp/fragment_home_screen.xml` variant declares an extra `@id/learnFab` `ComposeView` slot, but it is **not currently wired** in `HomeScreenFragment` (no `setContent`). Treat it as a reserved slot, not a live LearnFab. Wire it with `LearnFab(onClick = { CoachingFlowActivity.launchLearn(requireContext(), chwId) })` if you want a tablet Learn entry point.
+### CoachingGridTile inside a RecyclerView
 
----
-
-## Morning refresher & learn bottom sheets
-
-`RefresherBottomSheet` presents the morning refresher (cards → quiz). SPICE opens it from the `MorningCard`/`LearnCard` Start action:
+`CoachingGridTile` is the self-contained "Coaching" menu tile — it observes its own badge/indicator state, so the host only supplies `onClick`. Mounting it in a plain `ComposeView` works as shown above. Inside a `RecyclerView` whose layout manager **measures items before attaching them** (e.g. `FlexboxLayoutManager` on tablets), `AbstractComposeView.onMeasure` cannot find a window recomposer and crashes — create one in the adapter and set it before first measure:
 
 ```kotlin
-RefresherBottomSheet.show(
-    parentFragmentManager,
-    chwId,
-    fromHomeScreen = true,
-    entryMode = RefresherBottomSheet.EntryMode.QUESTION_FIRST,
-)
+class MenuAdapter : RecyclerView.Adapter<...>() {
+    private var recomposer: Recomposer? = null
+    private var recomposeScope: CoroutineScope? = null
+
+    override fun onAttachedToRecyclerView(recyclerView: RecyclerView) {
+        val dispatcher = AndroidUiDispatcher.CurrentThread
+        val scope = CoroutineScope(dispatcher)
+        val newRecomposer = Recomposer(dispatcher)
+        recomposeScope = scope
+        recomposer = newRecomposer
+        scope.launch { newRecomposer.runRecomposeAndApplyChanges() }
+    }
+
+    override fun onDetachedFromRecyclerView(recyclerView: RecyclerView) {
+        recomposeScope?.cancel()
+        recomposer = null
+    }
+
+    // onCreateViewHolder — BEFORE the first onMeasure:
+    //   composeView.setParentCompositionContext(recomposer)
+    //   composeView.setViewCompositionStrategy(
+    //       ViewCompositionStrategy.DisposeOnDetachedFromWindowOrReleasedFromPool)
+    // onBindViewHolder:
+    //   composeView.setContent { CoachingGridTile(onClick = { onCoachingSelected() }) }
+}
 ```
 
-The label's "wrong question count" comes from `QuickLearnViewModel`:
-
-```kotlin
-val morningVm: QuickLearnViewModel = viewModel(
-    factory = QuickLearnViewModel.factory(appContext, chwId),
-)
-val wrongCount by morningVm.wrongQuestionCount.collectAsState()
-LaunchedEffect(top?.moduleId) { morningVm.computeWrongQuestionCount() }
-```
+**SPICE reference** — `DashboardMenuItemsAdapter` (view type `VIEW_TYPE_COACHING`) uses exactly this recipe; the tile's tap launches `CoachingFlowActivity.launchLearn(requireContext(), chwId)`.
 
 ---
 
@@ -268,11 +250,23 @@ LaunchedEffect(top?.moduleId) { morningVm.computeWrongQuestionCount() }
 
 Wrap every SDK composable in `MicroCoachingTheme { … }` (as shown above). It provides the SDK's Material3 theme and the injected locale so text renders in the configured `Language`.
 
-> **Note:** `uiTheme` in `MicroCoachingConfig` does not currently change colours — SDK screens always render the light scheme. See [02 — config reference](./02-initialization.md#behaviour-thresholds-ui-data-testing).
+To render the SDK in **your** brand colours, do **not** wrap SDK content in your own `MaterialTheme` — that does not work, because `MaterialTheme` replaces rather than inherits a colour scheme, and SDK-owned surfaces (`CoachingFlowActivity`, the bottom sheets) have no "outside" to wrap. Register a token set on the Builder instead:
+
+```kotlin
+MicroCoachingSDK.Builder(this)
+    .theme(CoachingColors.Spice.copy(primary = Color(0xFF00695C)))
+    .build()
+```
+
+Full reference — the 35 tokens, what is derived from `primary` for free, and the two traps that make theming appear not to work: **[07 — Theming](./07-theming.md)**.
+
+> **Note:** `uiTheme` in `MicroCoachingConfig` is **deprecated** and was never read by the SDK. SDK screens always render the light scheme; see [07 — Not themeable](./07-theming.md#not-themeable).
 
 ---
 
 ## Next steps
 
-- [04 — Hooks & Data](./04-hooks-and-data.md) — `onHomeScreenShown`, `onAssessmentSubmitted`, and reading SDK data.
-- [05 — Model & Voice](./05-model-and-voice.md) — gating chat on model presence and the download prompt.
+- [00 — Quick Start](./00-quick-start.md) — the end-to-end integration sequence these surfaces slot into.
+- [07 — Theming](./07-theming.md) — brand colours and typography for SDK screens.
+- [04 — Hooks & Data](./04-hooks-and-data.md) — `onHomeScreenShown`, `onAssessmentSubmitted`, `onReferralSubmitted`, and reading SDK data.
+- [05 — Model & Voice](./05-model-and-voice.md) — the model lifecycle behind the chat setup screen.

@@ -7,10 +7,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  * v25 → v26: published source-document catalogue for the Knowledge section.
  *
  * Adds the `published_source_document` table — the durable mirror of
- * `GET /sync/source-documents/published`. The Knowledge grid now lists every
- * published source document (not just those referenced by a module), reading
- * this table reactively. The whole table is replaced on each inbound sync, so it
- * starts empty and populates on the next `/sync/source-documents/published` pull.
+ * `GET /sync/source-documents`. The Knowledge grid lists every published source
+ * document (not just those referenced by a module), reading this table reactively.
+ * The whole table is replaced on each inbound sync, so it starts empty and
+ * populates on the next pull.
  */
 val MIGRATION_25_26 = object : Migration(25, 26) {
     override fun migrate(db: SupportSQLiteDatabase) {

@@ -5,8 +5,8 @@ import com.medtroniclabs.microcoaching.data.db.entity.ModuleEntity
 /**
  * Bidirectional module↔gap map built from the **module fields** the backend ships
  * on `/sync/modules` (`module.primary_gap_id` + `module.behavioural_gap_ids`) — the
- * SDK-side mirror of the backend's `module_behavioural_gap` junction. (Trigger
- * bindings are no longer used for morning generation.)
+ * SDK-side mirror of the backend's `module_behavioural_gap` junction. Trigger
+ * bindings play no part in morning generation.
  *
  * @param familyToPrimaryGap moduleFamilyId → its `primary_gap_id`. Used to attribute
  *   quiz events to the module's primary gap, exactly as the backend's

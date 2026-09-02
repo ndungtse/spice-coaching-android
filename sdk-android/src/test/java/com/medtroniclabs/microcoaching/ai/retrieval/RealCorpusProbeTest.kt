@@ -134,7 +134,13 @@ class RealCorpusProbeTest {
                     Locale.US, hits.firstOrNull()?.score ?: 0f, margin,
                     hits.take(3).map { it.moduleFamilyId }.distinct().size == 1,
                     hits.firstOrNull()?.let { key(it) } ?: "∅",
-                    verdict(p, hits.firstOrNull(), refused = OffTopicGuard.shouldRefuseLowEnd(p.bangla, hits.take(3), scope.scopeTerms())),
+                    verdict(
+                        p, hits.firstOrNull(),
+                        refused = ServeDecision.decide(
+                            p.bangla, hits.take(3), scope.scopeTerms(),
+                            com.medtroniclabs.microcoaching.ServeTuning(), isBanglaTurn = true,
+                        ) !is ServeDecision.Decision.Serve,
+                    ),
                 )
             )
             probe.reportQuery(p.bangla)

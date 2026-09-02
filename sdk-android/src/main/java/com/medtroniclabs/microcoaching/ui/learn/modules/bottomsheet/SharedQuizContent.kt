@@ -47,14 +47,13 @@ import androidx.compose.ui.unit.dp
 import com.medtroniclabs.microcoaching.MicroCoachingSDK
 import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.ui.common.AnswerCard
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlue
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueContainer
 import com.medtroniclabs.microcoaching.ui.common.AnswerCardState
 import com.medtroniclabs.microcoaching.ui.common.InlineAnswerFeedback
 import com.medtroniclabs.microcoaching.ui.common.XpRewardBurst
 import com.medtroniclabs.microcoaching.ui.learn.LearnViewModel
 import com.medtroniclabs.microcoaching.ui.learn.selectAnswer
 import com.medtroniclabs.microcoaching.ui.learn.QuizQuestion
+import com.medtroniclabs.microcoaching.ui.theme.CoachingTheme
 
 /**
  * Shared quiz-in-progress composable for the refresher bottom sheet: both phases of
@@ -81,7 +80,7 @@ fun SharedQuizInProgressContent(
     onAllAnswered: () -> Unit,
     modifier: Modifier = Modifier,
     onClose: (() -> Unit)? = null,
-    optionContainerColor: Color = Color.White,
+    optionContainerColor: Color = MaterialTheme.colorScheme.surface,
     lastQuestionFooter: (@Composable () -> Unit)? = null,
 ) {
     var currentIndex by rememberSaveable { mutableIntStateOf(0) }
@@ -134,7 +133,7 @@ fun SharedQuizInProgressContent(
         Text(
             text = stringResource(R.string.quiz_question_counter, safeIndex + 1, total),
             style = MaterialTheme.typography.labelMedium,
-            color = Color(0xFF6B7280),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(8.dp))
         LinearProgressIndicator(
@@ -260,8 +259,8 @@ private fun NavCircleButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     contentDescription: String,
 ) {
-    val bg = if (enabled) SpiceBlueContainer else Color(0xFFF2F4F7)
-    val tint = if (enabled) SpiceBlue else Color(0xFFB0B7C3)
+    val bg = if (enabled) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow
+    val tint = if (enabled) MaterialTheme.colorScheme.primary else CoachingTheme.colors.textDisabled
     Box(
         modifier = Modifier
             .size(36.dp)
@@ -290,7 +289,7 @@ internal fun RefresherCaseSetupBox(caseSetup: String) {
         modifier = Modifier
             .fillMaxWidth()
             .background(
-                color = SpiceBlueContainer,
+                color = MaterialTheme.colorScheme.primaryContainer,
                 shape = RoundedCornerShape(10.dp),
             )
             .padding(12.dp),
@@ -298,7 +297,7 @@ internal fun RefresherCaseSetupBox(caseSetup: String) {
         Text(
             text = stringResource(R.string.quiz_case_context_label),
             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-            color = SpiceBlue,
+            color = MaterialTheme.colorScheme.primary,
         )
         Spacer(Modifier.height(4.dp))
         Text(

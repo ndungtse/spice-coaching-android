@@ -25,8 +25,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.medtroniclabs.microcoaching.R
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlue
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueDark
 
 /**
  * Blue gradient banner shown at the top of the modules screen. Renders one
@@ -34,8 +32,8 @@ import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueDark
  * source as `MicroCoachingSDK.morningModules`).
  *
  * @param questionText The question to preview on the banner.
- * @param participantCount Static count placeholder ("12 ASHAs answered today"
- *   — backend count endpoint is not in scope for v0.3.2).
+ * @param participantCount Static count placeholder ("12 ASHAs answered today") —
+ *   there is no backend count endpoint.
  * @param xpReward XP label shown in the right pill — display only, no scoring.
  * @param onClick Open the QuickLearnBottomSheet.
  */
@@ -53,7 +51,7 @@ fun QuickLearnCard(
             .padding(horizontal = 16.dp, vertical = 8.dp)
             .clip(RoundedCornerShape(20.dp))
             .background(
-                Brush.linearGradient(listOf(SpiceBlue, SpiceBlueDark)),
+                Brush.linearGradient(listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.onPrimaryContainer)),
             )
             .clickable(onClick = onClick)
             .padding(20.dp),

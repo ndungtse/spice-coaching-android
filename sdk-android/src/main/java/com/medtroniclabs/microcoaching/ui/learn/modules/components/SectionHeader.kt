@@ -12,11 +12,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueDark
 
 /**
  * Section heading used by Refreshers / Training / Knowledge rows on the
- * v0.3.2 modules screen. Optional right-aligned "See all" link.
+ * modules screen. Optional right-aligned "See all" link.
  */
 @Composable
 fun SectionHeader(
@@ -39,7 +38,7 @@ fun SectionHeader(
         if (seeAllLabel != null && onSeeAllClick != null) {
             Text(
                 text = seeAllLabel,
-                color = SpiceBlueDark,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
                 style = MaterialTheme.typography.labelLarge,
                 modifier = Modifier.clickable(onClick = onSeeAllClick),
             )

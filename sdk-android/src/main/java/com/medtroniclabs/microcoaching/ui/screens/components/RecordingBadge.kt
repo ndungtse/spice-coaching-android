@@ -86,7 +86,7 @@ private fun PulsingDot() {
         modifier = Modifier
             .size(8.dp)
             .clip(CircleShape)
-            .background(Color(0xFFE53935).copy(alpha = alpha)),
+            .background(MaterialTheme.colorScheme.error.copy(alpha = alpha)),
     )
 }
 

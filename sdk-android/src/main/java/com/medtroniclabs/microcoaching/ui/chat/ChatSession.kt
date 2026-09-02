@@ -65,7 +65,7 @@ internal enum class PromptMode {
  * @param language BCP-47 language tag, e.g. "bn-BD".
  * @param grounding Optional retrieved chunks from [com.medtroniclabs.microcoaching.ai.retrieval.ModuleKnowledgeIndex].
  *   When non-empty, a "Reference content" block is injected and the system
- *   prompt switches to the hardened B4-L3 directives (English only — Gemma 3
+ *   prompt switches to the hardened L3 directives (English only — Gemma 3
  *   handles directives best in English regardless of UI language).
  * @param mode Selects the system-prompt template. [PromptMode.Grounded] is the
  *   right pick when [grounding] is non-empty; [PromptMode.OpenScope] when
@@ -98,7 +98,7 @@ internal fun ChatSession.buildPrompt(
     val fullSystem = systemSections.joinToString("\n\n")
 
     // Refusal turns are excluded from the replayed history: each pair costs
-    // ~60–90 tokens of the window and, worse, primes a 1B model to keep
+    // ~60–90 tokens of the window and, worse, primes a small model to keep
     // refusing — the model imitates its own recent "I don't have this in my
     // training material" turns regardless of the new references. The refusal
     // is still visible to the CHW in the UI; it just isn't model context.
@@ -314,7 +314,7 @@ private const val ANSWER_CHAR_CAP = 320
 private const val MAX_ANSWER_SNIPPETS = 2
 
 /**
- * Hardened system prompt used when grounding is present (L3 in chat_plan.md §B4).
+ * Hardened system prompt used when grounding is present (guardrail layer L3).
  * Strong directives against fabrication; structured refusal sentinel so the output
  * validator can intercept off-source answers without parsing free text.
  */

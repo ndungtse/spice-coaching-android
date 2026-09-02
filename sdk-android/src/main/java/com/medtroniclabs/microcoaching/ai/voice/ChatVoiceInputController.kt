@@ -36,9 +36,10 @@ class ChatVoiceInputController internal constructor(
     private val androidEngine: AndroidSpeechRecognizerEngine,
     private val sttModelManager: SttModelManager,
     /**
-     * Factory for the offline Bengali engine. `null` until the sherpa-onnx
-     * impl is wired (B2). When non-null, the orchestrator instantiates it
-     * lazily with the model dir resolved by [SttModelManager.bengaliModelDir].
+     * Factory for the offline Bengali engine — `null` unless the host opts into the
+     * `sdk-android-sherpa` module (or supplies its own). When non-null, the
+     * orchestrator instantiates it lazily with the model dir resolved by
+     * [SttModelManager.bengaliModelDir].
      */
     private val offlineEngineFactory: ((File) -> OfflineSttEngine)? = null,
 ) : VoiceInputController {

@@ -15,8 +15,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import coil.compose.rememberAsyncImagePainter
 import com.medtroniclabs.microcoaching.ui.asset.rememberCachedImageFileForUrl
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlue
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueContainer
+import androidx.compose.material3.MaterialTheme
 
 /**
  * Video thumbnail that shows the **whole** frame (`ContentScale.Fit` / "contain")
@@ -48,7 +47,7 @@ fun VideoThumbnail(
                 Modifier
                     .matchParentSize()
                     .background(
-                        Brush.linearGradient(listOf(SpiceBlueContainer, SpiceBlue.copy(alpha = 0.3f))),
+                        Brush.linearGradient(listOf(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))),
                     ),
             )
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {

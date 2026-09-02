@@ -31,8 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.ui.learn.LearnModule
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlue
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueContainer
+import com.medtroniclabs.microcoaching.ui.theme.CoachingTheme
 
 /** Hero card aspect ratio — a wide banner matching the module design mock. */
 private const val HeroAspectRatio = 1.85f
@@ -43,7 +42,7 @@ private const val HeroAspectRatio = 1.85f
  * matching the module design mock (SDK colours). Used at the top of
  * [com.medtroniclabs.microcoaching.ui.coaching.RefresherSubTab].
  *
- * The thumbnail falls back to a [SpiceBlue] gradient when [LearnModule.thumbnailUrl] is null
+ * The thumbnail falls back to a `primary` gradient when [LearnModule.thumbnailUrl] is null
  * (same idiom as [TrainingCard]); a soft bottom scrim keeps the overlays legible over any
  * artwork.
  *
@@ -59,7 +58,7 @@ fun RefresherHeroCard(
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
     ) {
         Box(
@@ -77,7 +76,7 @@ fun RefresherHeroCard(
                             .matchParentSize()
                             .background(
                                 Brush.linearGradient(
-                                    colors = listOf(SpiceBlueContainer, SpiceBlue.copy(alpha = 0.3f)),
+                                    colors = listOf(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)),
                                 ),
                             ),
                     )
@@ -89,7 +88,7 @@ fun RefresherHeroCard(
                     .matchParentSize()
                     .background(
                         Brush.verticalGradient(
-                            colors = listOf(Color.Transparent, SpiceBlue.copy(alpha = 0.28f)),
+                            colors = listOf(Color.Transparent, MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)),
                         ),
                     ),
             )
@@ -114,7 +113,7 @@ private fun StartModuleButton(onClick: () -> Unit, modifier: Modifier = Modifier
     Row(
         modifier = modifier
             .clip(RoundedCornerShape(50))
-            .background(SpiceBlue)
+            .background(MaterialTheme.colorScheme.primary)
             .clickable(onClick = onClick)
             .padding(start = 20.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -128,13 +127,13 @@ private fun StartModuleButton(onClick: () -> Unit, modifier: Modifier = Modifier
         Box(
             modifier = Modifier
                 .size(28.dp)
-                .background(Color.White, CircleShape),
+                .background(MaterialTheme.colorScheme.surface, CircleShape),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.ArrowForward,
                 contentDescription = null,
-                tint = SpiceBlue,
+                tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(16.dp),
             )
         }
@@ -151,12 +150,12 @@ private fun HeroNewBadge(modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(4.dp))
-            .background(Color(0xFFB91C1C))
+            .background(CoachingTheme.colors.attention)
             .padding(horizontal = 6.dp, vertical = 2.dp),
     ) {
         Text(
             text = stringResource(R.string.badge_new),
-            color = Color.White,
+            color = CoachingTheme.colors.onAttention,
             style = MaterialTheme.typography.labelSmall.copy(
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 0.5.sp,

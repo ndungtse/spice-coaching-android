@@ -1,6 +1,6 @@
 # Chat (IT-Help) — How It Works Under the Hood
 
-**Version:** 0.3.8-SNAPSHOT · **Date:** 2026-06-03 · **Status:** Draft
+**Version:** 0.6.0-SNAPSHOT · **Date:** 2026-08-31 · **Status:** Draft
 
 How the SDK's on-device AI chat answers a CHW's question. This is the internal design behind the chat surfaces a host embeds (see [03 — UI Embedding](../documentation/03-ui-embedding.md) for the public API). It is **offline-first and on-device** — there is no online LLM fallback.
 
@@ -134,4 +134,4 @@ Every chat response generation emits one `coaching_event` row (`event_family = "
 
 - [03 — UI Embedding](../documentation/03-ui-embedding.md) — the public chat surfaces.
 - [05 — Model & Voice](../documentation/05-model-and-voice.md) — model download lifecycle and STT.
-- [docs/SDK.md](../SDK.md) — component-level reference (LLM service, networking, Room schema).
+- [docs/ARCHITECTURE.md](../ARCHITECTURE.md) — component-level reference (inference engines, networking, Room schema).

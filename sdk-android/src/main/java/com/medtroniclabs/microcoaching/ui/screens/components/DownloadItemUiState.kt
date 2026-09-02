@@ -4,7 +4,7 @@ import com.medtroniclabs.microcoaching.ai.model.ModelState
 import com.medtroniclabs.microcoaching.ai.voice.stt.SttModelState
 
 /**
- * Compact per-item state used by [DownloadItemCard]. Both the Gemma AI model
+ * Compact per-item state used by [DownloadItemCard]. Both the AI model
  * and the sherpa Bengali voice model map into this shape so the card composable
  * doesn't need to know which subsystem owns it.
  */

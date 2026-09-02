@@ -431,9 +431,8 @@ data class ModuleFamilySyncPayload(
 // Note: module quiz rows are carried verbatim in `ModuleSyncPayload.quiz`
 // (opaque `List<JsonObject>`) and parsed on-device at render time by
 // `parseInlineQuiz()` — which reads the nested `question/options/explanation/
-// case_setup: {bn, en}` shape with a legacy flat-key fallback. There is no typed
-// quiz DTO here; a former `ModuleQuizQuestionPayload` (flat `question_bn`/… keys)
-// was removed as dead code.
+// case_setup: {bn, en}` shape with a legacy flat-key fallback. There is
+// deliberately no typed quiz DTO here.
 
 // ── Gaps sync (GET /sync/gaps) ────────────────────────────────────────────────
 

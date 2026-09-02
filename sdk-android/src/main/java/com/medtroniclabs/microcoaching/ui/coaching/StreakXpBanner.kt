@@ -18,7 +18,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.ui.common.XpPill
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlueContainer
 
 /** SK coaching-tab banner: current streak message + XP total. */
 @Composable
@@ -28,7 +27,7 @@ fun StreakXpBanner(streakDays: Int, xp: Int, modifier: Modifier = Modifier) {
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp)
             .clip(RoundedCornerShape(12.dp))
-            .background(SpiceBlueContainer)
+            .background(MaterialTheme.colorScheme.primaryContainer)
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

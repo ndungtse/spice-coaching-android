@@ -29,9 +29,7 @@ import androidx.compose.ui.unit.sp
 import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.ui.badges.AchievementBadge
 import com.medtroniclabs.microcoaching.ui.badges.BadgeState
-import com.medtroniclabs.microcoaching.ui.theme.MutedText
-import com.medtroniclabs.microcoaching.ui.theme.SpiceBlue
-import com.medtroniclabs.microcoaching.ui.theme.SpiceGreen
+import com.medtroniclabs.microcoaching.ui.theme.CoachingTheme
 
 private val MedallionSize = 92.dp
 
@@ -58,13 +56,13 @@ fun BadgeMedallion(badge: AchievementBadge, modifier: Modifier = Modifier) {
             )
             when (badge.state) {
                 BadgeState.EARNED -> CornerMarker(
-                    background = SpiceGreen,
+                    background = CoachingTheme.colors.success,
                     icon = { Icon(Icons.Filled.Check, null, tint = Color.White, modifier = Modifier.size(15.dp)) },
                     modifier = Modifier.align(Alignment.BottomEnd),
                 )
                 BadgeState.LOCKED -> CornerMarker(
-                    background = Color(0xFFE4E8EF),
-                    icon = { Icon(Icons.Filled.Lock, null, tint = MutedText, modifier = Modifier.size(14.dp)) },
+                    background = CoachingTheme.colors.lockedSurface,
+                    icon = { Icon(Icons.Filled.Lock, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(14.dp)) },
                     modifier = Modifier.align(Alignment.BottomEnd),
                 )
             }
@@ -74,7 +72,7 @@ fun BadgeMedallion(badge: AchievementBadge, modifier: Modifier = Modifier) {
             style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Medium),
             color = when (badge.state) {
                 BadgeState.EARNED -> MaterialTheme.colorScheme.onBackground
-                BadgeState.LOCKED -> MutedText.copy(alpha = 0.8f)
+                BadgeState.LOCKED -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
             },
             textAlign = TextAlign.Center,
             maxLines = 2,
@@ -93,7 +91,7 @@ private fun CornerMarker(
     Box(
         modifier = modifier
             .size(26.dp)
-            .border(2.dp, Color.White, CircleShape)
+            .border(2.dp, MaterialTheme.colorScheme.surface, CircleShape)
             .background(background, CircleShape),
         contentAlignment = Alignment.Center,
     ) { icon() }

@@ -27,11 +27,11 @@ import java.util.Locale
  * a backend, or synced data.
  *
  * It is deliberately a thin shell: every ranking decision comes from the production
- * classes ([ModuleKnowledgeIndex], [GroundingSelector], [OffTopicGuard]) rather than a
+ * classes ([ModuleKnowledgeIndex], [GroundingSelector], [ServeDecision]) rather than a
  * re-implementation. Re-implementations drift, and a prototype that disagrees with the
  * shipped tokenizer produces confident but false conclusions about ranking changes.
  *
- * Run it with:
+ * Run it with for example:
  *   MC_CORPUS=ignored/v3/modules/modules.json ./gradlew :sdk-android:retrievalLab
  *
  * Accepts either corpus shape:
@@ -179,42 +179,41 @@ object DevRetrievalServer {
             return result(steps, outcome = "REFUSAL", refusalKey = "refused_no_ground")
         }
 
-        // Clinical-overlap backstop
-        val confident = OffTopicGuard.hasConfidentTopHit(grounding)
-        val refuseLowEnd = OffTopicGuard.shouldRefuseLowEnd(nativeQuery, grounding, scope.scopeTerms())
-        step(
-            "OffTopicGuard.shouldRefuseLowEnd", if (refuseLowEnd) "REFUSE" else "PASS",
-            "confidentTopHit(score≥80)=$confident — a confident hit bypasses the overlap check entirely",
+        // Serve decision — the single evidence gate both production paths consume.
+        val guardQuery = if (crossQuery != null) "$typed $nativeQuery" else typed
+        val decision = ServeDecision.decide(
+            query = guardQuery,
+            hits = grounding,
+            clinicalTerms = scope.scopeTerms(),
+            tuning = com.medtroniclabs.microcoaching.ServeTuning(),
+            isBanglaTurn = banglaOverride == null,
         )
-        if (refuseLowEnd) {
-            return result(steps, grounding, outcome = "REFUSAL", refusalKey = "refused_no_ground",
-                index = index, query = nativeQuery)
+        val evidences = when (decision) {
+            is ServeDecision.Decision.Serve -> decision.all
+            is ServeDecision.Decision.Refuse -> decision.evidence
+        }.associateBy { it.chunkId }
+
+        return when (decision) {
+            is ServeDecision.Decision.Refuse -> {
+                step(
+                    "ServeDecision", "REFUSE",
+                    "${decision.reason} — " + ServeDecision.describe(decision),
+                )
+                result(steps, grounding, outcome = "REFUSAL", refusalKey = "refused_no_ground",
+                    index = index, query = nativeQuery, evidences = evidences)
+            }
+            is ServeDecision.Decision.Serve -> {
+                val top = decision.hit
+                step(
+                    "ServeDecision", "SERVE",
+                    "${top.chunkId} — ${if (top.chunkId == grounding.first().chunkId) "BM25 rank 1" else "promoted over rank 1"} · " +
+                        decision.evidence.describe(),
+                )
+                val body = (top.bodyBn ?: top.bodyEn).orEmpty()
+                result(steps, grounding, outcome = "SERVED", served = top, body = body,
+                    index = index, query = nativeQuery, evidences = evidences)
+            }
         }
-
-        // Serve-target selection
-        val top = OffTopicGuard.selectLowEndServeHit(nativeQuery, grounding, scope.scopeTerms())
-            ?: grounding.first()
-        step(
-            "selectLowEndServeHit", "PICK",
-            "${top.chunkId} — ${if (top.chunkId == grounding.first().chunkId) "BM25 rank 1" else "promoted over rank 1"}",
-        )
-
-        // Topical gate (question↔evidence)
-        val related = OffTopicGuard.sharesTopicalTerm(nativeQuery, top)
-        step(
-            "sharesTopicalTerm", if (related) "PASS" else "REFUSE",
-            if (related) "shares a topical (non-demographic) word with the question"
-            else "matches only on who the question is about — refusing instead of serving",
-        )
-        if (!related) {
-            return result(steps, grounding, outcome = "REFUSAL", refusalKey = "refused_no_ground",
-                served = top, index = index, query = nativeQuery)
-        }
-
-        val body = (top.bodyBn ?: top.bodyEn).orEmpty()
-        step("serve", "SERVE", "served_retrieval_only · ${body.length} chars")
-        return result(steps, grounding, outcome = "SERVED", served = top, body = body,
-            index = index, query = nativeQuery)
     }
 
     private fun result(
@@ -226,6 +225,7 @@ object DevRetrievalServer {
         body: String? = null,
         index: ModuleKnowledgeIndex? = null,
         query: String? = null,
+        evidences: Map<String, ServeDecision.Evidence> = emptyMap(),
     ): JsonObject = buildJsonObject {
         put("outcome", outcome)
         refusalKey?.let { put("refusalKey", it) }
@@ -247,6 +247,18 @@ object DevRetrievalServer {
                         put("title", h.titleBn ?: h.titleEn ?: "")
                         put("score", "%.2f".format(Locale.US, h.score).toFloat())
                         put("body", (h.bodyBn ?: h.bodyEn).orEmpty().take(400))
+                        // Why the serve decision did / did not consider this hit servable.
+                        evidences[h.chunkId]?.let { ev ->
+                            putJsonObject("evidence") {
+                                putJsonArray("conditionTerms") { ev.conditionTerms.forEach { add(it) } }
+                                putJsonArray("sharedConcepts") { ev.sharedConcepts.forEach { add(it) } }
+                                put("titleHintOverlap", ev.titleHintOverlap)
+                                put("populationVeto", ev.populationVeto)
+                                put("stub", ev.isStubBody)
+                                put("referralBoost", ev.referralBoost)
+                                put("servable", ev.servable)
+                            }
+                        }
                         // Why this card scored what it did — same scorers as search().
                         if (index != null && query != null) {
                             index.explain(query, h.chunkId, ModuleKnowledgeIndex.Lang.BN)?.let { ex ->
