@@ -39,6 +39,7 @@ import kotlinx.serialization.json.contentOrNull
  */
 class ModuleKnowledgeIndex private constructor(
     private val chunks: List<GroundingChunk>,
+
     private val scorersEn: Map<Field, Bm25Scorer>,
     private val scorersBn: Map<Field, Bm25Scorer>,
     /** Per-corpus `synonyms_en` (abbreviation → expansion) fed to query expansion. */
@@ -83,6 +84,9 @@ class ModuleKnowledgeIndex private constructor(
      *   downstream groundedness gate, not a hand-tuned BM25 magnitude.
      * @param language which per-language index to score against.
      */
+    /** Every indexed chunk — the dense index joins card vectors onto these. */
+    internal val cardChunks: List<GroundingChunk> get() = chunks
+
     fun search(
         query: String,
         k: Int = 2,

@@ -110,6 +110,15 @@ data class MicroCoachingConfig internal constructor(
      */
     val wifiOnlyModelDownload: Boolean = false,
 
+    // ── Dense retrieval ───────────────────────────────────────────────────────
+    /**
+     * Enables hybrid (BM25 + embedding) chat retrieval: syncs per-card embedding
+     * vectors from `/sync/card-embeddings`, downloads the on-device query encoder,
+     * and fuses dense candidates into grounding selection. Off (default) keeps the
+     * pipeline byte-identical to BM25-only — no vector sync, no encoder download.
+     */
+    val enableDenseRetrieval: Boolean = false,
+
     // ── Model Download Providers ──────────────────────────────────────────────
     /**
      * Ordered list of providers tried when downloading the model.
@@ -432,12 +441,23 @@ data class ChatTuning(
  *           card's own words the character-bigram channel drives BM25 far above
  *           anything a topic mismatch reaches, so rank-1 is served without term
  *           evidence at or above this score.
+ * @property cosFloor Dense-retrieval evidence floor: a hit whose synced card
+ *           embedding reaches this cosine similarity against the query embedding
+ *           counts as servable evidence even with zero word overlap (the
+ *           population veto still wins). Only meaningful when dense retrieval is
+ *           enabled; hits without a vector carry no cosine and are unaffected.
+ * @property rrfK Reciprocal-rank-fusion constant for merging the BM25 and dense
+ *           rankings — larger values flatten the rank contribution of each list.
+ * @property denseTopK How many dense candidates enter the fusion.
  */
 data class ServeTuning(
     val bnScoreFloor: Float = 25f,
     val enScoreFloor: Float = 40f,
     val promoteRatio: Float = 0.55f,
     val bigramRescueScore: Float = 250f,
+    val cosFloor: Float = 0.50f,
+    val rrfK: Int = 60,
+    val denseTopK: Int = 3,
 )
 
 /**

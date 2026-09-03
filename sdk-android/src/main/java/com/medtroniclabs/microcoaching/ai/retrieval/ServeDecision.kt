@@ -77,6 +77,10 @@ object ServeDecision {
          * question share a population and nothing else.
          */
         val topicTermCount: Int,
+        /** Cosine of the card's synced embedding against the query embedding; null without a vector. */
+        val denseCos: Float? = null,
+        /** True when [denseCos] reaches the tuned floor — semantic agreement strong enough to serve on. */
+        val denseAgrees: Boolean = false,
     ) {
         /**
          * A question that names a subject must be answered by a card about that
@@ -91,6 +95,10 @@ object ServeDecision {
         val servable: Boolean
             get() {
                 if (populationVeto) return false
+                // Dense agreement is meaning-level evidence: the card's embedding and the
+                // query's agree even when they share no words (the exact failure word
+                // matching cannot close). It never overrides the population veto above.
+                if (denseAgrees) return true
                 if (queryTopicCount == 0) return conditionTerms.isNotEmpty() || sharedConcepts.isNotEmpty()
                 return topicTermCount >= if (queryTopicCount >= 3) 2 else 1
             }
@@ -101,7 +109,8 @@ object ServeDecision {
                 (if (topicTermCount == 0) " population-only" else "") +
                 (if (populationVeto) " POPULATION-VETO" else "") +
                 (if (isStubBody) " stub" else "") +
-                (if (referralBoost != 0) " referral=+$referralBoost" else "")
+                (if (referralBoost != 0) " referral=+$referralBoost" else "") +
+                (denseCos?.let { " cos=${"%.2f".format(Locale.US, it)}" } ?: "")
     }
 
     /**
@@ -228,7 +237,10 @@ object ServeDecision {
         val referralIntent = hasReferralTimingIntent(query)
 
         val evidences = hits.map { hit ->
-            evidenceFor(hit, queryTokens, queryGazetteer, queryConcepts, queryPopulations, referralIntent)
+            evidenceFor(
+                hit, queryTokens, queryGazetteer, queryConcepts, queryPopulations, referralIntent,
+                cosFloor = tuning.cosFloor,
+            )
         }
         val byChunk = evidences.associateBy { it.chunkId }
 
@@ -252,20 +264,32 @@ object ServeDecision {
         // that, title/hint evidence beats body-keyword density, stubs lose ties, and
         // raw score decides only what nothing else separates.
         val topScore = hits.first().score
-        val band = servable.filter { it.score >= topScore * tuning.promoteRatio }
-            .ifEmpty { listOf(servable.first()) }
+        // Dense-agreed hits enter the band on their cosine: a dense-only entrant has
+        // no BM25 score to clear the promote ratio with, yet is exactly the candidate
+        // fusion added. BM25-only paths are unaffected (denseAgrees is never set).
+        val band = servable.filter {
+            it.score >= topScore * tuning.promoteRatio || byChunk.getValue(it.chunkId).denseAgrees
+        }.ifEmpty { listOf(servable.first()) }
         val chosen = band.maxWithOrNull(
             compareBy(
                 { byChunk.getValue(it.chunkId).topicTermCount > 0 },
                 { byChunk.getValue(it.chunkId).titleHintOverlap + byChunk.getValue(it.chunkId).referralBoost },
                 { byChunk.getValue(it.chunkId).conditionTerms.size + byChunk.getValue(it.chunkId).sharedConcepts.size },
+                // Semantic agreement breaks ties among lexically comparable candidates,
+                // below explicit topic evidence and above raw score.
+                { byChunk.getValue(it.chunkId).denseAgrees },
                 { !byChunk.getValue(it.chunkId).isStubBody },
                 { it.score },
             ),
         ) ?: servable.first()
 
         val floor = if (isBanglaTurn) tuning.bnScoreFloor else tuning.enScoreFloor
-        if (chosen.score < floor) return Decision.Refuse(RefuseReason.BELOW_SCORE_FLOOR, evidences)
+        val chosenEvidence = byChunk.getValue(chosen.chunkId)
+        // The per-language floor is a BM25-score calibration; a dense-only entrant has
+        // no BM25 score, and its cosine already cleared its own floor.
+        if (chosen.score < floor && !chosenEvidence.denseAgrees) {
+            return Decision.Refuse(RefuseReason.BELOW_SCORE_FLOOR, evidences)
+        }
         return Decision.Serve(chosen, byChunk.getValue(chosen.chunkId), evidences)
     }
 
@@ -286,6 +310,7 @@ object ServeDecision {
         queryConcepts: Set<String>,
         queryPopulations: Set<String>,
         referralIntent: Boolean,
+        cosFloor: Float,
     ): Evidence {
         val hitText = listOfNotNull(
             hit.titleBn, hit.titleEn, hit.bodyBn, hit.bodyEn,
@@ -334,6 +359,8 @@ object ServeDecision {
                 queryConcepts.count { it !in SCOPE_CONCEPTS },
             topicTermCount = conditionTerms.count { populationsIn(it).isEmpty() } +
                 sharedConcepts.count { it !in SCOPE_CONCEPTS },
+            denseCos = hit.denseCos,
+            denseAgrees = (hit.denseCos ?: 0f) >= cosFloor,
         )
     }
 

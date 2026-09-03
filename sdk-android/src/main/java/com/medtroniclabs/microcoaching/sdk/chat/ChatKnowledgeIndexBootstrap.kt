@@ -2,9 +2,11 @@ package com.medtroniclabs.microcoaching.sdk.chat
 
 import android.util.Log
 import com.medtroniclabs.microcoaching.MicroCoachingConfig
+import com.medtroniclabs.microcoaching.ai.retrieval.DenseVectorIndex
 import com.medtroniclabs.microcoaching.ai.retrieval.ModuleKnowledgeIndex
 import com.medtroniclabs.microcoaching.ai.retrieval.RetrievalHintOverlay
 import com.medtroniclabs.microcoaching.ai.retrieval.ScopeClassifier
+import com.medtroniclabs.microcoaching.data.db.dao.CardEmbeddingDao
 import com.medtroniclabs.microcoaching.data.db.dao.ModuleDao
 import com.medtroniclabs.microcoaching.data.db.entity.sortedForDisplay
 import kotlinx.coroutines.CoroutineScope
@@ -32,6 +34,7 @@ internal class ChatKnowledgeIndexBootstrap(
     private val config: MicroCoachingConfig,
     private val moduleDao: () -> ModuleDao,
     private val retiredFamilyIds: () -> Set<String>,
+    private val cardEmbeddingDao: () -> CardEmbeddingDao,
 ) {
     private val _index = MutableStateFlow(ModuleKnowledgeIndex.empty())
 
@@ -48,6 +51,18 @@ internal class ChatKnowledgeIndexBootstrap(
      * invisible to the gate, which then reads the hit as having no evidence.
      */
     val scopeClassifier: StateFlow<ScopeClassifier> = _scope.asStateFlow()
+
+    private val _denseIndex = MutableStateFlow<DenseVectorIndex?>(null)
+
+    /**
+     * Dense vector index over the SAME chunks as [index], joined to the synced
+     * `card_embedding` rows on the per-card id. Null until dense retrieval is
+     * enabled AND vectors have synced AND the cached cards carry ids — every
+     * "null" path degrades chat to BM25-only for the turn, never to an error.
+     * Rebuilt with the BM25 index, so vectors landing between module syncs become
+     * visible on the next rebuild (or process restart) rather than instantly.
+     */
+    val denseIndex: StateFlow<DenseVectorIndex?> = _denseIndex.asStateFlow()
 
     @Volatile private var started = false
 
@@ -83,8 +98,17 @@ internal class ChatKnowledgeIndexBootstrap(
                         assets = config.context.assets,
                         enabled = config.enableRetrievalHintFixtureOverlay,
                     )
-                    _index.value = ModuleKnowledgeIndex.build(indexedModules)
+                    val built = ModuleKnowledgeIndex.build(indexedModules)
+                    _index.value = built
                     _scope.value = ScopeClassifier.buildFrom(indexedModules)
+                    _denseIndex.value = if (config.enableDenseRetrieval) {
+                        val vectors = cardEmbeddingDao().getAll()
+                            .associate { it.cardId to it.toFloatVector() }
+                        if (vectors.isEmpty()) null
+                        else DenseVectorIndex.build(built.cardChunks, vectors).takeIf { it.size > 0 }
+                    } else {
+                        null
+                    }
                     delay(RECOMPUTE_THROTTLE_MS)
                 }
         }

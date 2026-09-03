@@ -187,6 +187,7 @@ internal object ModuleCorpusParser {
                 hintsEn = cardMeta.hintsEn,
                 questionsBn = cardMeta.questionsBn,
                 questionsEn = cardMeta.questionsEn,
+                cardId = (obj["id"] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() },
             )
             Triple(chunk, obj.retrievalMetadata(), cardMeta)
         }

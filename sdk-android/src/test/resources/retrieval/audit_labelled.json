@@ -157,11 +157,17 @@
     "native_query": "শ্রমের বিপদ লক্ষণ কি এবং আমি কখন পড়তে হবে?",
     "english_query": "What are the danger signs of labor and when should I refer?",
     "acceptable": [
-      "f62c103f:3",
       "a6032a14:0",
       "a6032a14:1",
       "a6032a14:2",
-      "a6032a14:6"
+      "a6032a14:3",
+      "a6032a14:4",
+      "a6032a14:5",
+      "a6032a14:6",
+      "a6032a14:7",
+      "a6032a14:8",
+      "a6032a14:9",
+      "f62c103f:3"
     ]
   },
   {
@@ -402,11 +408,17 @@
     "native_query": "প্রসূতির বিপদজনক লক্ষণ কি কি এবং কখন রেফার করতে হবে?",
     "english_query": "What is the dangerous symptoms of the excitement and when to refer?",
     "acceptable": [
-      "f62c103f:3",
       "a6032a14:0",
       "a6032a14:1",
       "a6032a14:2",
-      "a6032a14:6"
+      "a6032a14:3",
+      "a6032a14:4",
+      "a6032a14:5",
+      "a6032a14:6",
+      "a6032a14:7",
+      "a6032a14:8",
+      "a6032a14:9",
+      "f62c103f:3"
     ]
   },
   {

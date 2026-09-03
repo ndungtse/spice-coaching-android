@@ -143,6 +143,9 @@ internal suspend fun ChatViewModel.handleLocalGemmaMessage(
         index = knowledgeIndex,
         k = ChatViewModel.GROUNDING_K,
         scoreThreshold = bm25Threshold,
+        dense = denseCandidates(trimmed),
+        rrfK = config.chatTuning.serve.rrfK,
+        denseAdmitFloor = config.chatTuning.serve.cosFloor,
     )
     val nativeHits = selection.nativeHits
     val translatedHits = selection.englishHits
@@ -631,6 +634,9 @@ internal suspend fun ChatViewModel.handleRetrievalOnlyMessage(trimmed: String) {
         index = knowledgeIndex,
         k = ChatViewModel.GROUNDING_K,
         scoreThreshold = config.chatTuning.bm25ScoreThreshold,
+        dense = denseCandidates(trimmed),
+        rrfK = config.chatTuning.serve.rrfK,
+        denseAdmitFloor = config.chatTuning.serve.cosFloor,
     )
     val grounding = selection.hits
     Log.i(ChatViewModel.TRACE_TAG, "BM25 retrieval-only[$searchLang] hits=${grounding.size} chosen=${selection.chosenLabel}")
@@ -718,4 +724,30 @@ internal suspend fun ChatViewModel.banglaRetrievalQueryOrError(trimmed: String):
         "EN→BN retrieval translate: in=\"${tracePreview(trimmed)}\" out=\"${tracePreview(inResult.text)}\"",
     )
     return inResult.text
+}
+
+/**
+ * Dense retrieval candidates for the TYPED question — the multilingual encoder
+ * needs no MLKit translation, so the dense channel sees the CHW's own words in
+ * both UI languages. Empty whenever any piece is missing (flag off, no synced
+ * vectors, no encoder, un-embeddable text): the turn then runs BM25-only, and the
+ * one DENSE trace line says which way it went for audit drivers.
+ */
+internal suspend fun ChatViewModel.denseCandidates(typedText: String): List<Pair<GroundingChunk, Float>> {
+    if (!config.enableDenseRetrieval) return emptyList()
+    val index = sdk.chatDenseIndex.value
+    val embedder = sdk.queryEmbedder
+    if (index == null || embedder == null) {
+        Log.i(ChatViewModel.TRACE_TAG, "DENSE off (index=${index != null} embedder=${embedder != null})")
+        return emptyList()
+    }
+    val vec = embedder.embed(typedText)
+    if (vec == null) {
+        Log.i(ChatViewModel.TRACE_TAG, "DENSE off (query not embeddable)")
+        return emptyList()
+    }
+    val hits = index.search(vec, config.chatTuning.serve.denseTopK)
+    val top = hits.firstOrNull()?.let { "%s@%.2f".format(it.first.chunkId, it.second) } ?: "-"
+    Log.i(ChatViewModel.TRACE_TAG, "DENSE hits=${hits.size} top=$top")
+    return hits
 }

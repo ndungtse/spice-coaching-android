@@ -7,6 +7,7 @@ import androidx.room.RoomDatabase
 import com.medtroniclabs.microcoaching.data.db.dao.AssignedModuleDao
 import com.medtroniclabs.microcoaching.data.db.dao.AssignedVideoDao
 import com.medtroniclabs.microcoaching.data.db.dao.BadgeDao
+import com.medtroniclabs.microcoaching.data.db.dao.CardEmbeddingDao
 import com.medtroniclabs.microcoaching.data.db.dao.BehaviouralGapDao
 import com.medtroniclabs.microcoaching.data.db.dao.ChatMessageDao
 import com.medtroniclabs.microcoaching.data.db.dao.ChwGapProfileDao
@@ -29,6 +30,7 @@ import com.medtroniclabs.microcoaching.data.db.dao.TriggerDefinitionDao
 import com.medtroniclabs.microcoaching.data.db.entity.AssignedModuleEntity
 import com.medtroniclabs.microcoaching.data.db.entity.AssignedVideoEntity
 import com.medtroniclabs.microcoaching.data.db.entity.BadgeEntity
+import com.medtroniclabs.microcoaching.data.db.entity.CardEmbeddingEntity
 import com.medtroniclabs.microcoaching.data.db.entity.BehaviouralGapEntity
 import com.medtroniclabs.microcoaching.data.db.entity.CachedAssetEntity
 import com.medtroniclabs.microcoaching.data.db.entity.DashboardCacheEntity
@@ -70,13 +72,14 @@ import com.medtroniclabs.microcoaching.data.db.migration.MIGRATION_31_32
 import com.medtroniclabs.microcoaching.data.db.migration.MIGRATION_32_33
 import com.medtroniclabs.microcoaching.data.db.migration.MIGRATION_33_34
 import com.medtroniclabs.microcoaching.data.db.migration.MIGRATION_34_35
+import com.medtroniclabs.microcoaching.data.db.migration.MIGRATION_35_36
 
 /**
  * Public schema version, mirrored from [Database.version] so callers (e.g.
  * `MicroCoachingSDK.init`) can detect destructive migrations and reset
  * SharedPreferences-based watermarks accordingly.
  */
-const val MICRO_COACHING_ROOM_VERSION: Int = 35
+const val MICRO_COACHING_ROOM_VERSION: Int = 36
 
 /**
  * SDK-owned Room database (`microcoaching.db`), entirely separate from SPICE's
@@ -115,6 +118,7 @@ const val MICRO_COACHING_ROOM_VERSION: Int = 35
         DashboardCacheEntity::class,
         RequestedModuleEntity::class,
         BadgeEntity::class,
+        CardEmbeddingEntity::class,
     ],
     version = MICRO_COACHING_ROOM_VERSION,
     exportSchema = false,
@@ -143,6 +147,7 @@ abstract class MicroCoachingDatabase : RoomDatabase() {
     abstract fun dashboardCacheDao(): DashboardCacheDao
     abstract fun requestedModuleDao(): RequestedModuleDao
     abstract fun badgeDao(): BadgeDao
+    abstract fun cardEmbeddingDao(): CardEmbeddingDao
 
     companion object {
         private const val DATABASE_NAME = "microcoaching.db"
@@ -181,6 +186,7 @@ abstract class MicroCoachingDatabase : RoomDatabase() {
                     MIGRATION_32_33,
                     MIGRATION_33_34,
                     MIGRATION_34_35,
+                    MIGRATION_35_36,
                 )
                 .fallbackToDestructiveMigration(dropAllTables = true)
                 .build()

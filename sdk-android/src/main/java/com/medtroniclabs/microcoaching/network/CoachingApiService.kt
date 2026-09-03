@@ -136,6 +136,16 @@ interface CoachingApiService {
     ): Response<VideoProgressSyncBundle>
 
     /**
+     * Card embedding vectors for published modules updated after [since]. Joined to
+     * cached cards on `card_id`; cards without a persisted embedding are omitted by
+     * the backend. `server_time_utc` is the next watermark.
+     */
+    @GET("sync/card-embeddings")
+    suspend fun pullCardEmbeddings(
+        @Query("since") since: String,
+    ): Response<CardEmbeddingsResponse>
+
+    /**
      * Re-sign a batch of object-storage paths — the only presign route open to a
      * device principal, and therefore the only one an SK or PO can use.
      *

@@ -135,6 +135,17 @@ data class ModulesResult(
 internal fun shouldHydrateFullCatalogue(wasFullCatalogue: Boolean, unresolvedAssignedCount: Int): Boolean =
     !wasFullCatalogue && unresolvedAssignedCount > 0
 
+/** `/sync/card-embeddings` outcome. Success with `upserted = 0` is a normal empty delta. */
+data class CardEmbeddingsResult(
+    val upserted: Int = 0,
+    val dropped: Int = 0,
+    val newWatermark: String? = null,
+    override val error: String? = null,
+    override val errorKind: SyncErrorKind? = null,
+) : SyncResult {
+    override val success: Boolean get() = error == null
+}
+
 data class GapsResult(
     val upsertedCount: Int = 0,
     val prunedCount: Int = 0,

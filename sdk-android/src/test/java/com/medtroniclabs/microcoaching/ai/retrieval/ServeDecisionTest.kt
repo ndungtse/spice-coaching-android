@@ -28,6 +28,7 @@ class ServeDecisionTest {
         family: String = "fam-$title",
         hintsBn: List<String> = emptyList(),
         questionsBn: List<String> = emptyList(),
+        denseCos: Float? = null,
     ) = GroundingChunk(
         source = GroundingChunk.Source.CARD,
         moduleFamilyId = family,
@@ -39,6 +40,7 @@ class ServeDecisionTest {
         score = score,
         hintsBn = hintsBn,
         questionsBn = questionsBn,
+        denseCos = denseCos,
     )
 
     private fun decide(query: String, hits: List<GroundingChunk>, bangla: Boolean = true) =
@@ -282,5 +284,59 @@ class ServeDecisionTest {
         val hit = chunk("রক্তস্বল্পতার মাত্রা", "গর্ভবতী মায়ের রক্তস্বল্পতা হলে আয়রন বড়ি খেতে হবে")
         val d = decide("গর্ভবতী মায়ের জন্য", listOf(hit))
         assertTrue(d is ServeDecision.Decision.Refuse)
+    }
+
+    // ── dense (embedding) evidence channel ───────────────────────────────────
+
+    @Test
+    fun `dense agreement makes a zero-lexical-overlap hit servable`() {
+        val hit = chunk(
+            "স্তনের যত্ন",
+            "প্রতিদিন স্তন পরিষ্কার করতে হবে এবং বোঁটা ভিতরের দিকে থাকলে তেল দিয়ে মালিশ করতে হবে",
+            denseCos = 0.60f,
+        )
+        val d = decide("মায়ের দুধ কম আসছে কি করব", listOf(hit))
+        assertTrue(d is ServeDecision.Decision.Serve)
+    }
+
+    @Test
+    fun `dense similarity below the floor with no lexical evidence still refuses`() {
+        val hit = chunk(
+            "স্তনের যত্ন",
+            "প্রতিদিন স্তন পরিষ্কার করতে হবে এবং বোঁটা ভিতরের দিকে থাকলে তেল দিয়ে মালিশ করতে হবে",
+            denseCos = 0.30f,
+        )
+        val d = decide("মায়ের দুধ কম আসছে কি করব", listOf(hit))
+        assertTrue(d is ServeDecision.Decision.Refuse)
+        assertEquals(ServeDecision.RefuseReason.NO_EVIDENCE, (d as ServeDecision.Decision.Refuse).reason)
+    }
+
+    @Test
+    fun `population veto beats dense agreement`() {
+        val hit = chunk(
+            "গর্ভকালীন রক্তচাপ: অস্বাভাবিক হলে করণীয়",
+            "গর্ভবতী মায়ের রক্তচাপ অস্বাভাবিক হলে রেফার করুন এবং পরামর্শ দিন",
+            denseCos = 0.90f,
+        )
+        val d = decide("সেবাগ্রহীতার রক্তচাপ বেশি পেলে কি করব", listOf(hit))
+        assertTrue(d is ServeDecision.Decision.Refuse)
+    }
+
+    @Test
+    fun `dense-only entrant with zero bm25 score passes the score floor`() {
+        val hit = chunk(
+            "রক্তচাপ মাপার নিয়ম",
+            "রক্তচাপ বেশি হলে দ্রুত রেফার করতে হবে হাসপাতালে",
+            score = 0f,
+            denseCos = 0.60f,
+        )
+        val d = ServeDecision.decide(
+            "রক্তচাপ বেশি হলে কি করব",
+            listOf(hit),
+            gazetteer,
+            ServeTuning(bnScoreFloor = 25f, enScoreFloor = 40f),
+            isBanglaTurn = true,
+        )
+        assertTrue(d is ServeDecision.Decision.Serve)
     }
 }

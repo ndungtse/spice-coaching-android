@@ -112,6 +112,19 @@ class InboundSyncWorker(
         }
         record(SyncDomain.MODULES, modulesResult)
 
+        // Card-embedding vectors ride behind the dense-retrieval flag: without it the
+        // dense index is never built, so the pull would only spend data. Non-fatal and
+        // not recorded as a SyncDomain — no UI section reads it; chat degrades to
+        // BM25-only until vectors land.
+        if (config.enableDenseRetrieval) {
+            val embeddingsResult = syncApi.pullCardEmbeddings(syncPrefs.cardEmbeddingsWatermark)
+            if (embeddingsResult.success) {
+                embeddingsResult.newWatermark?.let { syncPrefs.cardEmbeddingsWatermark = it }
+            } else {
+                Log.w(TAG, "Card-embeddings sync failed (non-fatal): ${embeddingsResult.error}")
+            }
+        }
+
         // Source-document catalogue — one call backing both the Knowledge section
         // and the Training sub-tab, so it reports into two domains. Non-fatal and
         // not part of the retry predicate: on failure the previous contents stay

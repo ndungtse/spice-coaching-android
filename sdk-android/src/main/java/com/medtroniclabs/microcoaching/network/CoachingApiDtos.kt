@@ -689,3 +689,26 @@ data class RagSourcePage(
 // A CHW training request has no request DTO of its own — it is a
 // `module_requested` telemetry event, carried by TelemetryBatch to
 // POST /telemetry/events.
+
+// ── Card embeddings sync (GET /sync/card-embeddings) ─────────────────────────
+
+/**
+ * Bundle of card embedding vectors. [embeddingDimension] applies to every row;
+ * a row whose vector length disagrees is dropped at mapping time. [modelId] is
+ * not sent by the backend yet — nullable so it activates when it appears.
+ */
+@Serializable
+data class CardEmbeddingsResponse(
+    @SerialName("cards") val cards: List<CardEmbeddingDto> = emptyList(),
+    @SerialName("embedding_dimension") val embeddingDimension: Int = 0,
+    @SerialName("model_id") val modelId: String? = null,
+    @SerialName("server_time_utc") val serverTimeUtc: String? = null,
+)
+
+@Serializable
+data class CardEmbeddingDto(
+    @SerialName("card_id") val cardId: String,
+    @SerialName("module_id") val moduleId: String? = null,
+    @SerialName("card_family_id") val cardFamilyId: String? = null,
+    @SerialName("embedding") val embedding: List<Float> = emptyList(),
+)

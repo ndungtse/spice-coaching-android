@@ -66,6 +66,11 @@ class SyncPrefs(context: Context) {
         get() = prefs.getString(KEY_MODULES_WATERMARK, null)
         set(value) = prefs.edit().putString(KEY_MODULES_WATERMARK, value).apply()
 
+    /** Same semantics as [modulesWatermark], for `/sync/card-embeddings`. */
+    var cardEmbeddingsWatermark: String?
+        get() = prefs.getString(KEY_CARD_EMBEDDINGS_WATERMARK, null)
+        set(value) = prefs.edit().putString(KEY_CARD_EMBEDDINGS_WATERMARK, value).apply()
+
     /**
      * ISO 8601 server watermark from the last `GET /sync/gaps` response.
      * Same semantics as [modulesWatermark].
@@ -158,6 +163,7 @@ class SyncPrefs(context: Context) {
         private const val KEY_LAST_INBOUND_SYNC_AT = "last_inbound_sync_at"
         private const val KEY_LAST_MODULES_RECONCILE_AT = "last_modules_reconcile_at"
         private const val KEY_MODULES_WATERMARK = "modules_watermark"
+        private const val KEY_CARD_EMBEDDINGS_WATERMARK = "card_embeddings_watermark"
         private const val KEY_GAPS_WATERMARK = "gaps_watermark"
         private const val KEY_TRIGGERS_WATERMARK = "triggers_watermark"
         private const val KEY_CONFIG_WATERMARK = "config_watermark"

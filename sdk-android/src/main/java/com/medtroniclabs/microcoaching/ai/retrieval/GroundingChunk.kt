@@ -48,6 +48,18 @@ data class GroundingChunk(
     val hintsEn: List<String> = emptyList(),
     val questionsBn: List<String> = emptyList(),
     val questionsEn: List<String> = emptyList(),
+    /**
+     * The backend's per-card UUID from `/sync/modules` — the join key for the
+     * card-embedding vectors synced separately. Null for cards cached before the
+     * backend shipped the field; such cards simply never gain a dense vector.
+     */
+    val cardId: String? = null,
+    /**
+     * Cosine similarity of this card's synced embedding against the query vector,
+     * set during dense/hybrid retrieval. Null when the card was not among the
+     * dense candidates (or dense retrieval did not run).
+     */
+    val denseCos: Float? = null,
 ) {
     enum class Source { CARD, QUIZ }
 
