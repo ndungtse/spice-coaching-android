@@ -26,6 +26,7 @@ opentelemetrySemconv = "1.30.0-alpha"
 
 # LiteRT-LM — the on-device inference engine
 litertlm = "0.16.1"
+litert = "1.4.2"
 
 # ML Kit Translation
 mlkitTranslate = "17.0.3"
@@ -99,6 +100,11 @@ opentelemetry-semconv = { group = "io.opentelemetry.semconv", name = "openteleme
 
 # LiteRT-LM — loads the `.litertlm` model bundles
 litertlm-android = { group = "com.google.ai.edge.litertlm", name = "litertlm-android", version.ref = "litertlm" }
+# LiteRT — the TFLite interpreter, for the EmbeddingGemma query encoder.
+# Held at 1.x: it declares minSdk 21 against the project's 23, ships one 4.3 MB
+# arm64 library instead of 2.x's interpreter-plus-GPU-accelerator pair, and CPU is
+# the backend this encoder wants (2.x's GPU path costs ~762 MB RSS).
+litert = { group = "com.google.ai.edge.litert", name = "litert", version.ref = "litert" }
 
 # ML Kit Translation (EN→BN on-device)
 mlkit-translate = { group = "com.google.mlkit", name = "translate", version.ref = "mlkitTranslate" }

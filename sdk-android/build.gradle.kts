@@ -163,6 +163,12 @@ dependencies {
         exclude(group = "org.jetbrains.kotlin", module = "kotlin-reflect")
     }
 
+    // LiteRT — the TFLite interpreter behind the EmbeddingGemma query encoder. A
+    // separate runtime from LiteRT-LM above: that one loads `.litertlm` chat bundles,
+    // this one runs a plain `.tflite` graph. No EmbeddingGemma `.litertlm` exists, so
+    // the two cannot be collapsed into one.
+    implementation(libs.litert)
+
     // ML Kit on-device translation (EN→BN, ~20 MB language pack downloaded on demand)
     implementation(libs.mlkit.translate)
 

@@ -113,9 +113,16 @@ data class MicroCoachingConfig internal constructor(
     // ── Dense retrieval ───────────────────────────────────────────────────────
     /**
      * Enables hybrid (BM25 + embedding) chat retrieval: syncs per-card embedding
-     * vectors from `/sync/card-embeddings`, downloads the on-device query encoder,
-     * and fuses dense candidates into grounding selection. Off (default) keeps the
-     * pipeline byte-identical to BM25-only — no vector sync, no encoder download.
+     * vectors from `/sync/card-embeddings`, downloads the on-device query encoder
+     * (~171 MB, capable device tiers only — see
+     * [com.medtroniclabs.microcoaching.ai.embedding.EncoderModelRule]), and fuses
+     * dense candidates into grounding selection.
+     *
+     * Off (default) keeps the pipeline byte-identical to BM25-only: no vector sync,
+     * no encoder download, and every dense evidence channel structurally unreachable
+     * because nothing sets a cosine. Degradation is likewise structural rather than
+     * conditional — missing vectors, a missing encoder, or a low-end device each leave
+     * chat on exactly the BM25 behaviour it has with the flag off.
      */
     val enableDenseRetrieval: Boolean = false,
 
@@ -449,6 +456,15 @@ data class ChatTuning(
  * @property rrfK Reciprocal-rank-fusion constant for merging the BM25 and dense
  *           rankings — larger values flatten the rank contribution of each list.
  * @property denseTopK How many dense candidates enter the fusion.
+ * @property cosDominantFloor Cosine at which semantic agreement stops being a
+ *           tie-breaker and outranks authored title/hint overlap. Set well above
+ *           [cosFloor]: agreement qualifies a hit to be served, dominance decides
+ *           which hit wins, and hint density is right far more often than it is
+ *           wrong. Calibrated over the labelled audit set as the widest setting
+ *           that never promotes an unacceptable card or breaks a refusal.
+ * @property cosDominantMargin How far the leading cosine must sit above the
+ *           runner-up's before it counts as dominant. Two candidates a hundredth
+ *           apart are not a semantic verdict, just noise.
  */
 data class ServeTuning(
     val bnScoreFloor: Float = 25f,
@@ -458,6 +474,8 @@ data class ServeTuning(
     val cosFloor: Float = 0.50f,
     val rrfK: Int = 60,
     val denseTopK: Int = 3,
+    val cosDominantFloor: Float = 0.65f,
+    val cosDominantMargin: Float = 0.03f,
 )
 
 /**

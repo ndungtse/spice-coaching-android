@@ -520,6 +520,13 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
     private val modelManagerLazy = lazy { ModelManager(config) }
     private val sttModelManagerLazy = lazy { SttModelManager(config) }
 
+    /**
+     * Owns the dense-retrieval query encoder's files. Lazy and never touched unless
+     * `enableDenseRetrieval` is on, so a default build constructs nothing.
+     */
+    private val encoderModelManagerLazy =
+        lazy { com.medtroniclabs.microcoaching.ai.embedding.EncoderModelManager(config) }
+
     /** Lazy-initialized model lifecycle manager (download, verify, state). */
     val modelManager: ModelManager by modelManagerLazy
 
@@ -1076,6 +1083,10 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
             runCatching { modelManagerLazy.value.close() }
                 .onFailure { Log.w(TAG, "modelManager.close threw: ${it.message}") }
         }
+        if (encoderModelManagerLazy.isInitialized()) {
+            runCatching { encoderModelManagerLazy.value.close() }
+                .onFailure { Log.w(TAG, "encoderModelManager.close threw: ${it.message}") }
+        }
         if (sttModelManagerLazy.isInitialized()) {
             runCatching { sttModelManagerLazy.value.close() }
                 .onFailure { Log.w(TAG, "sttModelManager.close threw: ${it.message}") }
@@ -1491,6 +1502,13 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
                 sdk.localModelEnabled
             ) {
                 sdk.modelManager.scheduleDownloadIfNeeded()
+            }
+
+            // The query encoder is gated on its own flag, not on the LLM's consent or
+            // download strategy: it improves retrieval on the BM25-only tier too, where
+            // no LLM is ever downloaded. EncoderModelRule decides and logs why.
+            if (config.enableDenseRetrieval) {
+                sdk.encoderModelManagerLazy.value.scheduleDownloadIfNeeded()
             }
 
             return sdk

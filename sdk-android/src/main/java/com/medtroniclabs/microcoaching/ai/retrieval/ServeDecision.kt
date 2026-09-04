@@ -81,6 +81,13 @@ object ServeDecision {
         val denseCos: Float? = null,
         /** True when [denseCos] reaches the tuned floor — semantic agreement strong enough to serve on. */
         val denseAgrees: Boolean = false,
+        /**
+         * True for the one candidate whose cosine both clears
+         * [ServeTuning.cosDominantFloor] and leads the runner-up by
+         * [ServeTuning.cosDominantMargin] — semantic agreement clear enough to
+         * outrank authored title/hint overlap rather than merely break its ties.
+         */
+        val denseDominant: Boolean = false,
     ) {
         /**
          * A question that names a subject must be answered by a card about that
@@ -110,7 +117,8 @@ object ServeDecision {
                 (if (populationVeto) " POPULATION-VETO" else "") +
                 (if (isStubBody) " stub" else "") +
                 (if (referralBoost != 0) " referral=+$referralBoost" else "") +
-                (denseCos?.let { " cos=${"%.2f".format(Locale.US, it)}" } ?: "")
+                (denseCos?.let { " cos=${"%.2f".format(Locale.US, it)}" } ?: "") +
+                (if (denseDominant) " cos-dominant" else "")
     }
 
     /**
@@ -241,7 +249,7 @@ object ServeDecision {
                 hit, queryTokens, queryGazetteer, queryConcepts, queryPopulations, referralIntent,
                 cosFloor = tuning.cosFloor,
             )
-        }
+        }.let { stampDominance(it, tuning) }
         val byChunk = evidences.associateBy { it.chunkId }
 
         val servable = hits.filter { byChunk.getValue(it.chunkId).servable }
@@ -272,11 +280,17 @@ object ServeDecision {
         }.ifEmpty { listOf(servable.first()) }
         val chosen = band.maxWithOrNull(
             compareBy(
+                // A card the encoder puts far ahead of every rival answers the question
+                // even when a different card repeats more of its words: authored hints
+                // reward vocabulary overlap, which is exactly what a paraphrased
+                // question lacks. Narrow by construction — at most one hit per turn
+                // clears the dominance floor and margin, so nothing else reorders.
+                { byChunk.getValue(it.chunkId).denseDominant },
                 { byChunk.getValue(it.chunkId).topicTermCount > 0 },
                 { byChunk.getValue(it.chunkId).titleHintOverlap + byChunk.getValue(it.chunkId).referralBoost },
                 { byChunk.getValue(it.chunkId).conditionTerms.size + byChunk.getValue(it.chunkId).sharedConcepts.size },
-                // Semantic agreement breaks ties among lexically comparable candidates,
-                // below explicit topic evidence and above raw score.
+                // Agreement short of dominance still breaks ties among lexically
+                // comparable candidates, below explicit topic evidence and above score.
                 { byChunk.getValue(it.chunkId).denseAgrees },
                 { !byChunk.getValue(it.chunkId).isStubBody },
                 { it.score },
@@ -302,6 +316,30 @@ object ServeDecision {
     }
 
     // ── evidence computation ──────────────────────────────────────────────────
+
+    /**
+     * Marks the leading cosine as dominant when it clears
+     * [ServeTuning.cosDominantFloor] and leads the runner-up by
+     * [ServeTuning.cosDominantMargin].
+     *
+     * Dominance is a property of the candidate set, not of one hit, so it is resolved
+     * here rather than in [evidenceFor]. A single cosine among the candidates has no
+     * runner-up to beat and is judged on the floor alone. Candidates without a vector
+     * carry no cosine, so on every BM25-only path this returns the list untouched.
+     */
+    private fun stampDominance(evidences: List<Evidence>, tuning: ServeTuning): List<Evidence> {
+        val ranked = evidences
+            .filter { it.denseCos != null }
+            .sortedByDescending { it.denseCos }
+        val leader = ranked.firstOrNull() ?: return evidences
+        val leaderCos = leader.denseCos ?: return evidences
+        if (leaderCos < tuning.cosDominantFloor) return evidences
+        val runnerUpCos = ranked.getOrNull(1)?.denseCos ?: 0f
+        if (leaderCos - runnerUpCos < tuning.cosDominantMargin) return evidences
+        return evidences.map {
+            if (it.chunkId == leader.chunkId) it.copy(denseDominant = true) else it
+        }
+    }
 
     private fun evidenceFor(
         hit: GroundingChunk,

@@ -18,9 +18,13 @@ interface CardEmbeddingDao {
     @Query("SELECT COUNT(*) FROM card_embedding")
     suspend fun count(): Int
 
-    /** Vectors from a different encoder cannot match on-device query vectors — drop them. */
-    @Query("DELETE FROM card_embedding WHERE model_id IS NOT :modelId")
-    suspend fun clearOtherModels(modelId: String)
+    /**
+     * The encoder the stored vectors came from, or null when no row names one.
+     * Rows are written one bundle at a time and the whole table is cleared whenever
+     * the bundle's model changes, so any row's id speaks for all of them.
+     */
+    @Query("SELECT model_id FROM card_embedding WHERE model_id IS NOT NULL LIMIT 1")
+    suspend fun anyModelId(): String?
 
     @Query("DELETE FROM card_embedding")
     suspend fun clear()

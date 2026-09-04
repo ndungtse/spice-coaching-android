@@ -119,7 +119,11 @@ class InboundSyncWorker(
         if (config.enableDenseRetrieval) {
             val embeddingsResult = syncApi.pullCardEmbeddings(syncPrefs.cardEmbeddingsWatermark)
             if (embeddingsResult.success) {
-                embeddingsResult.newWatermark?.let { syncPrefs.cardEmbeddingsWatermark = it }
+                if (embeddingsResult.resetWatermark) {
+                    syncPrefs.cardEmbeddingsWatermark = null
+                } else {
+                    embeddingsResult.newWatermark?.let { syncPrefs.cardEmbeddingsWatermark = it }
+                }
             } else {
                 Log.w(TAG, "Card-embeddings sync failed (non-fatal): ${embeddingsResult.error}")
             }

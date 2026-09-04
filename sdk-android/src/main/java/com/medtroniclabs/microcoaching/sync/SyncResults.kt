@@ -140,6 +140,11 @@ data class CardEmbeddingsResult(
     val upserted: Int = 0,
     val dropped: Int = 0,
     val newWatermark: String? = null,
+    /**
+     * The encoder changed and the stale vectors were dropped: the caller must send the
+     * watermark back to the epoch so the next pull refills the table in the new space.
+     */
+    val resetWatermark: Boolean = false,
     override val error: String? = null,
     override val errorKind: SyncErrorKind? = null,
 ) : SyncResult {

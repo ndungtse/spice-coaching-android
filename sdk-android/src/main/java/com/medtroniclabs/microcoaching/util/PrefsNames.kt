@@ -22,6 +22,7 @@ internal object PrefsNames {
     /** Shared intentionally by ModelManager and ModelDownloadWorker to coordinate download state. */
     const val MODEL = "microcoaching_model_prefs"
     const val STT = "microcoaching_stt_prefs"
+    const val EMBED = "microcoaching_embed_prefs"
 
     // ⚠️ Collision — see class doc. Same value on purpose until a migration lands.
     const val ONBOARDING = "mc_coaching_prefs"

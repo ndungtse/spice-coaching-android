@@ -339,4 +339,88 @@ class ServeDecisionTest {
         )
         assertTrue(d is ServeDecision.Decision.Serve)
     }
+
+    // ── dense dominance outranks hint density ────────────────────────────────
+    // The device case these pin: the correct danger-signs card was dense rank-1 at
+    // cos 0.69 while a low-birth-weight card at 0.59 repeated more of the question's
+    // authored hints and won the comparator. Dominance is deliberately narrow — a
+    // clear cosine lead, not mere agreement — because hint density is right far more
+    // often than it is wrong.
+
+    /** Repeats the question's words in its authored hints, so it outscores on title/hint overlap. */
+    private fun hintDenseRival(denseCos: Float?) = chunk(
+        "কম ওজনের নবজাতকের যত্ন",
+        "কম ওজনের নবজাতককে উষ্ণ রাখতে হবে এবং বিপদ দেখা দিলে দ্রুত রেফার করতে হবে",
+        score = 100f,
+        family = "fam-rival",
+        questionsBn = listOf("নবজাতকের বিপদ হলে কখন রেফার করতে হবে"),
+        denseCos = denseCos,
+    )
+
+    /** The card that actually answers the question, with thinner authored hints. */
+    private fun semanticMatch(denseCos: Float?) = chunk(
+        "নবজাতকের বিপদচিহ্ন",
+        "নবজাতকের বিপদচিহ্ন দেখা দিলে দেরি না করে নিকটস্থ হাসপাতালে পাঠাতে হবে",
+        score = 90f,
+        family = "fam-danger",
+        denseCos = denseCos,
+    )
+
+    private val dangerQuery = "নবজাতকের বিপদজনক লক্ষণ কি কি এবং কখন রেফার করতে হবে"
+
+    @Test
+    fun `a dominant cosine outranks a hint-dense rival`() {
+        val rival = hintDenseRival(denseCos = 0.59f)
+        val match = semanticMatch(denseCos = 0.69f)
+        val d = decide(dangerQuery, listOf(rival, match))
+        assertTrue(d is ServeDecision.Decision.Serve)
+        assertEquals(match.chunkId, (d as ServeDecision.Decision.Serve).hit.chunkId)
+    }
+
+    @Test
+    fun `a cosine below the dominance floor leaves hint density in charge`() {
+        val rival = hintDenseRival(denseCos = 0.52f)
+        val match = semanticMatch(denseCos = 0.62f)
+        val d = decide(dangerQuery, listOf(rival, match))
+        assertTrue(d is ServeDecision.Decision.Serve)
+        assertEquals(rival.chunkId, (d as ServeDecision.Decision.Serve).hit.chunkId)
+    }
+
+    @Test
+    fun `dense dominance needs a margin over the runner-up`() {
+        val rival = hintDenseRival(denseCos = 0.68f)
+        val match = semanticMatch(denseCos = 0.69f)
+        val d = decide(dangerQuery, listOf(rival, match))
+        assertTrue(d is ServeDecision.Decision.Serve)
+        assertEquals(rival.chunkId, (d as ServeDecision.Decision.Serve).hit.chunkId)
+    }
+
+    @Test
+    fun `a lone dominant cosine wins with no runner-up to beat`() {
+        val rival = hintDenseRival(denseCos = null)
+        val match = semanticMatch(denseCos = 0.69f)
+        val d = decide(dangerQuery, listOf(rival, match))
+        assertTrue(d is ServeDecision.Decision.Serve)
+        assertEquals(match.chunkId, (d as ServeDecision.Decision.Serve).hit.chunkId)
+    }
+
+    @Test
+    fun `population veto beats dense dominance`() {
+        val vetoed = chunk(
+            "গর্ভকালীন রক্তচাপ: অস্বাভাবিক হলে করণীয়",
+            "গর্ভবতী মায়ের রক্তচাপ অস্বাভাবিক হলে রেফার করুন এবং পরামর্শ দিন",
+            denseCos = 0.95f,
+        )
+        val d = decide("সেবাগ্রহীতার রক্তচাপ বেশি পেলে কি করব", listOf(vetoed))
+        assertTrue(d is ServeDecision.Decision.Refuse)
+    }
+
+    @Test
+    fun `dominance never fires without cosines so bm25-only ranking is untouched`() {
+        val rival = hintDenseRival(denseCos = null)
+        val match = semanticMatch(denseCos = null)
+        val d = decide(dangerQuery, listOf(rival, match))
+        assertTrue(d is ServeDecision.Decision.Serve)
+        assertEquals(rival.chunkId, (d as ServeDecision.Decision.Serve).hit.chunkId)
+    }
 }

@@ -2,6 +2,8 @@ package com.medtroniclabs.microcoaching.ai.inference
 
 import android.content.Context
 import android.util.Log
+import com.medtroniclabs.microcoaching.ai.embedding.EncoderModel
+import com.medtroniclabs.microcoaching.ai.embedding.LiteRtQueryEmbedder
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -70,17 +72,30 @@ internal class FixtureFileQueryEmbedder(context: Context) : QueryEmbedder {
 }
 
 /**
- * Picks the query embedder for this device, or null when dense retrieval cannot
- * run (the flag is off, or no encoder is present). The production on-device
- * encoder (EmbeddingGemma-300m via LiteRT — `litert-community/embeddinggemma-300m`,
- * `…seq1024_mixed-precision.tflite` + `sentencepiece.model`) plugs in here ahead
- * of the fixture once integrated.
+ * Picks the query embedder for this device, or null when dense retrieval cannot run
+ * (the flag is off, or neither an encoder nor a fixture is present).
+ *
+ * The downloaded EmbeddingGemma encoder wins when its files are on disk. The fixture
+ * comes second so a device audit can still replay precomputed vectors — dropping the
+ * fixture into `filesDir` overrides nothing, it only fills a gap.
  */
 internal object QueryEmbedders {
     fun resolve(context: Context, enableDenseRetrieval: Boolean): QueryEmbedder? {
         if (!enableDenseRetrieval) return null
+        val encoderDir = File(context.getExternalFilesDir(null), EncoderModel.DIR_NAME)
+        val encoder = LiteRtQueryEmbedder(encoderDir)
+        if (encoder.isAvailable) {
+            Log.i(TAG_RESOLVE, "dense query encoder: LiteRT EmbeddingGemma at $encoderDir")
+            return encoder
+        }
         val fixture = FixtureFileQueryEmbedder(context)
-        if (fixture.isAvailable) return fixture
+        if (fixture.isAvailable) {
+            Log.i(TAG_RESOLVE, "dense query encoder: precomputed fixture (no model on disk)")
+            return fixture
+        }
+        Log.i(TAG_RESOLVE, "dense query encoder: none — missing ${EncoderModel.missingFiles(encoderDir)}")
         return null
     }
+
+    private const val TAG_RESOLVE = "QueryEmbedders"
 }

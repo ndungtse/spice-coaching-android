@@ -29,20 +29,34 @@ suspend fun SyncApi.pullCardEmbeddings(sinceWatermark: String?): CardEmbeddingsR
         },
         onSuccess = { bundle ->
             val now = System.currentTimeMillis()
+            val dao = db.cardEmbeddingDao()
+            val encoderChanged = shouldDiscardStaleVectors(
+                storedModelId = dao.anyModelId(),
+                bundleModelId = bundle.modelId,
+                storedRows = dao.count(),
+            )
+            if (encoderChanged) {
+                Log.w(TAG, "Card embeddings: encoder changed to ${bundle.modelId} — clearing stale vectors")
+                dao.clear()
+            }
             val rows = bundle.cards.mapNotNull { it.toEntity(bundle.embeddingDimension, bundle.modelId, now) }
             val dropped = bundle.cards.size - rows.size
             if (rows.isNotEmpty()) {
-                db.cardEmbeddingDao().upsertAll(rows)
+                dao.upsertAll(rows)
             }
             Log.i(
                 TAG,
                 "Card embeddings sync OK: upserted=${rows.size} dropped=$dropped " +
-                    "dim=${bundle.embeddingDimension} total=${db.cardEmbeddingDao().count()}",
+                    "dim=${bundle.embeddingDimension} total=${dao.count()}",
             )
             CardEmbeddingsResult(
                 upserted = rows.size,
                 dropped = dropped,
-                newWatermark = bundle.serverTimeUtc,
+                // A delta pull only carries the cards that changed, so after a clear the
+                // table holds this bundle alone. Refusing the new watermark sends the next
+                // sync back to the epoch, which refills the rest in the new encoder's space.
+                newWatermark = bundle.serverTimeUtc.takeUnless { encoderChanged },
+                resetWatermark = encoderChanged,
             )
         },
         onFailure = { error, kind -> CardEmbeddingsResult(error = error, errorKind = kind) },
@@ -68,4 +82,24 @@ internal fun CardEmbeddingDto.toEntity(
         vec = embedding.toFloatArray().l2Normalized().toLeBytes(),
         syncedAtMs = nowMs,
     )
+}
+
+/**
+ * Whether the stored vectors must be thrown away because they came from a different
+ * encoder than the incoming bundle.
+ *
+ * Two encoders produce unrelated vector spaces, so a cosine across them is not a
+ * degraded similarity but a meaningless number — mixing them is worse than having no
+ * dense index, which simply degrades chat to BM25-only. Stored rows that name no
+ * model are of unknown provenance and go the same way once a bundle does name one.
+ * A bundle that names nothing (today's backend) proves nothing and condemns nothing.
+ */
+internal fun shouldDiscardStaleVectors(
+    storedModelId: String?,
+    bundleModelId: String?,
+    storedRows: Int = 1,
+): Boolean {
+    val incoming = bundleModelId?.takeIf { it.isNotBlank() } ?: return false
+    if (storedRows == 0) return false
+    return storedModelId != incoming
 }
