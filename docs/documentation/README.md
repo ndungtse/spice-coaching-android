@@ -186,5 +186,3 @@ Full detail: [03 — UI Embedding](./03-ui-embedding.md).
 - [docs/gaps/GAP_DETECTION_SDK.md](../gaps/GAP_DETECTION_SDK.md) — gap-detection rule model.
 - [references/chat.md](../references/chat.md) — how the chat works under the hood (pipeline, retrieval, guardrails, voice).
 - [sdk-android-sherpa/README.md](../../sdk-android-sherpa/README.md) — offline STT module.
-
-> **Note:** `docs/SDK_SPICE_SETUP.md` is an earlier setup note and is **superseded** by this guide (it predates the Maven-Local consumption model and the current API). Prefer the docs here.
