@@ -30,6 +30,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.medtroniclabs.microcoaching.R
+import com.medtroniclabs.microcoaching.ai.model.DownloadPhase
 import com.medtroniclabs.microcoaching.domain.decision.AnswerMode
 import com.medtroniclabs.microcoaching.ui.theme.CoachingTheme
 
@@ -190,22 +191,34 @@ private fun DownloadControls(
 @Composable
 private fun UpgradeProgressRow(modelDownload: DownloadItemUiState) {
     val percent = modelDownload.progressPercentOrNull()
+    // One bar spans both artifacts, so only the wording changes when the language model
+    // finishes and the encoder starts. Naming what is arriving is what stops the second
+    // phase reading as the first one having stalled near the end.
+    val embeddings = modelDownload.downloadPhase() == DownloadPhase.EMBEDDINGS
     val label = when (modelDownload) {
         is DownloadItemUiState.WaitingForNetwork -> stringResource(
-            if (modelDownload.wifiOnly) {
-                R.string.chat_mode_bar_upgrade_waiting_wifi
-            } else {
-                R.string.chat_mode_bar_upgrade_waiting_network
+            when {
+                modelDownload.wifiOnly && embeddings -> R.string.chat_mode_bar_search_waiting_wifi
+                modelDownload.wifiOnly -> R.string.chat_mode_bar_upgrade_waiting_wifi
+                embeddings -> R.string.chat_mode_bar_search_waiting_network
+                else -> R.string.chat_mode_bar_upgrade_waiting_network
             },
         )
-        is DownloadItemUiState.Paused ->
-            stringResource(R.string.chat_mode_bar_upgrade_paused, percent ?: 0)
+        is DownloadItemUiState.Paused -> stringResource(
+            if (embeddings) R.string.chat_mode_bar_search_paused else R.string.chat_mode_bar_upgrade_paused,
+            percent ?: 0,
+        )
         is DownloadItemUiState.Preparing ->
             stringResource(R.string.chat_mode_bar_upgrade_preparing)
         else -> if (percent != null) {
-            stringResource(R.string.chat_mode_bar_upgrade_progress, percent)
+            stringResource(
+                if (embeddings) R.string.chat_mode_bar_search_progress else R.string.chat_mode_bar_upgrade_progress,
+                percent,
+            )
         } else {
-            stringResource(R.string.chat_mode_bar_upgrade_preparing)
+            stringResource(
+                if (embeddings) R.string.chat_mode_bar_search_preparing else R.string.chat_mode_bar_upgrade_preparing,
+            )
         }
     }
     Text(
@@ -244,6 +257,19 @@ internal fun DownloadItemUiState.isModelTransferInFlight(): Boolean = when (this
     is DownloadItemUiState.Done,
     is DownloadItemUiState.Failed,
     is DownloadItemUiState.Unusable -> false
+}
+
+/**
+ * Which artifact the bar is currently reporting on.
+ *
+ * States that carry no phase are the ones that only happen before the first artifact
+ * starts, so the language model is the honest answer for them.
+ */
+internal fun DownloadItemUiState.downloadPhase(): DownloadPhase = when (this) {
+    is DownloadItemUiState.Downloading -> phase
+    is DownloadItemUiState.Paused -> phase
+    is DownloadItemUiState.WaitingForNetwork -> phase
+    else -> DownloadPhase.LANGUAGE_MODEL
 }
 
 /** Progress as a percentage, or null when no meaningful figure is available yet. */

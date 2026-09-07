@@ -686,6 +686,13 @@
     <string name="chat_mode_bar_upgrade_paused">Adding simple words · paused at %1$d%%</string>
     <string name="chat_mode_bar_upgrade_waiting_wifi">Adding simple words · waiting for Wi-Fi</string>
     <string name="chat_mode_bar_upgrade_waiting_network">Adding simple words · waiting for internet</string>
+    <!-- Second phase of the "simple words" download: the retrieval encoder. Named for
+         what it does for the CHW rather than what it is, matching the phase-one wording. -->
+    <string name="chat_mode_bar_search_progress">Adding smarter search · %1$d%%</string>
+    <string name="chat_mode_bar_search_preparing">Adding smarter search · starting…</string>
+    <string name="chat_mode_bar_search_paused">Adding smarter search · paused at %1$d%%</string>
+    <string name="chat_mode_bar_search_waiting_wifi">Adding smarter search · waiting for Wi-Fi</string>
+    <string name="chat_mode_bar_search_waiting_network">Adding smarter search · waiting for internet</string>
 
     <string name="answering_sheet_title">How answers are found</string>
     <string name="answering_sheet_online_title">Online</string>

@@ -1,5 +1,6 @@
 package com.medtroniclabs.microcoaching.ui.screens.components
 
+import com.medtroniclabs.microcoaching.ai.model.DownloadPhase
 import com.medtroniclabs.microcoaching.ai.model.ModelState
 import com.medtroniclabs.microcoaching.ai.voice.stt.SttModelState
 
@@ -29,6 +30,7 @@ sealed class DownloadItemUiState {
     data class WaitingForNetwork(
         val progressPercent: Int = -1,
         val wifiOnly: Boolean = false,
+        val phase: DownloadPhase = DownloadPhase.LANGUAGE_MODEL,
     ) : DownloadItemUiState()
 
     /**
@@ -37,18 +39,24 @@ sealed class DownloadItemUiState {
      * @param progressPercent 0–100 once `Content-Length` is known, -1 while preparing.
      * @param bytesDownloaded received so far (0 until first emit).
      * @param totalBytes expected total, or 0 if the server hasn't reported it yet.
+     * @param phase which artifact is moving. The figures above span the whole download, so
+     *   this is what the label is chosen from.
      */
     data class Downloading(
         val progressPercent: Int,
         val bytesDownloaded: Long = 0L,
         val totalBytes: Long = 0L,
+        val phase: DownloadPhase = DownloadPhase.LANGUAGE_MODEL,
     ) : DownloadItemUiState()
 
     /** Post-download archive extraction (sherpa STT model only). */
     object Extracting : DownloadItemUiState()
 
     /** User paused — partial bytes are preserved on disk; show a Resume button. */
-    data class Paused(val progressPercent: Int) : DownloadItemUiState()
+    data class Paused(
+        val progressPercent: Int,
+        val phase: DownloadPhase = DownloadPhase.LANGUAGE_MODEL,
+    ) : DownloadItemUiState()
 
     /** Files are on disk and the engine accepts them. */
     object Done : DownloadItemUiState()
@@ -88,7 +96,7 @@ fun ModelState.toAiDownloadItemState(damagedReason: String = ""): DownloadItemUi
     when (this) {
         is ModelState.Idle -> DownloadItemUiState.Idle
         is ModelState.WaitingForNetwork ->
-            DownloadItemUiState.WaitingForNetwork(progressPercent, wifiOnly)
+            DownloadItemUiState.WaitingForNetwork(progressPercent, wifiOnly, phase)
         is ModelState.Downloading ->
             if (progressPercent < 0) {
                 DownloadItemUiState.Preparing
@@ -97,9 +105,10 @@ fun ModelState.toAiDownloadItemState(damagedReason: String = ""): DownloadItemUi
                     progressPercent = progressPercent.coerceAtLeast(0),
                     bytesDownloaded = bytesDownloaded,
                     totalBytes = totalBytes,
+                    phase = phase,
                 )
             }
-        is ModelState.Paused -> DownloadItemUiState.Paused(progressPercent.coerceAtLeast(0))
+        is ModelState.Paused -> DownloadItemUiState.Paused(progressPercent.coerceAtLeast(0), phase)
         is ModelState.Ready -> DownloadItemUiState.Done
         is ModelState.DownloadFailed -> DownloadItemUiState.Failed(reason)
         // The bytes are wrong, which no retry of the load can fix — reported as damaged with

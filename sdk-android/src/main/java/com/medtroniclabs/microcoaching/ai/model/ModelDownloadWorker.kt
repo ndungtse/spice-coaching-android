@@ -51,6 +51,15 @@ class ModelDownloadWorker(
     /** Last `Content-Length` handed to [recordObservedSize]; dedupes the preference write. */
     private var lastRecordedTotalBytes: Long = 0L
 
+    /** Sum of every artifact in the plan — the denominator of the single progress bar. */
+    private var planTotalBytes: Long = 0L
+
+    /** Bytes belonging to artifacts already finished or skipped this run. */
+    private var completedBytes: Long = 0L
+
+    /** Artifact currently transferring; chooses the label under the bar. */
+    private var currentPhase: DownloadPhase = DownloadPhase.LANGUAGE_MODEL
+
     override suspend fun getForegroundInfo(): ForegroundInfo =
         buildForegroundInfo(progress = 0, bytesDownloaded = 0L, totalBytes = 0L)
 
@@ -74,7 +83,14 @@ class ModelDownloadWorker(
             ?.let { ModelCatalog.byId(it) }
             ?: ModelCatalog.default()
 
-        Log.i(TAG, "doWork start — providers=${providers.map { it::class.simpleName }}, model=${variant.id} (${variant.fileName})")
+        val includeEncoder = inputData.getBoolean(KEY_INCLUDE_ENCODER, false)
+        val plan = DownloadPlan.artifacts(variant, includeEncoder)
+
+        Log.i(
+            TAG,
+            "doWork start — providers=${providers.map { it::class.simpleName }}, model=${variant.id} " +
+                "(${variant.fileName}), artifacts=${plan.size}, encoder=$includeEncoder",
+        )
         logNetworkSnapshot("doWork")
 
         val outputDir = applicationContext.getExternalFilesDir(null)
@@ -83,12 +99,88 @@ class ModelDownloadWorker(
                 return Result.failure(workDataOf(KEY_ERROR to "External storage unavailable"))
             }
 
-        val errors = mutableListOf<String>()
+        // One progress track across every artifact, so the percentage does not restart
+        // when the language model finishes and the encoder begins. Artifacts already at
+        // their expected length still count towards the total — the bar has to read 40%
+        // when 40% of what the user agreed to is on disk, not 0% of what is left.
+        planTotalBytes = DownloadPlan.totalBytes(plan)
+        completedBytes = 0L
 
+        var languageModelFile: File? = null
+        var encoderError: String? = null
+
+        for (artifact in plan) {
+            currentPhase = artifact.phase
+            val target = DownloadPlan.fileFor(outputDir, artifact)
+
+            if (target.length() == artifact.expectedBytes) {
+                Log.i(TAG, "Already present, skipping: ${artifact.fileName}")
+                completedBytes += artifact.expectedBytes
+                if (artifact.phase == DownloadPhase.LANGUAGE_MODEL) languageModelFile = target
+                continue
+            }
+
+            when (val outcome = fetch(artifact, target, variant, providers)) {
+                is DownloadOutcome.Success -> {
+                    Log.i(
+                        TAG,
+                        "Downloaded ${artifact.fileName} " +
+                            "(${outcome.file.length()} bytes, expected ${artifact.expectedBytes})",
+                    )
+                    completedBytes += artifact.expectedBytes
+                    if (artifact.phase == DownloadPhase.LANGUAGE_MODEL) {
+                        languageModelFile = outcome.file
+                        // Persist before the encoder phase begins so a worker that dies
+                        // partway still leaves a usable language model behind for
+                        // ModelManager.reconcileReadyState() on the next process start.
+                        persistLanguageModelReady(outcome.file)
+                    }
+                }
+                is DownloadOutcome.Failure -> {
+                    if (artifact.phase == DownloadPhase.LANGUAGE_MODEL) {
+                        Log.e(TAG, "Language model failed: ${outcome.reason}")
+                        return Result.failure(workDataOf(KEY_ERROR to outcome.reason))
+                    }
+                    // The encoder is an improvement to retrieval, not the capability the
+                    // user asked for. Losing it must not strand a language model that has
+                    // already arrived, so the work succeeds and dense retrieval stays off.
+                    Log.w(TAG, "Encoder artifact ${artifact.fileName} failed: ${outcome.reason}")
+                    encoderError = "${artifact.fileName}: ${outcome.reason}"
+                    break
+                }
+            }
+        }
+
+        val modelFile = languageModelFile
+            ?: return Result.failure(workDataOf(KEY_ERROR to "Language model missing after download"))
+
+        return Result.success(
+            workDataOf(
+                KEY_PROGRESS to 100,
+                KEY_FILE_PATH to modelFile.absolutePath,
+                KEY_ENCODER_ERROR to encoderError,
+            ),
+        )
+    }
+
+    /**
+     * Fetches one artifact. The language model walks the provider fallback chain; the
+     * encoder goes straight to Hugging Face, which is the only place it exists.
+     */
+    private suspend fun fetch(
+        artifact: DownloadArtifact,
+        target: File,
+        variant: ModelVariant,
+        providers: List<ModelProvider>,
+    ): DownloadOutcome {
+        target.parentFile?.mkdirs()
+        if (!artifact.useProviderChain) return tryEncoderArtifact(artifact, target)
+
+        val outputDir = target.parentFile ?: return DownloadOutcome.Failure("No parent directory")
+        val errors = mutableListOf<String>()
         for (provider in providers) {
             val providerName = provider::class.simpleName ?: "Unknown"
             Log.i(TAG, "Attempting download from provider: $providerName")
-
             val outcome = when (provider) {
                 ModelProvider.Backend -> tryBackend(outputDir, variant)
                 ModelProvider.HuggingFace -> tryHuggingFace(outputDir, variant)
@@ -97,32 +189,8 @@ class ModelDownloadWorker(
                     DownloadOutcome.Failure("Kaggle provider not yet supported")
                 }
             }
-
             when (outcome) {
-                is DownloadOutcome.Success -> {
-                    // Exact bytes, not MB — a short file can round to the expected megabytes.
-                    Log.i(
-                        TAG,
-                        "Download complete via $providerName → ${outcome.file.name} " +
-                            "(${outcome.file.length()} bytes, expected ${variant.sizeInBytes})",
-                    )
-                    // Persist the ready flag before returning so ModelManager.reconcileReadyState()
-                    // on the next process start can emit Ready immediately even if the WorkInfo
-                    // SUCCEEDED event was never observed by a live ModelManager (e.g. worker
-                    // finished while the app was killed).
-                    applicationContext
-                        .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                        .edit()
-                        .putBoolean(KEY_MODEL_READY, true)
-                        .putString(KEY_MODEL_PATH, outcome.file.absolutePath)
-                        .apply()
-                    return Result.success(
-                        workDataOf(
-                            KEY_PROGRESS to 100,
-                            KEY_FILE_PATH to outcome.file.absolutePath,
-                        )
-                    )
-                }
+                is DownloadOutcome.Success -> return outcome
                 is DownloadOutcome.Failure -> {
                     val msg = "[$providerName] ${outcome.reason}"
                     Log.w(TAG, "$msg — trying next provider")
@@ -130,10 +198,63 @@ class ModelDownloadWorker(
                 }
             }
         }
+        return DownloadOutcome.Failure(errors.joinToString(" | "))
+    }
 
-        val combinedError = errors.joinToString(" | ")
-        Log.e(TAG, "All providers failed: $combinedError")
-        return Result.failure(workDataOf(KEY_ERROR to combinedError))
+    /**
+     * Hugging Face fetch for an encoder artifact. Unlike the language model this has no
+     * catalog entry, no host URL override and no structural validator — a `.tflite` has
+     * nothing inside it that proves the transfer finished, so the exact length recorded in
+     * [DownloadPlan] is the completeness check, applied by the caller.
+     */
+    private suspend fun tryEncoderArtifact(
+        artifact: DownloadArtifact,
+        target: File,
+    ): DownloadOutcome {
+        val token = inputData.getString(KEY_HF_TOKEN)
+            ?.takeIf { it.isNotBlank() }
+            ?: ModelProvider.DEFAULT_HF_TOKEN
+        if (token.isBlank() && artifact.requiresAccessToken) {
+            return DownloadOutcome.Failure("no Hugging Face token for gated ${artifact.fileName}")
+        }
+        val headers = if (token.isNotBlank()) mapOf("Authorization" to "Bearer $token") else emptyMap()
+
+        val result = ResumableHttpDownloader.download(
+            url = artifact.downloadUrl,
+            outputFile = target,
+            minValidBytes = (artifact.expectedBytes * ENCODER_SIZE_FLOOR_FRACTION).toLong(),
+            headers = headers,
+            logTag = TAG,
+        ) { _, bytesDownloaded, _ -> emitPlanProgress(bytesDownloaded) }
+
+        return when (result) {
+            is DownloadResult.Success ->
+                if (target.length() == artifact.expectedBytes) {
+                    DownloadOutcome.Success(target)
+                } else {
+                    // Wrong length means the artifact upstream is not the one the plan
+                    // describes. Drop it so the next attempt starts clean instead of
+                    // resuming onto a mismatch.
+                    target.delete()
+                    DownloadOutcome.Failure(
+                        "${artifact.fileName} arrived as ${target.length()} bytes, expected ${artifact.expectedBytes}",
+                    )
+                }
+            is DownloadResult.Failure -> DownloadOutcome.Failure(result.reason)
+        }
+    }
+
+    /**
+     * Records the language model as usable. Written before the encoder phase so a worker
+     * killed mid-encoder still leaves "simple words" recoverable on the next start.
+     */
+    private fun persistLanguageModelReady(file: File) {
+        applicationContext
+            .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_MODEL_READY, true)
+            .putString(KEY_MODEL_PATH, file.absolutePath)
+            .apply()
     }
 
     // ── Backend provider ──────────────────────────────────────────────────────
@@ -291,9 +412,9 @@ class ModelDownloadWorker(
             headers = headers,
             logTag = TAG,
             validate = validate,
-        ) { percent, bytesDownloaded, totalBytes ->
+        ) { _, bytesDownloaded, totalBytes ->
             recordObservedSize(variant, totalBytes)
-            emitProgress(percent, bytesDownloaded, totalBytes)
+            emitPlanProgress(bytesDownloaded)
         }
     ) {
         is DownloadResult.Success -> DownloadOutcome.Success(outputFile)
@@ -349,6 +470,7 @@ class ModelDownloadWorker(
                 KEY_PROGRESS to percent,
                 KEY_BYTES_DOWNLOADED to bytesDownloaded,
                 KEY_TOTAL_BYTES to totalBytes,
+                KEY_PHASE to currentPhase.name,
             )
         )
         runCatching {
@@ -356,6 +478,24 @@ class ModelDownloadWorker(
         }.onFailure {
             Log.w(TAG, "setForeground progress update failed: ${it.message}")
         }
+    }
+
+    /**
+     * Reports [bytesInCurrentArtifact] as a position within the whole plan.
+     *
+     * The user agreed to one figure and watches one bar, so every artifact contributes to
+     * the same numerator and denominator. Capped at 99 for the same reason the underlying
+     * downloader caps: 100 belongs to the terminal success, not to the last byte of an
+     * intermediate file.
+     */
+    private suspend fun emitPlanProgress(bytesInCurrentArtifact: Long) {
+        val done = completedBytes + bytesInCurrentArtifact
+        val percent = if (planTotalBytes > 0L) {
+            ((done * 100L) / planTotalBytes).toInt().coerceIn(0, 99)
+        } else {
+            -1
+        }
+        emitProgress(percent, done, planTotalBytes)
     }
 
     // ── Internal result type ──────────────────────────────────────────────────
@@ -390,6 +530,8 @@ class ModelDownloadWorker(
         const val KEY_HF_TOKEN = "hf_token"
         /** [ModelCatalog] variant id selected by the host (see [MicroCoachingConfig.selectedModelId]). */
         const val KEY_MODEL_ID = "model_id"
+        /** Boolean. Whether the dense-retrieval encoder rides along with the language model. */
+        const val KEY_INCLUDE_ENCODER = "include_encoder"
 
         // ── WorkManager progress / output keys ────────────────────────────────
         /** Int 0–100. Reports 100 only on [androidx.work.WorkInfo.State.SUCCEEDED]. */
@@ -402,6 +544,20 @@ class ModelDownloadWorker(
         const val KEY_FILE_PATH = "file_path"
         /** Human-readable error string. Present only on failure. */
         const val KEY_ERROR = "error"
+        /** Name of the [DownloadPhase] currently transferring. Present during RUNNING. */
+        const val KEY_PHASE = "phase"
+        /**
+         * Why the encoder half did not arrive, on an otherwise successful download. Non-null
+         * means "simple words" works but dense retrieval stays off.
+         */
+        const val KEY_ENCODER_ERROR = "encoder_error"
+
+        /**
+         * Floor below which a finished encoder transfer is obviously not the artifact — an
+         * error page or a Git LFS pointer. The exact-length check in [tryEncoderArtifact]
+         * is what actually decides completeness.
+         */
+        private const val ENCODER_SIZE_FLOOR_FRACTION = 0.85
 
         // Mirrors ModelManager constants — kept here so the worker can persist the
         // ready flag without needing a back-reference to the manager instance.

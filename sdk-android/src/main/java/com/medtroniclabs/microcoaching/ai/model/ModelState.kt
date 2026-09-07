@@ -15,11 +15,15 @@ sealed class ModelState {
      * @param bytesDownloaded total bytes received so far (0 until the first progress emit).
      * @param totalBytes total bytes expected, or 0 if the server hasn't reported `Content-Length`
      *   yet (chunked transfer). UI consumers should fall back to an indeterminate display when this is 0.
+     * @param phase which artifact is moving. The figures above span the whole download, so
+     *   this is the only thing that changes when the language model finishes and the encoder
+     *   starts — it is what the label under the progress bar is chosen from.
      */
     data class Downloading(
         val progressPercent: Int,
         val bytesDownloaded: Long = 0L,
         val totalBytes: Long = 0L,
+        val phase: DownloadPhase = DownloadPhase.LANGUAGE_MODEL,
     ) : ModelState()
 
     /**
@@ -38,6 +42,7 @@ sealed class ModelState {
     data class WaitingForNetwork(
         val progressPercent: Int = -1,
         val wifiOnly: Boolean = false,
+        val phase: DownloadPhase = DownloadPhase.LANGUAGE_MODEL,
     ) : ModelState()
 
     /**
@@ -52,7 +57,10 @@ sealed class ModelState {
      * WorkManager job, which leaves a partial file next to a finished job — the same shape a
      * failed download leaves behind, and indistinguishable from it without the stored flag.
      */
-    data class Paused(val progressPercent: Int) : ModelState()
+    data class Paused(
+        val progressPercent: Int,
+        val phase: DownloadPhase = DownloadPhase.LANGUAGE_MODEL,
+    ) : ModelState()
 
     /** Download failed. */
     data class DownloadFailed(val reason: String) : ModelState()

@@ -632,6 +632,12 @@
     <string name="chat_mode_bar_upgrade_paused">সহজ ভাষা · %1$d%%-এ থেমে আছে</string>
     <string name="chat_mode_bar_upgrade_waiting_wifi">সহজ ভাষা · ওয়াই-ফাইয়ের অপেক্ষায়</string>
     <string name="chat_mode_bar_upgrade_waiting_network">সহজ ভাষা · ইন্টারনেটের অপেক্ষায়</string>
+    <!-- Second phase of the "simple words" download: the retrieval encoder. -->
+    <string name="chat_mode_bar_search_progress">উন্নত খোঁজা যোগ হচ্ছে · %1$d%%</string>
+    <string name="chat_mode_bar_search_preparing">উন্নত খোঁজা যোগ হচ্ছে · শুরু হচ্ছে…</string>
+    <string name="chat_mode_bar_search_paused">উন্নত খোঁজা · %1$d%%-এ থেমে আছে</string>
+    <string name="chat_mode_bar_search_waiting_wifi">উন্নত খোঁজা · ওয়াই-ফাইয়ের অপেক্ষায়</string>
+    <string name="chat_mode_bar_search_waiting_network">উন্নত খোঁজা · ইন্টারনেটের অপেক্ষায়</string>
 
     <string name="answering_sheet_title">উত্তর কীভাবে পাওয়া যায়</string>
     <string name="answering_sheet_online_title">অনলাইন</string>

@@ -520,12 +520,6 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
     private val modelManagerLazy = lazy { ModelManager(config) }
     private val sttModelManagerLazy = lazy { SttModelManager(config) }
 
-    /**
-     * Owns the dense-retrieval query encoder's files. Lazy and never touched unless
-     * `enableDenseRetrieval` is on, so a default build constructs nothing.
-     */
-    private val encoderModelManagerLazy =
-        lazy { com.medtroniclabs.microcoaching.ai.embedding.EncoderModelManager(config) }
 
     /** Lazy-initialized model lifecycle manager (download, verify, state). */
     val modelManager: ModelManager by modelManagerLazy
@@ -1083,10 +1077,6 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
             runCatching { modelManagerLazy.value.close() }
                 .onFailure { Log.w(TAG, "modelManager.close threw: ${it.message}") }
         }
-        if (encoderModelManagerLazy.isInitialized()) {
-            runCatching { encoderModelManagerLazy.value.close() }
-                .onFailure { Log.w(TAG, "encoderModelManager.close threw: ${it.message}") }
-        }
         if (sttModelManagerLazy.isInitialized()) {
             runCatching { sttModelManagerLazy.value.close() }
                 .onFailure { Log.w(TAG, "sttModelManager.close threw: ${it.message}") }
@@ -1213,7 +1203,7 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
         private var modelPath: String = ""
         private var modelDownloadStrategy: ModelDownloadStrategy = ModelDownloadStrategy.ON_FIRST_USE
         private var wifiOnlyModelDownload: Boolean = false
-        private var enableDenseRetrieval: Boolean = false
+        private var enableDenseRetrieval: Boolean = true
         private var modelProviders: List<ModelProvider> = ModelProvider.DEFAULT_ORDER
         private var huggingFaceToken: String = ""
         private var huggingFaceModelUrl: String = ""
@@ -1267,8 +1257,12 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
         fun wifiOnlyModelDownload(wifiOnly: Boolean) = apply { wifiOnlyModelDownload = wifiOnly }
 
         /**
-         * Opt into hybrid (BM25 + embedding) chat retrieval — vector sync, on-device
-         * query encoder, dense fusion. Default off: the chat pipeline stays BM25-only.
+         * Turn hybrid (BM25 + embedding) chat retrieval off — vector sync, the on-device
+         * query encoder, and dense fusion all go with it.
+         *
+         * On by default. The encoder is fetched as the second half of the "simple words"
+         * download, so a host that leaves this alone still costs nothing on a device whose
+         * user never enables the local model.
          */
         fun enableDenseRetrieval(enabled: Boolean) = apply { enableDenseRetrieval = enabled }
         /**
@@ -1502,13 +1496,6 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
                 sdk.localModelEnabled
             ) {
                 sdk.modelManager.scheduleDownloadIfNeeded()
-            }
-
-            // The query encoder is gated on its own flag, not on the LLM's consent or
-            // download strategy: it improves retrieval on the BM25-only tier too, where
-            // no LLM is ever downloaded. EncoderModelRule decides and logs why.
-            if (config.enableDenseRetrieval) {
-                sdk.encoderModelManagerLazy.value.scheduleDownloadIfNeeded()
             }
 
             return sdk

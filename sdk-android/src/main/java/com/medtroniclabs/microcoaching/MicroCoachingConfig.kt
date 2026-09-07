@@ -112,19 +112,21 @@ data class MicroCoachingConfig internal constructor(
 
     // ── Dense retrieval ───────────────────────────────────────────────────────
     /**
-     * Enables hybrid (BM25 + embedding) chat retrieval: syncs per-card embedding
-     * vectors from `/sync/card-embeddings`, downloads the on-device query encoder
-     * (~171 MB, capable device tiers only — see
-     * [com.medtroniclabs.microcoaching.ai.embedding.EncoderModelRule]), and fuses
-     * dense candidates into grounding selection.
+     * Enables hybrid (BM25 + embedding) chat retrieval: syncs per-card embedding vectors
+     * from `/sync/card-embeddings`, and fetches the on-device query encoder as the second
+     * half of the "simple words" download.
      *
-     * Off (default) keeps the pipeline byte-identical to BM25-only: no vector sync,
-     * no encoder download, and every dense evidence channel structurally unreachable
-     * because nothing sets a cosine. Degradation is likewise structural rather than
-     * conditional — missing vectors, a missing encoder, or a low-end device each leave
-     * chat on exactly the BM25 behaviour it has with the flag off.
+     * On by default, and a kill switch rather than an opt-in — what actually decides whether
+     * a device fetches the ~176 MB encoder is the user enabling the local model plus the
+     * 3 GB RAM tier ([com.medtroniclabs.microcoaching.ai.embedding.EncoderModelRule]). A
+     * device that never turns on "simple words" never downloads it.
+     *
+     * Turning it off keeps the pipeline byte-identical to BM25-only: no vector sync, no
+     * encoder, and every dense evidence channel structurally unreachable because nothing
+     * sets a cosine. Degradation is likewise structural — missing vectors, a missing encoder
+     * or a low-end device each leave chat on exactly that same behaviour.
      */
-    val enableDenseRetrieval: Boolean = false,
+    val enableDenseRetrieval: Boolean = true,
 
     // ── Model Download Providers ──────────────────────────────────────────────
     /**
