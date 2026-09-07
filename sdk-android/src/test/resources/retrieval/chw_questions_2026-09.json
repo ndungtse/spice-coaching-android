@@ -1,0 +1,624 @@
+[
+ {
+  "id": "n01_en",
+  "lang": "en",
+  "question": "A mother says her breasts feel hard, hot and painful and the baby cannot latch. What do I advise?",
+  "native_query": "মা বলছেন তার স্তন শক্ত, গরম ও ব্যথা করছে এবং বাচ্চা মুখে নিতে পারছে না। কী পরামর্শ দেব?",
+  "english_query": "A mother says her breasts feel hard, hot and painful and the baby cannot latch. What do I advise?",
+  "acceptable": [
+   "11200183:1",
+   "a6032a14:8",
+   "e41cd447:8"
+  ]
+ },
+ {
+  "id": "n01_bn",
+  "lang": "bn",
+  "question": "মা বলছেন তার স্তন শক্ত, গরম ও ব্যথা করছে এবং বাচ্চা মুখে নিতে পারছে না। কী পরামর্শ দেব?",
+  "native_query": "মা বলছেন তার স্তন শক্ত, গরম ও ব্যথা করছে এবং বাচ্চা মুখে নিতে পারছে না। কী পরামর্শ দেব?",
+  "english_query": "A mother says her breasts feel hard, hot and painful and the baby cannot latch. What do I advise?",
+  "acceptable": [
+   "11200183:1",
+   "a6032a14:8",
+   "e41cd447:8"
+  ]
+ },
+ {
+  "id": "n02_en",
+  "lang": "en",
+  "question": "The mother wants to throw away the thick yellow milk that comes in the first days. Is she right?",
+  "native_query": "প্রথম দিনগুলোতে যে ঘন হলুদ দুধ আসে মা সেটা ফেলে দিতে চাইছেন। এটা কি ঠিক?",
+  "english_query": "The mother wants to throw away the thick yellow milk that comes in the first days. Is she right?",
+  "acceptable": [
+   "e41cd447:0",
+   "e41cd447:2"
+  ]
+ },
+ {
+  "id": "n02_bn",
+  "lang": "bn",
+  "question": "প্রথম দিনগুলোতে যে ঘন হলুদ দুধ আসে মা সেটা ফেলে দিতে চাইছেন। এটা কি ঠিক?",
+  "native_query": "প্রথম দিনগুলোতে যে ঘন হলুদ দুধ আসে মা সেটা ফেলে দিতে চাইছেন। এটা কি ঠিক?",
+  "english_query": "The mother wants to throw away the thick yellow milk that comes in the first days. Is she right?",
+  "acceptable": [
+   "e41cd447:0",
+   "e41cd447:2"
+  ]
+ },
+ {
+  "id": "n03_en",
+  "lang": "en",
+  "question": "How soon after birth should the baby be put to the breast for the first time?",
+  "native_query": "জন্মের কতক্ষণের মধ্যে শিশুকে প্রথমবার বুকের দুধ খাওয়াতে হবে?",
+  "english_query": "How soon after birth should the baby be put to the breast for the first time?",
+  "acceptable": [
+   "e41cd447:1",
+   "5cec984f:1",
+   "d12af13b:1"
+  ]
+ },
+ {
+  "id": "n03_bn",
+  "lang": "bn",
+  "question": "জন্মের কতক্ষণের মধ্যে শিশুকে প্রথমবার বুকের দুধ খাওয়াতে হবে?",
+  "native_query": "জন্মের কতক্ষণের মধ্যে শিশুকে প্রথমবার বুকের দুধ খাওয়াতে হবে?",
+  "english_query": "How soon after birth should the baby be put to the breast for the first time?",
+  "acceptable": [
+   "e41cd447:1",
+   "5cec984f:1",
+   "d12af13b:1"
+  ]
+ },
+ {
+  "id": "n04_en",
+  "lang": "en",
+  "question": "The baby's cord stump looks red and gives off a bad smell. What should I do?",
+  "native_query": "বাচ্চার নাড়ি কাটার জায়গা লাল হয়ে গেছে আর দুর্গন্ধ বের হচ্ছে। কী করব?",
+  "english_query": "The baby's cord stump looks red and gives off a bad smell. What should I do?",
+  "acceptable": [
+   "5cec984f:2",
+   "d12af13b:2",
+   "812346ad:4"
+  ]
+ },
+ {
+  "id": "n04_bn",
+  "lang": "bn",
+  "question": "বাচ্চার নাড়ি কাটার জায়গা লাল হয়ে গেছে আর দুর্গন্ধ বের হচ্ছে। কী করব?",
+  "native_query": "বাচ্চার নাড়ি কাটার জায়গা লাল হয়ে গেছে আর দুর্গন্ধ বের হচ্ছে। কী করব?",
+  "english_query": "The baby's cord stump looks red and gives off a bad smell. What should I do?",
+  "acceptable": [
+   "5cec984f:2",
+   "d12af13b:2",
+   "812346ad:4"
+  ]
+ },
+ {
+  "id": "n05_en",
+  "lang": "en",
+  "question": "A baby was born weighing 2.1 kg. What extra care does he need?",
+  "native_query": "একটি শিশু ২.১ কেজি ওজন নিয়ে জন্মেছে। তার বাড়তি কী যত্ন দরকার?",
+  "english_query": "A baby was born weighing 2.1 kg. What extra care does he need?",
+  "acceptable": [
+   "d12af13b:5",
+   "d12af13b:6",
+   "5cec984f:5"
+  ]
+ },
+ {
+  "id": "n05_bn",
+  "lang": "bn",
+  "question": "একটি শিশু ২.১ কেজি ওজন নিয়ে জন্মেছে। তার বাড়তি কী যত্ন দরকার?",
+  "native_query": "একটি শিশু ২.১ কেজি ওজন নিয়ে জন্মেছে। তার বাড়তি কী যত্ন দরকার?",
+  "english_query": "A baby was born weighing 2.1 kg. What extra care does he need?",
+  "acceptable": [
+   "d12af13b:5",
+   "d12af13b:6",
+   "5cec984f:5"
+  ]
+ },
+ {
+  "id": "n06_en",
+  "lang": "en",
+  "question": "How exactly do I show a mother to carry her small baby against her chest?",
+  "native_query": "ছোট বাচ্চাকে বুকের সাথে লাগিয়ে রাখার পদ্ধতি মাকে কীভাবে দেখাব?",
+  "english_query": "How exactly do I show a mother to carry her small baby against her chest?",
+  "acceptable": [
+   "d12af13b:7",
+   "d12af13b:8"
+  ]
+ },
+ {
+  "id": "n06_bn",
+  "lang": "bn",
+  "question": "ছোট বাচ্চাকে বুকের সাথে লাগিয়ে রাখার পদ্ধতি মাকে কীভাবে দেখাব?",
+  "native_query": "ছোট বাচ্চাকে বুকের সাথে লাগিয়ে রাখার পদ্ধতি মাকে কীভাবে দেখাব?",
+  "english_query": "How exactly do I show a mother to carry her small baby against her chest?",
+  "acceptable": [
+   "d12af13b:7",
+   "d12af13b:8"
+  ]
+ },
+ {
+  "id": "n07_en",
+  "lang": "en",
+  "question": "For how many days and how many hours a day should that chest-to-chest care continue?",
+  "native_query": "ওই বুকের সাথে লাগিয়ে রাখার যত্ন কতদিন আর দিনে কত ঘণ্টা চালাতে হবে?",
+  "english_query": "For how many days and how many hours a day should that chest-to-chest care continue?",
+  "acceptable": [
+   "d12af13b:9"
+  ]
+ },
+ {
+  "id": "n07_bn",
+  "lang": "bn",
+  "question": "ওই বুকের সাথে লাগিয়ে রাখার যত্ন কতদিন আর দিনে কত ঘণ্টা চালাতে হবে?",
+  "native_query": "ওই বুকের সাথে লাগিয়ে রাখার যত্ন কতদিন আর দিনে কত ঘণ্টা চালাতে হবে?",
+  "english_query": "For how many days and how many hours a day should that chest-to-chest care continue?",
+  "acceptable": [
+   "d12af13b:9"
+  ]
+ },
+ {
+  "id": "n08_en",
+  "lang": "en",
+  "question": "Two days after delivery the mother is soaking a cloth with blood very quickly. What is this?",
+  "native_query": "প্রসবের দুই দিন পর মায়ের রক্তে দ্রুত কাপড় ভিজে যাচ্ছে। এটা কী?",
+  "english_query": "Two days after delivery the mother is soaking a cloth with blood very quickly. What is this?",
+  "acceptable": [
+   "a6032a14:0"
+  ]
+ },
+ {
+  "id": "n08_bn",
+  "lang": "bn",
+  "question": "প্রসবের দুই দিন পর মায়ের রক্তে দ্রুত কাপড় ভিজে যাচ্ছে। এটা কী?",
+  "native_query": "প্রসবের দুই দিন পর মায়ের রক্তে দ্রুত কাপড় ভিজে যাচ্ছে। এটা কী?",
+  "english_query": "Two days after delivery the mother is soaking a cloth with blood very quickly. What is this?",
+  "acceptable": [
+   "a6032a14:0"
+  ]
+ },
+ {
+  "id": "n09_en",
+  "lang": "en",
+  "question": "The mother had a fit and lost consciousness a day after giving birth.",
+  "native_query": "প্রসবের একদিন পর মায়ের খিঁচুনি হয়েছে এবং তিনি অজ্ঞান হয়ে গেছেন।",
+  "english_query": "The mother had a fit and lost consciousness a day after giving birth.",
+  "acceptable": [
+   "a6032a14:3"
+  ]
+ },
+ {
+  "id": "n09_bn",
+  "lang": "bn",
+  "question": "প্রসবের একদিন পর মায়ের খিঁচুনি হয়েছে এবং তিনি অজ্ঞান হয়ে গেছেন।",
+  "native_query": "প্রসবের একদিন পর মায়ের খিঁচুনি হয়েছে এবং তিনি অজ্ঞান হয়ে গেছেন।",
+  "english_query": "The mother had a fit and lost consciousness a day after giving birth.",
+  "acceptable": [
+   "a6032a14:3"
+  ]
+ },
+ {
+  "id": "n10_en",
+  "lang": "en",
+  "question": "A week after delivery the fluid coming from below smells very bad.",
+  "native_query": "প্রসবের এক সপ্তাহ পর নিচ দিয়ে যে পানি যাচ্ছে তাতে খুব দুর্গন্ধ।",
+  "english_query": "A week after delivery the fluid coming from below smells very bad.",
+  "acceptable": [
+   "a6032a14:2",
+   "dfd06f1e:8"
+  ]
+ },
+ {
+  "id": "n10_bn",
+  "lang": "bn",
+  "question": "প্রসবের এক সপ্তাহ পর নিচ দিয়ে যে পানি যাচ্ছে তাতে খুব দুর্গন্ধ।",
+  "native_query": "প্রসবের এক সপ্তাহ পর নিচ দিয়ে যে পানি যাচ্ছে তাতে খুব দুর্গন্ধ।",
+  "english_query": "A week after delivery the fluid coming from below smells very bad.",
+  "acceptable": [
+   "a6032a14:2",
+   "dfd06f1e:8"
+  ]
+ },
+ {
+  "id": "n11_en",
+  "lang": "en",
+  "question": "How do I check that the womb is going back to its normal size after birth?",
+  "native_query": "প্রসবের পর জরায়ু ঠিকমতো আগের আকারে ফিরছে কিনা কীভাবে দেখব?",
+  "english_query": "How do I check that the womb is going back to its normal size after birth?",
+  "acceptable": [
+   "dfd06f1e:6",
+   "4cfbd386:5"
+  ]
+ },
+ {
+  "id": "n11_bn",
+  "lang": "bn",
+  "question": "প্রসবের পর জরায়ু ঠিকমতো আগের আকারে ফিরছে কিনা কীভাবে দেখব?",
+  "native_query": "প্রসবের পর জরায়ু ঠিকমতো আগের আকারে ফিরছে কিনা কীভাবে দেখব?",
+  "english_query": "How do I check that the womb is going back to its normal size after birth?",
+  "acceptable": [
+   "dfd06f1e:6",
+   "4cfbd386:5"
+  ]
+ },
+ {
+  "id": "n12_en",
+  "lang": "en",
+  "question": "What colour should the flow be in the first few days after birth, and later?",
+  "native_query": "প্রসবের প্রথম কয়েক দিনে আর পরে স্রাবের রং কেমন হওয়ার কথা?",
+  "english_query": "What colour should the flow be in the first few days after birth, and later?",
+  "acceptable": [
+   "dfd06f1e:7",
+   "4cfbd386:6"
+  ]
+ },
+ {
+  "id": "n12_bn",
+  "lang": "bn",
+  "question": "প্রসবের প্রথম কয়েক দিনে আর পরে স্রাবের রং কেমন হওয়ার কথা?",
+  "native_query": "প্রসবের প্রথম কয়েক দিনে আর পরে স্রাবের রং কেমন হওয়ার কথা?",
+  "english_query": "What colour should the flow be in the first few days after birth, and later?",
+  "acceptable": [
+   "dfd06f1e:7",
+   "4cfbd386:6"
+  ]
+ },
+ {
+  "id": "n13_en",
+  "lang": "en",
+  "question": "On which days am I supposed to visit a mother after she has delivered?",
+  "native_query": "প্রসবের পর কোন কোন দিনে মায়ের কাছে যেতে হবে?",
+  "english_query": "On which days am I supposed to visit a mother after she has delivered?",
+  "acceptable": [
+   "dfd06f1e:3",
+   "4cfbd386:3"
+  ]
+ },
+ {
+  "id": "n13_bn",
+  "lang": "bn",
+  "question": "প্রসবের পর কোন কোন দিনে মায়ের কাছে যেতে হবে?",
+  "native_query": "প্রসবের পর কোন কোন দিনে মায়ের কাছে যেতে হবে?",
+  "english_query": "On which days am I supposed to visit a mother after she has delivered?",
+  "acceptable": [
+   "dfd06f1e:3",
+   "4cfbd386:3"
+  ]
+ },
+ {
+  "id": "n14_en",
+  "lang": "en",
+  "question": "A pregnant woman's feet are puffy. What should I tell her?",
+  "native_query": "একজন গর্ভবতী মায়ের পা ফোলা। তাকে কী বলব?",
+  "english_query": "A pregnant woman's feet are puffy. What should I tell her?",
+  "acceptable": [
+   "47ea6019:6",
+   "6818eb87:7",
+   "cb824f82:3"
+  ]
+ },
+ {
+  "id": "n14_bn",
+  "lang": "bn",
+  "question": "একজন গর্ভবতী মায়ের পা ফোলা। তাকে কী বলব?",
+  "native_query": "একজন গর্ভবতী মায়ের পা ফোলা। তাকে কী বলব?",
+  "english_query": "A pregnant woman's feet are puffy. What should I tell her?",
+  "acceptable": [
+   "47ea6019:6",
+   "6818eb87:7",
+   "cb824f82:3"
+  ]
+ },
+ {
+  "id": "n15_en",
+  "lang": "en",
+  "question": "Her blood pressure reading came out high during the visit. What now?",
+  "native_query": "ভিজিটের সময় তার রক্তচাপ বেশি পাওয়া গেছে। এখন কী করব?",
+  "english_query": "Her blood pressure reading came out high during the visit. What now?",
+  "acceptable": [
+   "47ea6019:8",
+   "cb824f82:2"
+  ]
+ },
+ {
+  "id": "n15_bn",
+  "lang": "bn",
+  "question": "ভিজিটের সময় তার রক্তচাপ বেশি পাওয়া গেছে। এখন কী করব?",
+  "native_query": "ভিজিটের সময় তার রক্তচাপ বেশি পাওয়া গেছে। এখন কী করব?",
+  "english_query": "Her blood pressure reading came out high during the visit. What now?",
+  "acceptable": [
+   "47ea6019:8",
+   "cb824f82:2"
+  ]
+ },
+ {
+  "id": "n16_en",
+  "lang": "en",
+  "question": "She is throwing up a lot in the early months of pregnancy.",
+  "native_query": "গর্ভাবস্থার প্রথম দিকের মাসগুলোতে তার খুব বমি হচ্ছে।",
+  "english_query": "She is throwing up a lot in the early months of pregnancy.",
+  "acceptable": [
+   "c8f1a780:0"
+  ]
+ },
+ {
+  "id": "n16_bn",
+  "lang": "bn",
+  "question": "গর্ভাবস্থার প্রথম দিকের মাসগুলোতে তার খুব বমি হচ্ছে।",
+  "native_query": "গর্ভাবস্থার প্রথম দিকের মাসগুলোতে তার খুব বমি হচ্ছে।",
+  "english_query": "She is throwing up a lot in the early months of pregnancy.",
+  "acceptable": [
+   "c8f1a780:0"
+  ]
+ },
+ {
+  "id": "n17_en",
+  "lang": "en",
+  "question": "She feels a burning in her chest after eating. What advice?",
+  "native_query": "খাওয়ার পর তার বুক জ্বালাপোড়া করে। কী পরামর্শ?",
+  "english_query": "She feels a burning in her chest after eating. What advice?",
+  "acceptable": [
+   "c8f1a780:2"
+  ]
+ },
+ {
+  "id": "n17_bn",
+  "lang": "bn",
+  "question": "খাওয়ার পর তার বুক জ্বালাপোড়া করে। কী পরামর্শ?",
+  "native_query": "খাওয়ার পর তার বুক জ্বালাপোড়া করে। কী পরামর্শ?",
+  "english_query": "She feels a burning in her chest after eating. What advice?",
+  "acceptable": [
+   "c8f1a780:2"
+  ]
+ },
+ {
+  "id": "n18_en",
+  "lang": "en",
+  "question": "The pregnant woman has not passed stool for several days.",
+  "native_query": "গর্ভবতী মায়ের কয়েকদিন ধরে পায়খানা হচ্ছে না।",
+  "english_query": "The pregnant woman has not passed stool for several days.",
+  "acceptable": [
+   "c8f1a780:4"
+  ]
+ },
+ {
+  "id": "n18_bn",
+  "lang": "bn",
+  "question": "গর্ভবতী মায়ের কয়েকদিন ধরে পায়খানা হচ্ছে না।",
+  "native_query": "গর্ভবতী মায়ের কয়েকদিন ধরে পায়খানা হচ্ছে না।",
+  "english_query": "The pregnant woman has not passed stool for several days.",
+  "acceptable": [
+   "c8f1a780:4"
+  ]
+ },
+ {
+  "id": "n19_en",
+  "lang": "en",
+  "question": "When during pregnancy should she get the tetanus injection?",
+  "native_query": "গর্ভাবস্থায় কখন তাকে ধনুষ্টংকারের টিকা দিতে হবে?",
+  "english_query": "When during pregnancy should she get the tetanus injection?",
+  "acceptable": [
+   "7e6098c0:8",
+   "7e6098c0:9"
+  ]
+ },
+ {
+  "id": "n19_bn",
+  "lang": "bn",
+  "question": "গর্ভাবস্থায় কখন তাকে ধনুষ্টংকারের টিকা দিতে হবে?",
+  "native_query": "গর্ভাবস্থায় কখন তাকে ধনুষ্টংকারের টিকা দিতে হবে?",
+  "english_query": "When during pregnancy should she get the tetanus injection?",
+  "acceptable": [
+   "7e6098c0:8",
+   "7e6098c0:9"
+  ]
+ },
+ {
+  "id": "n20_en",
+  "lang": "en",
+  "question": "The child is breathing very fast. When do I send him to hospital?",
+  "native_query": "শিশুটি খুব দ্রুত শ্বাস নিচ্ছে। কখন তাকে হাসপাতালে পাঠাব?",
+  "english_query": "The child is breathing very fast. When do I send him to hospital?",
+  "acceptable": [
+   "7a1f98e9:6",
+   "7a1f98e9:5",
+   "7a1f98e9:3"
+  ]
+ },
+ {
+  "id": "n20_bn",
+  "lang": "bn",
+  "question": "শিশুটি খুব দ্রুত শ্বাস নিচ্ছে। কখন তাকে হাসপাতালে পাঠাব?",
+  "native_query": "শিশুটি খুব দ্রুত শ্বাস নিচ্ছে। কখন তাকে হাসপাতালে পাঠাব?",
+  "english_query": "The child is breathing very fast. When do I send him to hospital?",
+  "acceptable": [
+   "7a1f98e9:6",
+   "7a1f98e9:5",
+   "7a1f98e9:3"
+  ]
+ },
+ {
+  "id": "n21_en",
+  "lang": "en",
+  "question": "How many breaths in a minute counts as too fast for a small baby?",
+  "native_query": "ছোট শিশুর ক্ষেত্রে মিনিটে কত শ্বাস হলে সেটা বেশি ধরা হয়?",
+  "english_query": "How many breaths in a minute counts as too fast for a small baby?",
+  "acceptable": [
+   "7a1f98e9:5"
+  ]
+ },
+ {
+  "id": "n21_bn",
+  "lang": "bn",
+  "question": "ছোট শিশুর ক্ষেত্রে মিনিটে কত শ্বাস হলে সেটা বেশি ধরা হয়?",
+  "native_query": "ছোট শিশুর ক্ষেত্রে মিনিটে কত শ্বাস হলে সেটা বেশি ধরা হয়?",
+  "english_query": "How many breaths in a minute counts as too fast for a small baby?",
+  "acceptable": [
+   "7a1f98e9:5"
+  ]
+ },
+ {
+  "id": "n22_en",
+  "lang": "en",
+  "question": "The child has loose stools. How much of the packet solution do I give?",
+  "native_query": "শিশুর পাতলা পায়খানা হচ্ছে। প্যাকেটের স্যালাইন কতটা খাওয়াব?",
+  "english_query": "The child has loose stools. How much of the packet solution do I give?",
+  "acceptable": [
+   "e660517c:5"
+  ]
+ },
+ {
+  "id": "n22_bn",
+  "lang": "bn",
+  "question": "শিশুর পাতলা পায়খানা হচ্ছে। প্যাকেটের স্যালাইন কতটা খাওয়াব?",
+  "native_query": "শিশুর পাতলা পায়খানা হচ্ছে। প্যাকেটের স্যালাইন কতটা খাওয়াব?",
+  "english_query": "The child has loose stools. How much of the packet solution do I give?",
+  "acceptable": [
+   "e660517c:5"
+  ]
+ },
+ {
+  "id": "n23_en",
+  "lang": "en",
+  "question": "Should zinc be given for loose motions, and for how many days?",
+  "native_query": "পাতলা পায়খানায় জিংক দিতে হবে কি, আর কতদিন?",
+  "english_query": "Should zinc be given for loose motions, and for how many days?",
+  "acceptable": [
+   "e660517c:6"
+  ]
+ },
+ {
+  "id": "n23_bn",
+  "lang": "bn",
+  "question": "পাতলা পায়খানায় জিংক দিতে হবে কি, আর কতদিন?",
+  "native_query": "পাতলা পায়খানায় জিংক দিতে হবে কি, আর কতদিন?",
+  "english_query": "Should zinc be given for loose motions, and for how many days?",
+  "acceptable": [
+   "e660517c:6"
+  ]
+ },
+ {
+  "id": "n24_en",
+  "lang": "en",
+  "question": "A man has been coughing for three weeks and is losing weight.",
+  "native_query": "একজন পুরুষ তিন সপ্তাহ ধরে কাশছেন এবং ওজন কমে যাচ্ছে।",
+  "english_query": "A man has been coughing for three weeks and is losing weight.",
+  "acceptable": [
+   "8528ce04:1",
+   "8528ce04:2"
+  ]
+ },
+ {
+  "id": "n24_bn",
+  "lang": "bn",
+  "question": "একজন পুরুষ তিন সপ্তাহ ধরে কাশছেন এবং ওজন কমে যাচ্ছে।",
+  "native_query": "একজন পুরুষ তিন সপ্তাহ ধরে কাশছেন এবং ওজন কমে যাচ্ছে।",
+  "english_query": "A man has been coughing for three weeks and is losing weight.",
+  "acceptable": [
+   "8528ce04:1",
+   "8528ce04:2"
+  ]
+ },
+ {
+  "id": "n25_en",
+  "lang": "en",
+  "question": "Where do I send the spit sample and what happens if it comes back positive?",
+  "native_query": "কফের নমুনা কোথায় পাঠাব আর ফল পজিটিভ এলে কী হবে?",
+  "english_query": "Where do I send the spit sample and what happens if it comes back positive?",
+  "acceptable": [
+   "8528ce04:3"
+  ]
+ },
+ {
+  "id": "n25_bn",
+  "lang": "bn",
+  "question": "কফের নমুনা কোথায় পাঠাব আর ফল পজিটিভ এলে কী হবে?",
+  "native_query": "কফের নমুনা কোথায় পাঠাব আর ফল পজিটিভ এলে কী হবে?",
+  "english_query": "Where do I send the spit sample and what happens if it comes back positive?",
+  "acceptable": [
+   "8528ce04:3"
+  ]
+ },
+ {
+  "id": "n26_en",
+  "lang": "en",
+  "question": "How do I treat a snake bite in the field?",
+  "native_query": "মাঠে সাপে কাটলে কীভাবে চিকিৎসা করব?",
+  "english_query": "How do I treat a snake bite in the field?",
+  "acceptable": "refuse"
+ },
+ {
+  "id": "n26_bn",
+  "lang": "bn",
+  "question": "মাঠে সাপে কাটলে কীভাবে চিকিৎসা করব?",
+  "native_query": "মাঠে সাপে কাটলে কীভাবে চিকিৎসা করব?",
+  "english_query": "How do I treat a snake bite in the field?",
+  "acceptable": "refuse"
+ },
+ {
+  "id": "n27_en",
+  "lang": "en",
+  "question": "What dose of insulin should a diabetic patient take?",
+  "native_query": "ডায়াবেটিস রোগীকে কত ইনসুলিন দিতে হবে?",
+  "english_query": "What dose of insulin should a diabetic patient take?",
+  "acceptable": "refuse"
+ },
+ {
+  "id": "n27_bn",
+  "lang": "bn",
+  "question": "ডায়াবেটিস রোগীকে কত ইনসুলিন দিতে হবে?",
+  "native_query": "ডায়াবেটিস রোগীকে কত ইনসুলিন দিতে হবে?",
+  "english_query": "What dose of insulin should a diabetic patient take?",
+  "acceptable": "refuse"
+ },
+ {
+  "id": "n28_en",
+  "lang": "en",
+  "question": "How do I apply for a birth registration certificate?",
+  "native_query": "জন্ম নিবন্ধন সনদের জন্য কীভাবে আবেদন করব?",
+  "english_query": "How do I apply for a birth registration certificate?",
+  "acceptable": "refuse"
+ },
+ {
+  "id": "n28_bn",
+  "lang": "bn",
+  "question": "জন্ম নিবন্ধন সনদের জন্য কীভাবে আবেদন করব?",
+  "native_query": "জন্ম নিবন্ধন সনদের জন্য কীভাবে আবেদন করব?",
+  "english_query": "How do I apply for a birth registration certificate?",
+  "acceptable": "refuse"
+ },
+ {
+  "id": "n29_en",
+  "lang": "en",
+  "question": "What should I do for someone with a broken arm?",
+  "native_query": "কারো হাত ভেঙে গেলে কী করব?",
+  "english_query": "What should I do for someone with a broken arm?",
+  "acceptable": "refuse"
+ },
+ {
+  "id": "n29_bn",
+  "lang": "bn",
+  "question": "কারো হাত ভেঙে গেলে কী করব?",
+  "native_query": "কারো হাত ভেঙে গেলে কী করব?",
+  "english_query": "What should I do for someone with a broken arm?",
+  "acceptable": "refuse"
+ },
+ {
+  "id": "n30_en",
+  "lang": "en",
+  "question": "Which eye drops are used for conjunctivitis?",
+  "native_query": "চোখ ওঠা রোগে কোন ড্রপ ব্যবহার করতে হয়?",
+  "english_query": "Which eye drops are used for conjunctivitis?",
+  "acceptable": "refuse"
+ },
+ {
+  "id": "n30_bn",
+  "lang": "bn",
+  "question": "চোখ ওঠা রোগে কোন ড্রপ ব্যবহার করতে হয়?",
+  "native_query": "চোখ ওঠা রোগে কোন ড্রপ ব্যবহার করতে হয়?",
+  "english_query": "Which eye drops are used for conjunctivitis?",
+  "acceptable": "refuse"
+ }
+]

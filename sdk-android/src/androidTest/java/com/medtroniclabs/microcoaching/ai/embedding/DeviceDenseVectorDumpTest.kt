@@ -99,15 +99,19 @@ class DeviceDenseVectorDumpTest {
             }
         }
 
-        // ── queries ──────────────────────────────────────────────────────────────
+        // ── queries, from every labelled set on disk ─────────────────────────────
+        // Card vectors are the expensive half and are shared, so embedding both sets in
+        // one run costs only the queries and keeps them directly comparable.
         val queryIds = ArrayList<String>()
         val queryVectors = ArrayList<FloatArray>()
-        json.parseToJsonElement(asset("audit_labelled.json")).jsonArray.forEach { row ->
-            val record = row.jsonObject
-            queryIds += record.getValue("id").jsonPrimitive.content
-            queryVectors += embed(
-                QueryEncoding.promptFor(record.getValue("native_query").jsonPrimitive.content),
-            )
+        listOf("audit_labelled.json", "chw_questions_2026-09.json").forEach { file ->
+            json.parseToJsonElement(asset(file)).jsonArray.forEach { row ->
+                val record = row.jsonObject
+                queryIds += record.getValue("id").jsonPrimitive.content
+                queryVectors += embed(
+                    QueryEncoding.promptFor(record.getValue("native_query").jsonPrimitive.content),
+                )
+            }
         }
         interpreter.close()
 
