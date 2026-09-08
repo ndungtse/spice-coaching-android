@@ -32,8 +32,8 @@ import kotlin.math.roundToInt
  * doesn't strand the button off-screen after a layout change.
  *
  * @param restingBottomPadding bottom margin of the resting position. Defaults to
- *   96.dp so the FAB clears a typical Previous / Next button bar (button height
- *   ~56.dp + container padding ~16.dp + breathing room ~24.dp).
+ *   80.dp so the FAB clears a typical Previous / Next button bar (button height
+ *   ~56.dp plus container padding).
  * @param restingEndPadding end margin of the resting position. Defaults to 16.dp
  *   matching the rest of the SDK's screen-edge inset.
  */

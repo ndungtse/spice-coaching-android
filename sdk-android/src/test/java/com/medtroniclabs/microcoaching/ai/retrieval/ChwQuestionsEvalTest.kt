@@ -76,22 +76,20 @@ class ChwQuestionsEvalTest {
         )
         // Per question, what each mode did — so a difference can be read off directly
         // instead of inferred from two totals.
-        val perQuestion = StringBuilder()
+        val perQuestion = mapOf("en" to StringBuilder(), "bn" to StringBuilder())
 
         for (q in questions) {
             val bm25 = runPipeline(q, index, scope, dense = emptyList())
             val hybrid = runPipeline(q, index, scope, dense = denseByQuery[q.id].orEmpty())
             score(results.getValue("BM25-only").getValue(q.lang), q, bm25.first)
             score(results.getValue("BM25+dense").getValue(q.lang), q, hybrid.first)
-            if (q.lang == "en") {
-                val a = verdict(q, bm25.first)
-                val b = verdict(q, hybrid.first)
-                val marker = if (a == b) " " else "*"
-                perQuestion.appendLine(
-                    "$marker ${q.id.padEnd(8)} bm25=${a.padEnd(11)}${(bm25.first ?: "-").padEnd(14)}" +
-                        "hybrid=${b.padEnd(11)}${hybrid.first ?: "-"}",
-                )
-            }
+            val a = verdict(q, bm25.first)
+            val b = verdict(q, hybrid.first)
+            perQuestion.getValue(q.lang).appendLine(
+                "${if (a == b) " " else "*"} ${q.id.padEnd(8)} " +
+                    "bm25=${a.padEnd(11)}${(bm25.first ?: "-").padEnd(14)}" +
+                    "hybrid=${b.padEnd(11)}${hybrid.first ?: "-"}",
+            )
         }
 
         println("ChwQuestionsEval — 30 fresh questions (25 answerable, 5 not)")
@@ -99,8 +97,10 @@ class ChwQuestionsEvalTest {
             println("  $mode")
             for ((lang, tally) in byLang) println("    ${lang.uppercase()}: $tally")
         }
-        println("\nPer-question, English (* = the two modes disagree):")
-        print(perQuestion)
+        for ((lang, detail) in perQuestion) {
+            println("\nPer-question, ${lang.uppercase()} (* = the two modes disagree):")
+            print(detail)
+        }
 
         for (byLang in results.values) {
             for (tally in byLang.values) assertEquals(30, tally.total)

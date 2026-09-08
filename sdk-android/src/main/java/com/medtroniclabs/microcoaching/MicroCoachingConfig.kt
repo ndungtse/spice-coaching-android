@@ -235,7 +235,10 @@ data class MicroCoachingConfig internal constructor(
     val forceLowEndMode: Boolean? = null,
 
     // ── Feature Flags ─────────────────────────────────────────────────────────
-    /** Enable the AI chat fragment (UC-2 entry point). */
+    /**
+     * **Reserved — no effect.** Stored here but read nowhere in the SDK; chat is always
+     * available. Kept for wire compatibility with existing host builder chains.
+     */
     val enableChat: Boolean = true,
     /**
      * When `true`, merge per-card `retrieval_hints_*` from APK assets
@@ -246,11 +249,14 @@ data class MicroCoachingConfig internal constructor(
     val enableRetrievalHintFixtureOverlay: Boolean = false,
     /** Enable Bengali voice input/output (Phase 6 — disabled by default). */
     val enableVoice: Boolean = false,
-    /** Enable micro-learning module UC-1 (Phase 3 — disabled by default). */
+    /**
+     * **Reserved — no effect.** Read nowhere in the SDK. Note the `false` default while
+     * micro-learning works regardless: that mismatch is the giveaway that this is not a gate.
+     */
     val enableLearnModule: Boolean = false,
-    /** Enable counselling apply module UC-2 (Phase 4 — disabled by default). */
+    /** **Reserved — no effect.** Read nowhere in the SDK. See [enableLearnModule]. */
     val enableApplyModule: Boolean = false,
-    /** Enable telemetry measure module UC-3 (Phase 5 — disabled by default). */
+    /** **Reserved — no effect.** Read nowhere in the SDK. See [enableLearnModule]. */
     val enableMeasureModule: Boolean = false,
     /**
      * Run synced gap-detection rules inside `onReferralSubmitted` (see

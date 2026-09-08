@@ -82,8 +82,12 @@ See [docs/ARCHITECTURE.md — Build, Publishing & Consumption](docs/ARCHITECTURE
 **Quick summary:**
 1. Set the version in `sdk-android/build.gradle.kts` → `buildConfigField("String", "SDK_VERSION", "\"x.y.z\"")`
 2. Also set `version = "x.y.z"` and `group = "com.medtroniclabs.microcoaching"` in the same file's publishing block
-3. Run `./gradlew :sdk-android:publishToMavenLocal` to test locally
-4. Run `./gradlew :sdk-android:publish` to push to the configured remote repository
+3. Run `./gradlew :sdk-android:publishToMavenLocal` to publish to `~/.m2`
+
+**There is no remote repository configured.** The publishing blocks declare publications only — no
+`publishing { repositories { … } }` exists in any build script, so `publishToMavenLocal` is the only
+working publish task and Maven Local is the only consumption path. Wiring a hosted repository is
+still to do.
 
 ---
 

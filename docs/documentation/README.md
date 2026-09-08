@@ -180,9 +180,24 @@ Full detail: [03 — UI Embedding](./03-ui-embedding.md).
 
 ---
 
+## Where this is documented for the platform audience
+
+The `coaching-platform` gitbook carries a condensed, host-neutral version of this guide for platform
+and backend readers. These files are the source of truth; the gitbook pages summarise them and link
+back here. **When the host-facing API changes, update both sides.**
+
+| Gitbook page | Mirrors |
+|---|---|
+| `getting-started/connect-the-android-sdk.md` | [00](./00-quick-start.md) · [01](./01-setup.md) · [02](./02-initialization.md) |
+| `device-integration/spice-host-app.md` (Host app contract) | [04](./04-hooks-and-data.md), plus [00 §9](./00-quick-start.md#9-what-not-to-wire) |
+| `device-integration/sdk-surfaces.md` | [03](./03-ui-embedding.md) · [05](./05-model-and-voice.md) · [07](./07-theming.md) |
+| `device-integration/pii-boundary.md` | the `onAssessmentSubmitted` / `onReferralSubmitted` key contracts in [04](./04-hooks-and-data.md) |
+
 ## Related docs
 
 - [docs/ARCHITECTURE.md](../ARCHITECTURE.md) — architecture, components, data model, workflows, and Maven publishing.
-- [docs/gaps/GAP_DETECTION_SDK.md](../gaps/GAP_DETECTION_SDK.md) — gap-detection rule model.
+- Gap-detection rule model — the `GAP_DETECTION_SDK.md` this used to link to no longer exists.
+  The rule schema and operators now live in the platform gitbook under
+  `device-integration/detection-rules.md`.
 - [references/chat.md](../references/chat.md) — how the chat works under the hood (pipeline, retrieval, guardrails, voice).
 - [sdk-android-sherpa/README.md](../../sdk-android-sherpa/README.md) — offline STT module.
