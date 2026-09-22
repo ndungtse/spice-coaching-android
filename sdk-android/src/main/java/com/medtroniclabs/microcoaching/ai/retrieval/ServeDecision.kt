@@ -27,9 +27,9 @@ import java.util.Locale
  * a long question on one word is how an unrelated card wins on shared vocabulary.
  *
  * Counter-evidence overrides both: a card whose title/hints scope it to a population
- * (maternal, child) is not servable for a question naming a different population or
- * none — sharing "রক্তচাপ" does not make an antenatal card an answer for a general
- * NCD client.
+ * (maternal, child, adult) is not servable for a question that names a different
+ * population. A question naming no population may still receive a scoped card, but only
+ * on two shared topic terms or a dominant cosine, never on one shared word.
  *
  * Among servable hits, title/hint overlap outranks BM25 score: authors write
  * retrieval hints as the questions a card answers, so that is stronger evidence than
@@ -62,19 +62,19 @@ object ServeDecision {
         val sharedConcepts: Set<String>,
         /** How many of the above were found in the card's title/hints/questions. */
         val titleHintOverlap: Int,
-        /** Card is population-scoped to a group the question does not mention. */
+        /** Card is population-scoped and the question names a different population. */
         val populationVeto: Boolean,
-        val isStubBody: Boolean,
-        val referralBoost: Int,
+        /** Card is population-scoped and the question names no population at all. */
+        val populationUnstated: Boolean,
         /**
          * How many terms the question offered that name a subject rather than a
          * population — the denominator the match is judged against.
          */
         val queryTopicCount: Int,
         /**
-         * Matched evidence left after discounting terms that only say WHO the card is
-         * for ("প্রসূতি", "নবজাতক") or WHEN ("postpartum"). Zero means the hit and the
-         * question share a population and nothing else.
+         * Matched evidence left after discounting terms and concepts that only say WHO the
+         * card is for or WHEN ([POPULATION_GROUPS], [POPULATION_CONCEPTS]). Zero means the
+         * hit and the question share a population and nothing else.
          */
         val topicTermCount: Int,
         /** Cosine of the card's synced embedding against the query embedding; null without a vector. */
@@ -103,8 +103,13 @@ object ServeDecision {
             get() {
                 if (populationVeto) return false
                 // Dense agreement is meaning-level evidence: the card's embedding and the
-                // query's agree even when they share no words (the exact failure word
-                // matching cannot close). It never overrides the population veto above.
+                // query's agree even when they share no words. It never overrides the
+                // population veto above.
+                if (denseDominant) return true
+                // A card written for a population, asked about by a question that names
+                // none: one shared word is not enough to hand it over. It takes two, or the
+                // encoder's clear verdict above.
+                if (populationUnstated) return topicTermCount >= 2
                 if (denseAgrees) return true
                 if (queryTopicCount == 0) return conditionTerms.isNotEmpty() || sharedConcepts.isNotEmpty()
                 return topicTermCount >= if (queryTopicCount >= 3) 2 else 1
@@ -115,11 +120,11 @@ object ServeDecision {
                 "terms=$conditionTerms concepts=$sharedConcepts titleHint=$titleHintOverlap" +
                 (if (topicTermCount == 0) " population-only" else "") +
                 (if (populationVeto) " POPULATION-VETO" else "") +
-                (if (isStubBody) " stub" else "") +
-                (if (referralBoost != 0) " referral=+$referralBoost" else "") +
+                (if (populationUnstated) " population-unstated" else "") +
                 (denseCos?.let { " cos=${"%.2f".format(Locale.US, it)}" } ?: "") +
                 (if (denseDominant) " cos-dominant" else "")
     }
+
 
     /**
      * Who the question is about rather than what it is about. A quarter of a
@@ -190,7 +195,8 @@ object ServeDecision {
      */
     private val POPULATION_GROUPS: Map<String, Set<String>> = mapOf(
         "maternal" to setOf(
-            "গর্ভ", "গর্ভবতী", "গর্ভকালীন", "প্রসূতি", "প্রসব", "মা", "মায়ের", "মহিলা", "নারী",
+            "গর্ভ", "গর্ভবতী", "গর্ভকালীন", "প্রসূতি", "প্রসব", "প্রসবোত্তর", "মা", "মায়ের", "মহিলা", "নারী",
+            "এএনসি", "পিএনসি",
             "pregnan", "antenatal", "anc", "postpartum", "postnatal", "pnc", "mother", "maternal",
             "woman", "women",
             // The peripartum period named in English, as MLKit renders "প্রসব".
@@ -199,22 +205,21 @@ object ServeDecision {
         "child" to setOf(
             "শিশু", "বাচ্চা", "নবজাতক", "child", "children", "baby", "newborn", "neonat", "infant",
         ),
+        // The general adult client, named so that a question about an adult conflicts with
+        // a card scoped to mothers or children, and the reverse.
+        "adult" to setOf(
+            "সেবাগ্রহীতা", "ক্লায়েন্ট", "প্রাপ্তবয়স্ক", "পুরুষ", "বয়স্ক",
+            "client", "adult", "man", "elderly",
+        ),
     )
 
     /**
-     * Synonym groups that name a period or population rather than a condition. Like
-     * the population markers themselves they qualify a hit as being about the right
-     * kind of person, never about the right subject.
+     * Synonym concepts reachable from a population marker: they name a period or a kind of
+     * person, so they qualify a card as being about the right people without making it
+     * about the right subject. Derived from [POPULATION_GROUPS], so the two never disagree.
      */
-    private val SCOPE_CONCEPTS = setOf("postpartum", "anc_visit")
-
-    private val REFERRAL_SIGNALS = setOf(
-        "refer", "referral", "রেফার", "বিপদ", "danger", "emergency", "জরুরি", "urgent",
-    )
-
-    /** Bodies at or below these lengths read as headers/stubs rather than answers. */
-    private const val STUB_BODY_MAX_LEN = 80
-    private const val MIN_SUBSTANTIVE_BODY_LEN = 40
+    private val POPULATION_CONCEPTS: Set<String> =
+        ClinicalSynonymMap.conceptsFor(POPULATION_GROUPS.values.flatten())
 
     /**
      * Decide what to serve for one turn.
@@ -242,35 +247,23 @@ object ServeDecision {
             .filterNotTo(mutableSetOf()) { term -> isTemplateOrDemographic(term) }
         val queryConcepts = ClinicalSynonymMap.conceptsFor(queryTokens)
         val queryPopulations = populationsIn(query)
-        val referralIntent = hasReferralTimingIntent(query)
 
         val evidences = hits.map { hit ->
             evidenceFor(
-                hit, queryTokens, queryGazetteer, queryConcepts, queryPopulations, referralIntent,
+                hit, queryTokens, queryGazetteer, queryConcepts, queryPopulations,
                 cosFloor = tuning.cosFloor,
             )
         }.let { stampDominance(it, tuning) }
         val byChunk = evidences.associateBy { it.chunkId }
 
         val servable = hits.filter { byChunk.getValue(it.chunkId).servable }
-        if (servable.isEmpty()) {
-            // Mangled input (OCR, mistyped Bangla) matches no term yet can still be a
-            // garbled rendition of a card's own words, which drives the character-bigram
-            // channel to scores a topic mismatch never reaches. Rank-1 serves in that
-            // band only, and never past a population veto.
-            val top = hits.first()
-            val topEvidence = byChunk.getValue(top.chunkId)
-            if (top.score >= tuning.bigramRescueScore && !topEvidence.populationVeto) {
-                return Decision.Serve(top, topEvidence, evidences)
-            }
-            return Decision.Refuse(RefuseReason.NO_EVIDENCE, evidences)
-        }
+        if (servable.isEmpty()) return Decision.Refuse(RefuseReason.NO_EVIDENCE, evidences)
 
         // Selection, within the promote band of rank-1's score. A hit that matches the
         // question's subject always beats one that only matches its population, however
         // it scores — a card can be about the right people and the wrong thing. Below
-        // that, title/hint evidence beats body-keyword density, stubs lose ties, and
-        // raw score decides only what nothing else separates.
+        // that, title/hint evidence beats body-keyword density, and raw score decides
+        // only what nothing else separates.
         val topScore = hits.first().score
         // Dense-agreed hits enter the band on their cosine: a dense-only entrant has
         // no BM25 score to clear the promote ratio with, yet is exactly the candidate
@@ -280,19 +273,18 @@ object ServeDecision {
         }.ifEmpty { listOf(servable.first()) }
         val chosen = band.maxWithOrNull(
             compareBy(
-                // A card the encoder puts far ahead of every rival answers the question
-                // even when a different card repeats more of its words: authored hints
-                // reward vocabulary overlap, which is exactly what a paraphrased
-                // question lacks. Narrow by construction — at most one hit per turn
-                // clears the dominance floor and margin, so nothing else reorders.
+                // A card the encoder puts far ahead of every rival answers the question even
+                // when a different card repeats more of its words. At most one hit per turn
+                // clears the dominance floor and margin.
                 { byChunk.getValue(it.chunkId).denseDominant },
+                // A card about the question's subject beats one about only its population.
                 { byChunk.getValue(it.chunkId).topicTermCount > 0 },
-                { byChunk.getValue(it.chunkId).titleHintOverlap + byChunk.getValue(it.chunkId).referralBoost },
+                // Authors write hints as the questions a card answers, so a hint match
+                // outranks body-keyword density.
+                { byChunk.getValue(it.chunkId).titleHintOverlap },
                 { byChunk.getValue(it.chunkId).conditionTerms.size + byChunk.getValue(it.chunkId).sharedConcepts.size },
-                // Agreement short of dominance still breaks ties among lexically
-                // comparable candidates, below explicit topic evidence and above score.
+                // Agreement short of dominance breaks ties among lexically comparable cards.
                 { byChunk.getValue(it.chunkId).denseAgrees },
-                { !byChunk.getValue(it.chunkId).isStubBody },
                 { it.score },
             ),
         ) ?: servable.first()
@@ -347,7 +339,6 @@ object ServeDecision {
         queryGazetteer: Set<String>,
         queryConcepts: Set<String>,
         queryPopulations: Set<String>,
-        referralIntent: Boolean,
         cosFloor: Float,
     ): Evidence {
         val hitText = listOfNotNull(
@@ -381,8 +372,13 @@ object ServeDecision {
 
         // Scope is read from the authored fields, never the body: bodies mention
         // mothers and children in passing on cards that answer anyone.
+        // A card written for one population does not answer a question about another. A
+        // question that names no population is not "another": it is judged on topic evidence.
         val hitPopulations = populationsIn(titleHintText)
-        val veto = hitPopulations.isNotEmpty() && hitPopulations.intersect(queryPopulations).isEmpty()
+        val veto = hitPopulations.isNotEmpty() &&
+            queryPopulations.isNotEmpty() &&
+            hitPopulations.intersect(queryPopulations).isEmpty()
+        val unstated = hitPopulations.isNotEmpty() && queryPopulations.isEmpty()
 
         return Evidence(
             chunkId = hit.chunkId,
@@ -391,16 +387,16 @@ object ServeDecision {
             sharedConcepts = sharedConcepts,
             titleHintOverlap = titleHint,
             populationVeto = veto,
-            isStubBody = isStubLikeBody(hit),
-            referralBoost = if (referralIntent) referralTimingScore(hit) else 0,
+            populationUnstated = unstated,
             queryTopicCount = queryGazetteer.count { populationsIn(it).isEmpty() } +
-                queryConcepts.count { it !in SCOPE_CONCEPTS },
+                queryConcepts.count { it !in POPULATION_CONCEPTS },
             topicTermCount = conditionTerms.count { populationsIn(it).isEmpty() } +
-                sharedConcepts.count { it !in SCOPE_CONCEPTS },
+                sharedConcepts.count { it !in POPULATION_CONCEPTS },
             denseCos = hit.denseCos,
             denseAgrees = (hit.denseCos ?: 0f) >= cosFloor,
         )
     }
+
 
     /**
      * Template words that must match as whole terms only. As substrings they live
@@ -476,42 +472,4 @@ object ServeDecision {
     private fun String.isBanglaCharBigram(): Boolean =
         length == 2 && all { it.code in 0x0980..0x09FF }
 
-    // ── ranking adjustments ───────────────────────────────────────────────────
-
-    /**
-     * "When should I refer?" questions. Both halves are required: a referral word
-     * alone matches most clinical content, and "when"/"কখন" alone is a stop-word that
-     * survives only in the raw text.
-     */
-    private fun hasReferralTimingIntent(query: String): Boolean {
-        val lower = query.lowercase()
-        if (REFERRAL_SIGNALS.none { it in lower }) return false
-        return Regex("\\bwhen\\b").containsMatchIn(lower) || "কখন" in lower
-    }
-
-    /**
-     * How well a card answers "when to refer". A facility-services list scores
-     * negative: it names the same places a referral card does without saying when.
-     */
-    private fun referralTimingScore(hit: GroundingChunk): Int {
-        val text = listOfNotNull(hit.titleEn, hit.titleBn, hit.bodyEn, hit.bodyBn)
-            .joinToString(" ").lowercase()
-        var score = 0
-        if ("when to refer" in text) score += 4
-        if ("when" in text && "refer" in text) score += 3
-        if ("danger" in text || "বিপদ" in text) score += 2
-        if ("services at" in text && "when to refer" !in text) score -= 2
-        return score
-    }
-
-    /**
-     * True for section headers and lead-ins masquerading as cards: too short to be an
-     * answer, a colon-terminated title, or a bold run with no sentence after it.
-     */
-    private fun isStubLikeBody(hit: GroundingChunk): Boolean {
-        val body = listOfNotNull(hit.bodyBn, hit.bodyEn).maxByOrNull { it.length }?.trim() ?: return true
-        if (body.length < MIN_SUBSTANTIVE_BODY_LEN) return true
-        if (body.length < STUB_BODY_MAX_LEN && body.endsWith(":")) return true
-        return body.startsWith("<b>") && body.count { it == '.' } <= 1
-    }
 }

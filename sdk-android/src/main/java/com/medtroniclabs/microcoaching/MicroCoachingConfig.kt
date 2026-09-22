@@ -451,11 +451,6 @@ data class ChatTuning(
  * @property enScoreFloor Minimum score for a hit to be served on an English turn.
  * @property promoteRatio A hit may be served ahead of BM25 rank-1 only while it
  *           retains at least this fraction of rank-1's score.
- * @property bigramRescueScore Rescue band for mangled input (OCR, mistyped Bangla).
- *           Such a query matches no term, yet when it is a garbled rendition of a
- *           card's own words the character-bigram channel drives BM25 far above
- *           anything a topic mismatch reaches, so rank-1 is served without term
- *           evidence at or above this score.
  * @property cosFloor Dense-retrieval evidence floor: a hit whose synced card
  *           embedding reaches this cosine similarity against the query embedding
  *           counts as servable evidence even with zero word overlap (the
@@ -478,7 +473,6 @@ data class ServeTuning(
     val bnScoreFloor: Float = 25f,
     val enScoreFloor: Float = 40f,
     val promoteRatio: Float = 0.55f,
-    val bigramRescueScore: Float = 250f,
     val cosFloor: Float = 0.50f,
     val rrfK: Int = 60,
     val denseTopK: Int = 3,

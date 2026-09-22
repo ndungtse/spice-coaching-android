@@ -254,8 +254,6 @@ object DevRetrievalServer {
                                 putJsonArray("sharedConcepts") { ev.sharedConcepts.forEach { add(it) } }
                                 put("titleHintOverlap", ev.titleHintOverlap)
                                 put("populationVeto", ev.populationVeto)
-                                put("stub", ev.isStubBody)
-                                put("referralBoost", ev.referralBoost)
                                 put("servable", ev.servable)
                             }
                         }

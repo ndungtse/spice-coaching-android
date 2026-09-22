@@ -270,35 +270,4 @@ class BracJulyRegressionTest {
         assertEquals("cbf9f968", selection.primary?.moduleFamilyId)
     }
 
-    @Test
-    fun `code mixed condoms query keeps bm25 rank1 over sibling access card`() {
-        val accessCondoms = GroundingChunk(
-            source = GroundingChunk.Source.CARD,
-            moduleFamilyId = "cbb372e5",
-            positionalId = 4,
-            titleEn = "Where to Access Condoms and Oral Pills",
-            bodyEn = "Condoms and oral pills are available at community clinics and pharmacies.",
-            titleBn = "কনডোম ও খাবার বড়ি কোথায় পাওয়া যায়",
-            bodyBn = "কমিউনিটি ক্লিনিক ও ফার্মেসিতে কনডোম ও খাবার বড়ি পাওয়া যায়।",
-            score = 362.58f,
-        )
-        val accessInjections = GroundingChunk(
-            source = GroundingChunk.Source.CARD,
-            moduleFamilyId = "cbb372e5",
-            positionalId = 5,
-            titleEn = "Where to Access Injections, IUDs, and Implants",
-            bodyEn = "Injections and IUDs are available at upazila health complexes and district hospitals.",
-            titleBn = "ইনজেকশন, আইইউডি ও ইমপ্লান্ট কোথায় পাওয়া যায়",
-            bodyBn = "উপজেলা স্বাস্থ্য কমপ্লেক্স ও জেলা হাসপাতালে ইনজেকশন ও আইইউডি পাওয়া যায়।",
-            score = 229.61f,
-        )
-        val decision = ServeDecision.decide(
-            query = "কনডর্ ও খাবাি বয়ি রকাথাি পাওিা যাি? — what are the key steps?",
-            hits = listOf(accessCondoms, accessInjections),
-            clinicalTerms = setOf("condom", "oral", "pill", "কনডোম", "পিল"),
-            tuning = com.medtroniclabs.microcoaching.ServeTuning(),
-            isBanglaTurn = true,
-        )
-        assertEquals(4, (decision as? ServeDecision.Decision.Serve)?.hit?.positionalId)
-    }
 }

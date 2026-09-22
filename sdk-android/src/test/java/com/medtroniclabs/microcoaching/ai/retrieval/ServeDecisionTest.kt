@@ -81,25 +81,17 @@ class ServeDecisionTest {
 
     /** Score does not substitute for evidence below the mangled-input rescue band. */
     @Test
-    fun `zero-evidence hit refuses at any score below the rescue band`() {
+    fun `zero-evidence hit refuses at any score`() {
         val hit = chunk(
             "ডায়রিয়ার ভয়াবহতা",
             "ডায়রিয়া হলে খাবার স্যালাইন দিতে হবে এবং পানি শূন্যতা দেখতে হবে",
-            score = 240f,
+            score = 10_000f,
         )
         val d = decide("রক্তচাপ বেশি হলে কি করব", listOf(hit))
         assertTrue(d is ServeDecision.Decision.Refuse)
     }
 
     // ── demographic / template / numeric words are not evidence ──────────────
-
-    @Test
-    fun `card sharing only demographic words refuses`() {
-        // Both texts are about pregnant women; only one is about food.
-        val hit = chunk("রক্তস্বল্পতার মাত্রা", "গর্ভবতী মায়ের রক্তস্বল্পতা হলে আয়রন বড়ি খেতে হবে প্রতিদিন নিয়ম করে")
-        val d = decide("গর্ভবতী মা প্রতিদিন কি খাবেন", listOf(hit))
-        assertTrue(d is ServeDecision.Decision.Refuse)
-    }
 
     @Test
     fun `template-only overlap refuses - symptoms question vs another disease symptom card`() {
@@ -117,6 +109,16 @@ class ServeDecisionTest {
         assertTrue(d is ServeDecision.Decision.Refuse)
     }
 
+
+    @Test
+    fun `card sharing only demographic words refuses`() {
+        // Both texts are about pregnant women; only one is about food.
+        val hit = chunk("রক্তস্বল্পতার মাত্রা", "গর্ভবতী মায়ের রক্তস্বল্পতা হলে আয়রন বড়ি খেতে হবে প্রতিদিন নিয়ম করে")
+        val d = decide("গর্ভবতী মা প্রতিদিন কি খাবেন", listOf(hit))
+        assertTrue(d is ServeDecision.Decision.Refuse)
+    }
+
+
     @Test
     fun `numbers and units are not topical evidence`() {
         // A shared unit says both texts mention a lab value, not that they share a topic.
@@ -131,19 +133,35 @@ class ServeDecisionTest {
     // ── population-scope veto ─────────────────────────────────────────────────
 
     @Test
-    fun `pregnancy-scoped card is vetoed for a general NCD question`() {
-        // Advice written for pregnant mothers does not answer a question about an
-        // adult client with no pregnancy mentioned.
-        val hit = chunk("গর্ভকালীন রক্তচাপ: অস্বাভাবিক হলে করণীয়", "গর্ভবতী মায়ের রক্তচাপ অস্বাভাবিক হলে রেফার করুন এবং পরামর্শ দিন")
-        val d = decide("সেবাগ্রহীতার রক্তচাপ বেশি পেলে কি করব", listOf(hit))
-        assertTrue(d is ServeDecision.Decision.Refuse)
+    fun `population veto blocks only an explicit conflict`() {
+        // A card scoped to a population is unservable only when the question names a
+        // population and it is a different one. Every row shares two topic terms so the
+        // table isolates the veto from the evidence rule. Body text never carries scope.
+        data class Row(val cardTitle: String, val question: String, val blocked: Boolean)
+        val rows = listOf(
+            Row("রক্তচাপ মাপার নিয়ম", "রক্তচাপ ও ইডিমা বেশি হলে কি করব", blocked = false),
+            Row("গর্ভবতী মায়ের রক্তচাপ", "গর্ভবতী মায়ের রক্তচাপ ও ইডিমা বেশি হলে কি করব", blocked = false),
+            Row("গর্ভবতী মায়ের রক্তচাপ", "গর্ভবতী মা ও শিশুর রক্তচাপ ও ইডিমা বেশি হলে কি করব", blocked = false),
+            Row("গর্ভবতী মায়ের রক্তচাপ", "শিশুর রক্তচাপ ও ইডিমা বেশি হলে কি করব", blocked = true),
+            Row("গর্ভবতী মায়ের রক্তচাপ", "সেবাগ্রহীতার রক্তচাপ ও ইডিমা বেশি হলে কি করব", blocked = true),
+            Row("গর্ভবতী মায়ের রক্তচাপ", "রক্তচাপ ও ইডিমা বেশি হলে কি করব", blocked = false),
+            Row("শিশুর রক্তচাপ", "রক্তচাপ ও ইডিমা বেশি হলে কি করব", blocked = false),
+        )
+        for (r in rows) {
+            val hit = chunk(r.cardTitle, "রক্তচাপ বেশি হলে ইডিমা দেখে রেফার করুন")
+            val d = decide(r.question, listOf(hit))
+            assertEquals("card='${r.cardTitle}' question='${r.question}'", r.blocked, d is ServeDecision.Decision.Refuse)
+        }
     }
 
     @Test
-    fun `the same pregnancy-scoped card serves when the question is about a pregnant mother`() {
-        val hit = chunk("গর্ভকালীন রক্তচাপ: অস্বাভাবিক হলে করণীয়", "গর্ভবতী মায়ের রক্তচাপ অস্বাভাবিক হলে রেফার করুন এবং পরামর্শ দিন")
-        val d = decide("গর্ভবতী মায়ের রক্তচাপ বেশি পেলে কি করব", listOf(hit))
-        assertTrue(d is ServeDecision.Decision.Serve)
+    fun `a scoped card needs two shared terms or a dominant cosine when the question names nobody`() {
+        val card = "গর্ভবতী মায়ের রক্তচাপ"
+        val body = "রক্তচাপ বেশি হলে ইডিমা দেখে রেফার করুন"
+        assertTrue(decide("রক্তচাপ বেশি হলে কি করব", listOf(chunk(card, body))) is ServeDecision.Decision.Refuse)
+        assertTrue(decide("রক্তচাপ ও ইডিমা বেশি হলে কি করব", listOf(chunk(card, body))) is ServeDecision.Decision.Serve)
+        assertTrue(decide("রক্তচাপ বেশি হলে কি করব", listOf(chunk(card, body, denseCos = 0.90f))) is ServeDecision.Decision.Serve)
+        assertTrue(decide("রক্তচাপ বেশি হলে কি করব", listOf(chunk(card, body, denseCos = 0.55f))) is ServeDecision.Decision.Refuse)
     }
 
     // ── Bangla compound containment + concept bridge ─────────────────────────
@@ -202,38 +220,6 @@ class ServeDecisionTest {
         assertEquals(hinted.chunkId, (d as ServeDecision.Decision.Serve).hit.chunkId)
     }
 
-    // ── referral timing + stub demotion ──────────────────────────────────────
-
-    @Test
-    fun `referral timing question promotes the when-to-refer card`() {
-        val services = chunk(
-            "টিকা সেবা তালিকা",
-            "Services at the clinic include টিকা and growth monitoring for children every week",
-            score = 100f,
-        )
-        val whenToRefer = chunk(
-            "কখন রেফার করতে হবে",
-            "When to refer: danger sign দেখা দিলে দ্রুত রেফার করতে হবে বিপদ চিহ্ন থাকলে",
-            score = 75f,
-        )
-        val d = decide("শিশুর টিকা নিয়ে কখন রেফার করতে হবে", listOf(services, whenToRefer))
-        assertTrue(d is ServeDecision.Decision.Serve)
-        assertEquals(whenToRefer.chunkId, (d as ServeDecision.Decision.Serve).hit.chunkId)
-    }
-
-    @Test
-    fun `stub top hit loses to a substantive sibling with the same evidence`() {
-        val stub = chunk("রক্তচাপ মাপা:", "রক্তচাপ মাপার নিয়ম:", score = 100f)
-        val full = chunk(
-            "রক্তচাপ মাপার নিয়ম",
-            "রক্তচাপ মাপতে হবে রোগীকে বসিয়ে এবং বেশি হলে চার ঘন্টা পরে আবার মাপতে হবে তারপর রেফার",
-            score = 70f,
-        )
-        val d = decide("রক্তচাপ কীভাবে মাপব", listOf(stub, full))
-        assertTrue(d is ServeDecision.Decision.Serve)
-        assertEquals(full.chunkId, (d as ServeDecision.Decision.Serve).hit.chunkId)
-    }
-
     // ── floors ────────────────────────────────────────────────────────────────
 
     @Test
@@ -248,34 +234,6 @@ class ServeDecisionTest {
         )
         assertTrue(d is ServeDecision.Decision.Refuse)
         assertEquals(ServeDecision.RefuseReason.BELOW_SCORE_FLOOR, (d as ServeDecision.Decision.Refuse).reason)
-    }
-
-    // ── mangled-input rescue ──────────────────────────────────────────────────
-
-    @Test
-    fun `mangled query with an extreme bigram score serves rank-1 despite zero word evidence`() {
-        // Garbled text matches no word, but the character-bigram channel still scores
-        // the card whose words were mangled far above any unrelated card.
-        val hit = chunk(
-            "কনডোম ও খাবার বড়ি কোথায় পাওয়া যায়",
-            "কমিউনিটি ক্লিনিক ও ফার্মেসিতে কনডোম ও খাবার বড়ি পাওয়া যায়।",
-            score = 362.58f,
-        )
-        val d = decide("কনডর্ ও খাবাি বয়ি রকাথাি পাওিা যাি", listOf(hit))
-        assertTrue(d is ServeDecision.Decision.Serve)
-    }
-
-    @Test
-    fun `zero word evidence below the rescue band still refuses`() {
-        // A topic mismatch can score highly on shared vocabulary; the rescue band sits
-        // above anything such a mismatch reaches.
-        val hit = chunk(
-            "ডট পদ্ধতিতে চিকিৎসার তথ্য সংরক্ষণ",
-            "রোগী নিয়মমাফিক খাওয়ার পর কার্ডের নির্দিষ্ট তারিখের ঘরে টিক চিহ্ন দেবেন",
-            score = 189f,
-        )
-        val d = decide("সেবাগ্রহীতার উচ্চরক্তচাপ নিয়ে ডাক্তার দেখাতে রাজি করাবো কীভাবে", listOf(hit))
-        assertTrue(d is ServeDecision.Decision.Refuse)
     }
 
     /** A question with no topical content has nothing to match, so nothing is served. */
@@ -318,7 +276,7 @@ class ServeDecisionTest {
             "গর্ভবতী মায়ের রক্তচাপ অস্বাভাবিক হলে রেফার করুন এবং পরামর্শ দিন",
             denseCos = 0.90f,
         )
-        val d = decide("সেবাগ্রহীতার রক্তচাপ বেশি পেলে কি করব", listOf(hit))
+        val d = decide("শিশুর রক্তচাপ বেশি পেলে কি করব", listOf(hit))
         assertTrue(d is ServeDecision.Decision.Refuse)
     }
 
@@ -411,7 +369,7 @@ class ServeDecisionTest {
             "গর্ভবতী মায়ের রক্তচাপ অস্বাভাবিক হলে রেফার করুন এবং পরামর্শ দিন",
             denseCos = 0.95f,
         )
-        val d = decide("সেবাগ্রহীতার রক্তচাপ বেশি পেলে কি করব", listOf(vetoed))
+        val d = decide("শিশুর রক্তচাপ বেশি পেলে কি করব", listOf(vetoed))
         assertTrue(d is ServeDecision.Decision.Refuse)
     }
 
