@@ -13,6 +13,8 @@ This folder explains **how the SDK works internally** — the mechanisms behind 
 | Doc | Topic |
 |---|---|
 | [chat.md](./chat.md) | How the on-device AI chat works — the input→retrieval→LLM→output pipeline, grounding, guardrails, translation, voice, and telemetry. |
+| [retrieval.md](./retrieval.md) | BM25 and dense retrieval, how the two rankings are fused, with a worked example on real corpus questions. |
+| [serve-gate.md](./serve-gate.md) | The serve/refuse gate: its five steps, the population veto, every refusal reason and its threshold, a worked example. |
 
 ---
 
@@ -38,7 +40,8 @@ The chat pipeline is the deepest under-the-hood subsystem and gets its own page 
    │  AnswerModeResolver ── ONLINE / ON_DEVICE_ASSISTED / DIRECT   │
    │        │                                                      │
    │        ├─ ChatBackendAnswerer ── POST /coaching/rag-query     │
-   │        └─ ChatLocalAnswerer ── BM25 → ServeDecision →         │
+   │        └─ ChatLocalAnswerer ── BM25 + dense → fusion →         │
+   │                                ServeDecision →                 │
    │                                LiteRT-LM (Qwen3, downloaded)  │
    │                                                               │
    │  ModuleKnowledgeIndex ── BM25 retrieval over synced module    │
@@ -48,7 +51,7 @@ The chat pipeline is the deepest under-the-hood subsystem and gets its own page 
    │  SyncCoordinator ── 15-min periodic + triggered sync          │
    │  TelemetryManager ── OpenTelemetry spans (optional)           │
    │  OnDeviceTranslator ── ML Kit BN↔EN                           │
-   │  microcoaching.db (Room, v35) ── modules, events, chat, state │
+   │  microcoaching.db (Room, v36) ── modules, events, chat, state │
    └──────────────────────────────────────────────────────────────┘
 ```
 

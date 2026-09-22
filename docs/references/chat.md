@@ -1,137 +1,190 @@
-# Chat (IT-Help) — How It Works Under the Hood
+# Chat — How It Works Under the Hood
 
-**Version:** 0.6.0-SNAPSHOT · **Date:** 2026-08-31 · **Status:** Draft
+**Status:** current for `feat/hybrid-dense-retrieval`
 
-How the SDK's on-device AI chat answers a CHW's question. This is the internal design behind the chat surfaces a host embeds (see [03 — UI Embedding](../documentation/03-ui-embedding.md) for the public API). It is **offline-first and on-device** — there is no online LLM fallback.
+How the SDK's AI chat answers a CHW's question. This is the internal design behind the chat
+surfaces a host embeds (see [03 — UI Embedding](../documentation/03-ui-embedding.md) for the
+public API). Online, the backend answers. Offline, everything below runs on the phone.
 
 ---
 
-## The pipeline
+## Which pipeline answers
 
-A Bangla question travels through scope-gating, retrieval-grounding, the on-device LLM, output validation, and translation before it renders. Every guardrail that can run **without** invoking the LLM runs first — the model is the last line, not the first.
+`resolveAnswerMode` picks one of three modes for every message, from a stored preference,
+connectivity, device memory, consent and model state:
+
+| Mode | When | What answers |
+|---|---|---|
+| `ONLINE` | the user prefers online and a network is available | backend RAG (`POST /coaching/rag-query`) |
+| `ON_DEVICE_ASSISTED` | device has ≥ 3 GB RAM, the user opted in, the model file is present and the engine is loaded | on-device retrieval, then the small model rewords the one card the gate chose |
+| `ON_DEVICE_DIRECT` | anything else | on-device retrieval, then the card is served as written |
+
+Direct is the floor every other mode falls back to. Retrieval picks the same card in both
+on-device modes; the model rewords the result, it does not choose it.
+
+The on-device model is the catalog default, Qwen3-0.6B mixed INT4 on LiteRT-LM
+(`ModelCatalog.DEFAULT_ID`). Gemma 3 entries in the catalog are rollback targets. The
+query encoder for dense retrieval is EmbeddingGemma-300m, downloaded with the model.
+
+---
+
+## The offline pipeline
 
 ```
 Bangla text  (or voice → STT)
       │
       ▼
-  tokenize (BN)
+  L0 deny-list (ScopeClassifier.isOutOfScope) ── hit ──► canned refusal, no retrieval
       │
       ▼
-  L1 scope classifier ──── out-of-scope ──► canned refusal  (no LLM call)
-      │ in-scope
-      ▼
-  ML Kit  BN → EN
+  ML Kit  BN → EN   (the English copy joins the question for the gate)
       │
       ▼
-  BM25 retrieval over the synced module corpus (ModuleKnowledgeIndex)
-      │
-      ├──── L2: top score below threshold ──► canned "no grounding" refusal (no LLM)
-      │ grounded
-      ▼
-  build grounded prompt  (English reference block + L3 hardened directives)
+  BM25 over every card  +  dense cosine over every card vector
       │
       ▼
-  Gemma 3  (on-device LLM, EN → EN)
+  rank fusion  →  top 3 candidates                    ── see retrieval.md
       │
       ▼
-  L4 OutputValidator (drug / dosage / length / sentinel) ── reject ──► quiz-explanation fallback
-      │ pass
-      ▼
-  ML Kit  EN → BN  ── L5 fidelity check ── fail ──► EN body + "(অনুবাদ অনুপলব্ধ)" prefix
+  ServeDecision  ── refuse ──► canned "no grounding" refusal   ── see serve-gate.md
+      │ one card
+      ├── ON_DEVICE_DIRECT ─────────────────────────► card text served as written
+      │
+      ▼ ON_DEVICE_ASSISTED
+  prompt = that one card's text + the question + two instructions
       │
       ▼
-  render  +  L6 telemetry (it-help / chatbot coaching_event)
+  Qwen3-0.6B  (EN → EN)
+      │
+      ▼
+  groundedness check ── under floor ──► the card itself is served instead
+      │
+      ▼
+  L4 OutputValidator (drug / dosage / length) ── reject ──► card served instead
+      │
+      ▼
+  ML Kit  EN → BN  ── L5 fidelity check ── fail ──► EN body with a caveat
+      │
+      ▼
+  render  +  telemetry
 ```
 
----
-
-## Entry surfaces & session
-
-The chat is reached through `CoachingChatFragment`, `CoachingChatBottomSheet`, or the `ChatFab` composable (see [03 — UI Embedding](../documentation/03-ui-embedding.md)). There is no `openChat()` API — hosts launch the surfaces directly.
-
-Each open creates a fresh `ChatSession` (UUID-keyed). The session clamps context to keep the prompt small: ~3 prior exchanges (6 turns), a ~2000-character prompt cap, and per-message truncation (~600 chars). The Gemma chat template carries a Bangla or English system prompt depending on `MicroCoachingConfig.language`.
+Every guardrail that can run without the model runs first. The model is the last step, not
+the first.
 
 ---
 
-## On-device model & inference
+## Retrieval and the gate
 
-- **Model:** Gemma 3 1B INT4, on-device, `.task` (MediaPipe) or `.litertlm` (LiteRT-LM). Inference knobs: `inferenceTemperature` (0.6 default), `maxInferenceTokens` (512 default).
-- **Mode:** the `InferenceRouter` resolves `ONLINE` / `EDGE` / `CACHED`. In practice the chat runs **edge** (on-device) — the online RAG route exists but is dormant. `forcedMode` can pin a mode for dev/test.
-- **Low-end devices** (< ~3 GB RAM): no model is loaded. The chat degrades to **retrieval-only** — it serves pre-authored, clinician-reviewed Bangla card/quiz text from the corpus with no LLM round-trip. See [05 — Model & Voice](../documentation/05-model-and-voice.md#low-end-devices).
+Retrieval runs two searches over the whole corpus, word-based BM25 and meaning-based dense
+vectors, and merges their rankings by rank position. The serve gate then decides whether any
+of the top three candidates demonstrably shares the question's subject, taking population
+scope into account, and refuses otherwise.
 
-Model download/verification/state is owned by `ModelManager` — see [05 — Model & Voice](../documentation/05-model-and-voice.md).
+- [retrieval.md](./retrieval.md): both searches, the fusion arithmetic with a worked example,
+  and why the phone does not copy the backend's design.
+- [serve-gate.md](./serve-gate.md): the five steps, the population veto, every refusal reason
+  with its threshold, and a worked example.
 
 ---
 
-## Retrieval grounding (BM25)
+## One card reaches the model
 
-The chat is **grounded** — it answers from the synced learning corpus, not free-form world knowledge.
+`ChatTuning.llmContextCards` is 1. The gate's chosen card is placed first, the other candidates
+after it, all are translated to English, and the list is cut to one before the prompt is
+built. The cut happens before the prompt so that everything downstream judges the answer
+against exactly what the model saw: the groundedness check, the drug and dosage block-lists,
+and the attribution chip.
 
-- **Index:** `ModuleKnowledgeIndex` builds an inverted index from `ModuleDao` at SDK init and rebuilds after a successful module sync. It indexes both module **cards** (title + body + next-action, BN and EN) and **quizzes** (case + question + correct options + explanation).
-- **Scorer:** Okapi **BM25** (`k1≈1.5`, `b≈0.75`) — pure-Kotlin, < 20 ms per query, no embedding model (deliberately: keeps the APK small and latency low at pilot corpus size).
-- **Tokenization:** whitespace + Bangla/Latin punctuation, with Bangla **bigram** fallback for short queries (captures compounding without a stemmer).
-- **Top-K = 2**, with quiz hits boosted over card hits (quizzes are reviewed Q&A pairs). A score-threshold gate (≈3.0 BM25) decides whether there is enough grounding to answer at all.
-- The reference block injected into the prompt is **English-only** (the model is English-dominant); chunks without English text are translated once at index time and cached.
+The prompt is deliberately spare (`buildContextAnswerPrompt`): the card text, the question,
+and two instructions to answer from the text and add nothing. No labels, no turn markers, no
+refusal sentinel. The card text is the linked quiz explanation when the card has one,
+otherwise the body clipped to its last complete sentence: the same text the direct mode would
+show, so the model's only job is to reword it.
+
+Conversation history is not replayed to the model. Each turn is independent; the history
+stays visible in the UI only.
 
 ---
 
 ## Guardrails (defence in depth)
 
-| Layer | When | Catches | Cost |
-|---|---|---|---|
-| **L1 — Scope classifier** | Pre-LLM, after tokenization | Off-topic questions (cooking, sports, personal advice) | < 5 ms |
-| **L2 — Retrieval threshold** | Post-BM25, pre-LLM | In-domain questions the corpus doesn't cover | ~0 (part of retrieval) |
-| **L3 — Hardened system prompt** | Inside the LLM | Drift, hallucinated drugs/dosages, "as an AI…" patter; emits a `REFUSE_NO_GROUND` sentinel when uncovered | 0 (prompt text) |
-| **L4 — Output validator** | Post-LLM, pre-translation | Drug names / dosage numbers not in the source chunks, length blow-out, sentinel leaks | < 10 ms |
-| **L5 — Translation fidelity** | Post EN→BN | Empty / Latin-only / mangled translation → falls back to EN with a caveat prefix | < 5 ms |
-| **L6 — Telemetry** | Every outcome | Tuning data — records the outcome + retrieval score + chunk ids | cheap |
-
-When L4 rejects an LLM answer but a quiz chunk was retrieved, the chat serves that quiz's **authored `explanation_bn` verbatim** — pre-authored, clinician-reviewed Bangla — rather than a blank refusal.
+| Layer | When | Catches |
+|---|---|---|
+| **L0 — Deny-list** | before retrieval | Off-topic questions the model has answered wrongly before (weather, sports, recipes). Canned refusal, no retrieval. |
+| **L1 — Scope classifier** | advisory under `ExtendedClinical`, a hard gate under `Strict` | Questions with no clinical or workflow vocabulary. |
+| **L2 — Serve gate** (`ServeDecision`) | after retrieval, before the model | Candidates that share no subject with the question, or are scoped to a different population. Evidence-based, not a score threshold. |
+| **L3 — Prompt** | inside the model | The instruction to use only the card text. |
+| **Groundedness** | after the model | Content-word overlap with the card under 0.25 (strong retrieval) or 0.35. The card is served instead when its score is at least 20; otherwise the turn refuses. |
+| **L4 — Output validator** | after the model | Drug names or dosage numbers not in the card, over-length answers. The card is served instead. |
+| **L5 — Translation fidelity** | after EN→BN | Empty, Latin-only or mangled translation. English served with a caveat. |
+| **Telemetry** | every outcome | The outcome, retrieval score and chunk ids, for tuning. |
 
 ### Scope strictness
 
-`MicroCoachingConfig.chatScopeStrictness` tunes how aggressively the chat refuses (effective default via the Builder is **`Strict`** — see [02 — config reference](../documentation/02-initialization.md#llm--inference--model-download)):
+`MicroCoachingConfig.chatScopeStrictness`:
 
-- **`Strict`** — an L1 keyword miss or L2 retrieval miss is a hard refusal, without ever calling the LLM. Cheapest; most aggressive at rejecting uncovered questions.
-- **`ExtendedClinical`** — L1 is advisory; on a retrieval miss the LLM is called with an open-scope clinical prompt and either answers with a "consult your supervisor" caveat or emits the refusal sentinel. One LLM round-trip per message.
+- **`Strict`**: an L1 miss or a gate refusal is a hard refusal, without calling the model.
+- **`ExtendedClinical`**: L1 is advisory; the deny-list and the gate are what refuse.
 
 ### Refusal taxonomy
 
-Refusals are canned, clinician-authored Bangla strings (keyed `chat_refusal_*` in `strings.xml` / `values-bn`), never generated by the LLM:
+Refusals are canned, clinician-authored Bangla strings, never generated by the model:
 
 | Outcome | Trigger |
 |---|---|
-| `refused_scope` | L1 — out of clinical/SPICE scope |
-| `refused_no_ground` | L2 — in-scope but uncovered by the corpus |
-| `refused_unsafe` | L4 — validator rejected the LLM output |
-| `translation_degraded` | L5 — translation unusable; English served with a caveat |
+| `refused_scope` | L0 deny-list, or L1 under `Strict` |
+| `refused_no_ground` | the serve gate refused, or a groundedness fallback found no card worth serving |
+| `refused_unsafe` | L4 rejected the answer and no card could be served instead |
+| `translation_degraded` | L5: translation unusable, English served with a caveat |
+
+---
+
+## Entry surfaces & session
+
+The chat is reached through `CoachingChatFragment`, `CoachingChatBottomSheet`, or the
+`ChatFab` composable (see [03 — UI Embedding](../documentation/03-ui-embedding.md)). Each
+open creates a fresh `ChatSession`. The answering-style sheet lets the user choose between
+the verbatim card (direct) and the reworded answer (assisted); choosing direct unloads the
+engine but can keep the model file.
 
 ---
 
 ## Translation pipeline
 
-The chat preserves a full BN → EN → LLM → EN → BN round-trip via ML Kit `OnDeviceTranslator`:
-
-- Bangla input is translated to English before retrieval/prompt-build; Gemma replies in English; the reply is translated back to Bangla before render.
-- `MicroCoachingSDK.translationModelState` gates the UI: suggestion chips stay hidden until the BN↔EN pack is `Ready`; a `Downloading` pack blocks send with a "Bangla loading" state; a `Failed` pack falls back to **BN-only retrieval + BN prompt** (degraded but functional).
+Bangla input is translated to English by ML Kit before retrieval, and the English copy joins
+the typed Bangla in the gate's question so evidence can match either language. The model is
+prompted in English and its reply is translated back to Bangla before render.
+`MicroCoachingSDK.translationModelState` gates the UI: a `Downloading` pack blocks send; a
+`Failed` pack falls back to Bangla-only retrieval with the card served in Bangla.
 
 ---
 
 ## Voice
 
-- **TTS ("speak out loud"):** `CoachingTtsHelper` wraps Android `TextToSpeech` (locale `bn-BD` in chat). On a missing Bengali voice pack it fires the system installer intent and reports a `LanguageMissing` state. The lesson player uses the same helper.
-- **STT (mic input):** Android's platform `SpeechRecognizer` handles English (on-device + cloud) and online Bengali. **Offline Bengali** is provided by the optional `:sdk-android-sherpa` engine, wired via `Builder.offlineSttEngineFactory(SherpaOnnxStt.factory)`. Hosts can also supply a custom `voiceInputController`. See [05 — Model & Voice](../documentation/05-model-and-voice.md#voice--stt).
+- **TTS ("speak out loud"):** `CoachingTtsHelper` wraps Android `TextToSpeech` (locale
+  `bn-BD` in chat). On a missing Bengali voice pack it fires the system installer intent and
+  reports a `LanguageMissing` state.
+- **STT (mic input):** Android's platform `SpeechRecognizer` handles English and online
+  Bengali. Offline Bengali is the optional `:sdk-android-sherpa` engine, wired via
+  `Builder.offlineSttEngineFactory(SherpaOnnxStt.factory)`. See
+  [05 — Model & Voice](../documentation/05-model-and-voice.md#voice--stt).
 
 ---
 
 ## Telemetry
 
-Every chat response generation emits one `coaching_event` row (`event_family = "it-help"`, `event_type = "chatbot"`), capturing `validator_status`, `fallback_used`, `inference_mode` (`edge`), `network_state`, and — on refusals — a `payload_json` with the refusal outcome, retrieval top-score, and grounded chunk ids. Rows persist via `CoachingEventDao` and ship on the next `OutboundSyncWorker` cycle. Chat **messages** themselves persist separately in `chat_messages`. Telemetry export is gated by `enableTelemetry` (off by default) — see [02 — Telemetry](../documentation/02-initialization.md#telemetry-opentelemetry-configuration).
+Every response emits one `coaching_event` row (`event_family = "it-help"`,
+`event_type = "chatbot"`) with the validator status, whether a fallback was used, the answer
+mode, the network state and, on refusals, the refusal outcome, retrieval top score and
+grounded chunk ids. Rows persist via `CoachingEventDao` and ship on the next
+`OutboundSyncWorker` cycle. Export is gated by `enableTelemetry` (off by default).
 
 ---
 
 ## Related
 
-- [03 — UI Embedding](../documentation/03-ui-embedding.md) — the public chat surfaces.
-- [05 — Model & Voice](../documentation/05-model-and-voice.md) — model download lifecycle and STT.
-- [docs/ARCHITECTURE.md](../ARCHITECTURE.md) — component-level reference (inference engines, networking, Room schema).
+- [retrieval.md](./retrieval.md) and [serve-gate.md](./serve-gate.md), the two pages this one points at.
+- [03 — UI Embedding](../documentation/03-ui-embedding.md), the public chat surfaces.
+- [05 — Model & Voice](../documentation/05-model-and-voice.md), model download lifecycle and STT.
+- [docs/ARCHITECTURE.md](../ARCHITECTURE.md), component-level reference.
