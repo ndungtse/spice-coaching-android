@@ -104,7 +104,7 @@ class DeviceDenseVectorDumpTest {
         // one run costs only the queries and keeps them directly comparable.
         val queryIds = ArrayList<String>()
         val queryVectors = ArrayList<FloatArray>()
-        listOf("audit_labelled.json", "chw_questions_2026-09.json").forEach { file ->
+        listOf("audit_labelled.json", "chw_questions_2026-09.json", "qa_questions_bn.json").forEach { file ->
             json.parseToJsonElement(asset(file)).jsonArray.forEach { row ->
                 val record = row.jsonObject
                 queryIds += record.getValue("id").jsonPrimitive.content

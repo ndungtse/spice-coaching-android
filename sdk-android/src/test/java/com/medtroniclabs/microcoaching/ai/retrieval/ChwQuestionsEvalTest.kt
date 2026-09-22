@@ -92,6 +92,12 @@ class ChwQuestionsEvalTest {
             )
         }
 
+        val report = linkedMapOf("BM25-only" to EvalReport.Tally(), "BM25+dense" to EvalReport.Tally())
+        for (q in questions) {
+            report.getValue("BM25-only").add(EvalReport.verdict(q.acceptable, runPipeline(q, index, scope, emptyList()).first))
+            report.getValue("BM25+dense").add(EvalReport.verdict(q.acceptable, runPipeline(q, index, scope, denseByQuery[q.id].orEmpty()).first))
+        }
+        EvalReport.print("CHW question set", report)
         println("ChwQuestionsEval — 30 fresh questions (25 answerable, 5 not)")
         for ((mode, byLang) in results) {
             println("  $mode")
