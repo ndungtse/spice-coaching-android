@@ -15,6 +15,7 @@ This folder explains **how the SDK works internally** — the mechanisms behind 
 | [chat.md](./chat.md) | How the on-device AI chat works — the input→retrieval→LLM→output pipeline, grounding, guardrails, translation, voice, and telemetry. |
 | [retrieval.md](./retrieval.md) | BM25 and dense retrieval, how the two rankings are fused, with a worked example on real corpus questions. |
 | [serve-gate.md](./serve-gate.md) | The serve/refuse gate: its five steps, the population veto, every refusal reason and its threshold, a worked example. |
+| [gate-vocabulary.md](./gate-vocabulary.md) | Every word list retrieval and the gate compare against: gazetteer, synonyms, template/demographic/population words, where each comes from, and how much of the corpus it covers. |
 
 ---
 
