@@ -237,10 +237,10 @@ Chat routes on **`AnswerMode`** (`domain/decision/AnswerModeResolver.kt`), a pur
 | Mode | Path | Needs |
 |---|---|---|
 | `ONLINE` | `ChatBackendAnswerer` → `POST /coaching/rag-query` (backend retrieval + generation) | Network |
-| `ON_DEVICE_ASSISTED` | `ChatLocalAnswerer` full L0→L5: deny-list → scope gate → BM25 → `ServeDecision` → LLM → validators → BN↔EN round-trip | Downloaded model + consent |
+| `ON_DEVICE_ASSISTED` | `ChatLocalAnswerer` full L0→L5: deny-list → scope gate → BM25 + dense → fusion → ranker → `ServeGate` → LLM → groundedness and validators → BN↔EN round-trip | Downloaded model + consent |
 | `ON_DEVICE_DIRECT` | Same retrieval + gate, serving clinician-authored card text verbatim | Nothing but the local index — the hard floor |
 
-Key invariant: **`ServeDecision` (`ai/retrieval/ServeDecision.kt`) is the single serve/refuse authority for both offline paths, and it runs *before* any LLM call.** It demands shared clinical evidence (condition terms + synonym concepts), applies per-language score floors (`ServeTuning`), and refuses with `NO_HITS` / `NO_EVIDENCE` / `BELOW_SCORE_FLOOR`. The model can only reword a card the gate would already have served — "this mode gives up presentation, not accuracy."
+Key invariant: **`ServeGate` (`ai/retrieval/ServeGate.kt`) is the single serve/refuse authority for both offline paths, and it runs *before* any LLM call.** `CardRanker` picks one card from the fused candidates; the gate serves or refuses that card and never substitutes another. It demands shared clinical evidence (`CardEvidence`: condition terms + synonym concepts), applies per-language score floors (`ServeTuning`), and refuses with `NO_HITS` / `NO_EVIDENCE` / `BELOW_SCORE_FLOOR`. After the model, a rejected answer is replaced by the same card verbatim; nothing after the gate refuses it. The model can only reword a card the gate already served — "this mode gives up presentation, not accuracy."
 
 Supporting pieces: `ModuleKnowledgeIndex` (field-weighted BM25 over TITLE/BODY/QUESTION/KEYWORD × EN/BN, one chunk per card, built lazily on first chat open, excludes retired families), `ScopeClassifier` (clinical allow-list + deny terms; `Strict` vs `ExtendedClinical`), `InferenceRouter`/`SharedInferenceRouter` (ref-counted — two routers on one mapped model file is a native crash), `OnDeviceTranslator` (ML Kit, 8 s timeout then passthrough), `OutputValidator` + `ChatRefusal` (guardrails, localized refusal strings, every refusal recorded as telemetry).
 
@@ -386,7 +386,7 @@ sequenceDiagram
     autonumber
     actor CHW
     participant UI as ChatScreen / ChatViewModel
-    participant Gate as ScopeClassifier + ServeDecision
+    participant Gate as ScopeClassifier + CardRanker + ServeGate
     participant Index as ModuleKnowledgeIndex (BM25)
     participant LLM as SharedInferenceRouter → LiteRT-LM
     participant TR as OnDeviceTranslator (ML Kit)
@@ -399,7 +399,7 @@ sequenceDiagram
     end
     UI->>Index: BM25 retrieve (BN anchor, EN merge)
     Index-->>UI: top chunks + scores
-    UI->>Gate: ServeDecision.decide()
+    UI->>Gate: ServeGate.decide() (ranker picks, gate judges)
     alt no evidence / below floor
         Gate-->>UI: refusal — no LLM call ever made
     end
@@ -547,11 +547,11 @@ sequenceDiagram
 - ⚠️ Duplicated decision logic (server + `OnDeviceMorningGenerator`) must be kept in behavioural sync
 - ⚠️ Eventual consistency: gap state converges only after telemetry round-trips
 
-### 9.4 — `ServeDecision` as the single serve/refuse authority
+### 9.4 — One serve/refuse gate (`ServeGate`, formerly `ServeDecision`)
 
 **Status**: Accepted (commit `64b6b24`)
 **Context**: An on-device LLM answering ungrounded clinical questions is a safety risk.
-**Decision**: One pure gate, shared by both offline paths, runs **before** any LLM call; it requires demonstrable shared clinical evidence and refuses otherwise. The LLM can only reword a card the gate already served.
+**Decision**: One pure gate, shared by both offline paths, runs **before** any LLM call; it requires demonstrable shared clinical evidence and refuses otherwise. The LLM can only reword a card the gate already served. Choosing the card is a separate step (`CardRanker`) that runs first, so the gate only serves or refuses one card, and every stage logs one trace line (`FUSED`, `RANK`, `GATE`, `POST`).
 **Trade-offs**:
 - ✅ No hallucinated clinical answers offline; refusals are deterministic and testable (`retrievalLab`)
 - ⚠️ Conservative: in-scope questions with weak lexical overlap get refused (semantic retrieval is the planned fix — Appendix C)
@@ -682,7 +682,7 @@ spice-coaching-android/
 │       │   ├── inference/            # LLMService, LiteRtLmService, (Shared)InferenceRouter
 │       │   ├── model/                # ModelManager, ModelCatalog, download worker, consent prefs
 │       │   ├── download/             # ResumableHttpDownloader (Range)
-│       │   ├── retrieval/            # BM25 index, ServeDecision, ScopeClassifier, tokenizers
+│       │   ├── retrieval/            # BM25 index, CardEvidence, CardRanker, ServeGate, ScopeClassifier, tokenizers
 │       │   ├── translation/          # ML Kit EN↔BN
 │       │   └── voice/                # controllers, platform engine, STT pack manager
 │       ├── content/richtext/         # TipTap model/parser (shared by index + UI)
@@ -727,7 +727,7 @@ spice-coaching-android/
 
 ## Appendix C — In Progress / Known Gaps
 
-- **Local embeddings for offline chat** *(shared roadmap with the backend — see the platform ARCHITECTURE.md)*: module publish will additionally produce embeddings from a locally-runnable embedding model, shipped to the device so offline retrieval gains semantic search alongside BM25. Generation stays as-is; only the retrieval layer is enhanced. This directly addresses `ServeDecision`'s main weakness (lexical-overlap dependence).
+- **Local embeddings for offline chat** *(shared roadmap with the backend — see the platform ARCHITECTURE.md)*: module publish will additionally produce embeddings from a locally-runnable embedding model, shipped to the device so offline retrieval gains semantic search alongside BM25. Generation stays as-is; only the retrieval layer is enhanced. This directly addresses the serve gate's main weakness (lexical-overlap dependence).
 - **Stub / placeholder code** (kept deliberately, flagged honestly): `sdk/hooks/HookEvents.kt` and `sdk/hooks/SpiceHookAdapter.kt` (comment-only Phase-E placeholders); `ai/voice/BanglaSttEngine.kt` (TODO stub — real impl is the sherpa sidecar); `ModelProvider.Kaggle` (unimplemented, skipped); `ModelRuntime.MEDIAPIPE`/`LLAMA_CPP` (non-runnable, exist so stored values compile); three of four `GapEvaluator`s return null (only `WrongFacilityTierEvaluator` is wired end-to-end); `ModelManager.verifyIntegrity()` has no callers; `MicroCoachingInitializer.create()` is an empty body.
 - **Reserved config**: `enableChat` / `enableLearnModule` / `enableApplyModule` / `enableMeasureModule` have zero read sites; `enableGapDetection` has no Builder setter (single read site in `ReferralSubmittedHandler`); a decision to either implement or deprecate them in code is pending.
 - **Known defects**: `consumer-rules.pro` keeps `…chat.CoachingChatFragment` but the class lives in `…ui.chat` (release-minified hosts need a manual keep — see [01 — Setup](documentation/01-setup.md)); root `build.gradle.kts` still carries a stale `version = "0.2.0-SNAPSHOT"` (the publishing blocks in each module are authoritative); `PrefsNames` documents a deliberate ONBOARDING/REMINDER prefs-file collision pending a data migration.

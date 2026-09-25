@@ -24,11 +24,11 @@ read.
 | Harvest filter | `ScopeClassifier.GENERIC_HARVEST_STOPWORDS` | static | 25 | gazetteer build | keep framing words out of the harvest |
 | Synonym concepts | `ClinicalSynonymMap.GROUPS` | static | 13 concepts, 80 aliases | BM25 expansion; gazetteer; gate concepts; groundedness | bridge spellings and BN↔EN |
 | Bridges | `ClinicalSynonymMap.BRIDGES` | static + per-module `synonyms` | 14 static | BM25 expansion only | abbreviation → words |
-| Template words | `ServeDecision.TEMPLATE_TERMS` | static | 104 | gate | words that say what *form* of answer is wanted |
-| Demographic words | `ServeDecision.DEMOGRAPHIC_TERMS` | static | 36 | gate | words that say *who*, not *what* |
-| Units | `ServeDecision.UNIT_TERMS` | static | 14 | gate | numbers and units are not topics |
-| Population groups | `ServeDecision.POPULATION_GROUPS` | static | 3 groups | gate | veto, unstated rule, topic discount |
-| Population concepts | `ServeDecision.POPULATION_CONCEPTS` | derived from the groups | 2 | gate | concepts that only say who or when |
+| Template words | `CardEvidence.TEMPLATE_TERMS` | static | 104 | gate | words that say what *form* of answer is wanted |
+| Demographic words | `CardEvidence.DEMOGRAPHIC_TERMS` | static | 36 | gate | words that say *who*, not *what* |
+| Units | `CardEvidence.UNIT_TERMS` | static | 14 | gate | numbers and units are not topics |
+| Population groups | `CardEvidence.POPULATION_GROUPS` | static | 3 groups | gate | veto, unstated rule, topic discount |
+| Population concepts | `CardEvidence.POPULATION_CONCEPTS` | derived from the groups | 2 | gate | concepts that only say who or when |
 | Facilitator markers | `ModuleCorpusParser.FACILITATOR_MARKERS` | static | 6 | index build | drop trainer-script cards |
 
 The gazetteer is the one that matters most and the only one partly built from the modules.
@@ -101,7 +101,7 @@ have to be subtracted again in the gate.
 - `ScopeClassifier.isInScope` (`:26`): the L1 check. Any gazetteer term anywhere in the
   question means in scope. Only Strict mode refuses on it; ExtendedClinical lets retrieval
   decide.
-- `ServeDecision.gazetteerTermsIn` (`ServeDecision.kt:439`): which gazetteer terms the
+- `CardEvidence.gazetteerTermsIn` (`CardEvidence.kt:354`): which gazetteer terms the
   question contains. After subtracting template and demographic words this is the question's
   **term list**, and a card's `terms=[…]` in the trace is the subset of that list found in the
   card's title, body, hints or questions.
@@ -150,21 +150,21 @@ then it is the only path to any card. Modules add their own bridges through
 
 ### 2.5 Template, demographic and unit words
 
-All in `ServeDecision.kt`, all static, all **subtracted** rather than matched.
+All in `CardEvidence.kt`, all static, all **subtracted** rather than matched.
 
-- `TEMPLATE_TERMS` (`:152`), 104 words. Question-form words (লক্ষণ, প্রতিরোধ, করণীয়,
+- `TEMPLATE_TERMS` (`CardEvidence.kt:127`), 104 words. Question-form words (লক্ষণ, প্রতিরোধ, করণীয়,
   পরামর্শ, কারণ, symptoms, prevention, advice, cause), procedure words (পরিমাপ, পরীক্ষা,
   measure, test), near-universal clinical filler (রক্ত, উচ্চ, চাপ, blood, pressure, high,
   low), verbal words that reach the gazetteer through titles (দেওয়া, করা, গুরুত্ব), and
   relational words (পরবর্তী, আগের). Without this list every symptom card in the corpus
   shares লক্ষণ with every symptom question.
-- `WHOLE_TERM_ONLY_TEMPLATE` (`:406`): the seven filler words (রক্ত, উচ্চ, চাপ, মাত্রা,
+- `WHOLE_TERM_ONLY_TEMPLATE` (`:321`): the seven filler words (রক্ত, উচ্চ, চাপ, মাত্রা,
   পরিমাণ …) that sit inside real condition words. They are subtracted only when they are the
   whole term, so রক্তচাপ survives while রক্ত alone does not.
-- `DEMOGRAPHIC_TERMS` (`:135`), 36 words: গর্ভবতী, মা, শিশু, রোগী, সেবাগ্রহীতা, pregnant,
+- `DEMOGRAPHIC_TERMS` (`:110`), 36 words: গর্ভবতী, মা, শিশু, রোগী, সেবাগ্রহীতা, pregnant,
   mother, child, patient and their inflections. A quarter of a maternal corpus mentions
   গর্ভবতী, so a match on it proves nothing.
-- `UNIT_TERMS` (`:184`) and anything numeric: a shared mmHg says both texts quote a reading.
+- `UNIT_TERMS` (`:159`) and anything numeric: a shared mmHg says both texts quote a reading.
 
 Consequence worth keeping in mind: "ডায়রিয়ার প্রধান কারণ" has exactly one topic word,
 ডায়রিয়া. The question's own template words carry no evidence, by design, so a card is judged
@@ -173,7 +173,7 @@ that one.
 
 ### 2.6 Populations
 
-`POPULATION_GROUPS` (`:196`): three groups of markers, both languages.
+`POPULATION_GROUPS` (`CardEvidence.kt:171`): three groups of markers, both languages.
 
 | Group | Markers |
 |---|---|
@@ -182,13 +182,13 @@ that one.
 | adult | সেবাগ্রহীতা, ক্লায়েন্ট, প্রাপ্তবয়স্ক, পুরুষ, বয়স্ক, client, adult, man, elderly |
 
 A **card's** populations are read from its title, hints and questions only (`populationsIn`
-over `titleHintText`, `:353`), never its body, because bodies mention mothers and children in
+over `titleHintText`, `:268`), never its body, because bodies mention mothers and children in
 passing on cards that answer anyone. A **question's** populations are read from the whole
 guard query, the typed text plus its translation, so an English question about "the mother"
 and a Bangla one about মা land in the same group. Markers under four characters must match a
 whole token, so মা does not fire inside মাপার.
 
-`POPULATION_CONCEPTS` (`:221`) is derived by asking the synonym map which concepts the
+`POPULATION_CONCEPTS` (`:196`) is derived by asking the synonym map which concepts the
 markers touch; today that is `anc_visit` and `postpartum`. Those two concepts are discounted
 when the gate counts topic evidence, so "postpartum" shared between a PNC question and a PNC
 card counts as population, not subject.
@@ -224,8 +224,8 @@ Every card ships a title, a body and a `search_metadata` object with `retrieval_
 | module title | not indexed | no | no | yes, split into words |
 
 Field weights are `ModuleKnowledgeIndex.kt:252`; the copy of module metadata onto each card
-is at `:369`. The gate's evidence text is assembled at `ServeDecision.kt:344` and the
-title/hint text at `:353`.
+is at `:369`. The evidence text is assembled at `CardEvidence.kt:259` and the
+title/hint text at `:268`.
 
 Read the two bold columns together and the shape of the problem is visible. The authored
 keywords are what put a card at BM25 rank 1, and the gate cannot see them. The gate can only
@@ -324,7 +324,8 @@ fix needs no backend release.
 ## Reading the trace with this page
 
 ```
-SERVE-DECISION refuse reason=NO_EVIDENCE 7a1f98e9:card:3 score=143.5 terms=[] concepts=[] titleHint=0 population-only
+RANK pick=7a1f98e9:3 fused=1 band=[…] | 7a1f98e9-…:card:3 score=143.5 terms=[] concepts=[] titleHint=0 population-only
+GATE refuse 7a1f98e9:3 reason=NO_EVIDENCE
 ```
 
 `terms` is section 2.3 after section 2.5's subtraction; `concepts` is section 2.4;
