@@ -16,8 +16,9 @@ import org.junit.Test
 /**
  * Runs an externally authored question bank through the production retrieval pipeline.
  *
- * `retrieval/qa_questions_bn.json` holds one row per question with a `source` naming the
- * run it came from; new runs append rows under a new source. No gate threshold is tuned on
+ * `qa_bn.jsonl`, the question bank in the eval harness's `chat-eval/banks/` directory, holds one
+ * row per question with a `source` naming the run it came from; new runs append rows under a
+ * new source. No gate threshold is tuned on
  * this bank, so it measures generalisation rather than fit.
  *
  * Sources with device-computed cosines in `retrieval/qa_dense_cosines_device.json` run
@@ -38,7 +39,6 @@ class QaQuestionBankEvalTest {
         val nativeQuery: String,
         val englishQuery: String?,
         val acceptable: Set<String>?,
-        val qaStatus: String?,
     )
 
     /**
@@ -72,18 +72,11 @@ class QaQuestionBankEvalTest {
                 }
             }
             val tallies = modes.associateWith { EvalReport.Tally() }
-            var decisionAgree = 0
-            var decisionKnown = 0
             for (mode in modes) for (r in rows) {
                 val served = outcomes.getValue(mode).getValue(r.id).first
                 tallies.getValue(mode).add(EvalReport.verdict(r.acceptable, served))
-                if (mode == modes.last() && r.qaStatus != null) {
-                    decisionKnown++
-                    if ((r.qaStatus == "ok") == (served != null)) decisionAgree++
-                }
             }
             EvalReport.print("QA bank: $source — ${rows.size} questions", tallies)
-            println("  serve/refuse agrees with the QA device: $decisionAgree/$decisionKnown (${modes.last()})")
 
             val shipped = outcomes.getValue(modes.last())
             val refusals = rows.filter { it.acceptable != null && shipped.getValue(it.id).first == null }
@@ -128,12 +121,12 @@ class QaQuestionBankEvalTest {
             denseAdmitFloor = tuning.cosFloor,
         ).hits
         if (hits.isEmpty()) return null to "no BM25 hit cleared the floor"
-        val decision = ServeDecision.decide(
+        val decision = ServeGate.decide(
             query = q.question, hits = hits, clinicalTerms = scope.scopeTerms(),
             tuning = tuning, isBanglaTurn = true,
         )
-        val why = ServeDecision.describe(decision)
-        val top = (decision as? ServeDecision.Decision.Serve)?.hit ?: return null to why
+        val why = ServeGate.describe(decision)
+        val top = (decision as? ServeGate.Decision.Serve)?.hit ?: return null to why
         return "${top.moduleFamilyId.take(8)}:${top.positionalId}" to why
     }
 
@@ -154,22 +147,21 @@ class QaQuestionBankEvalTest {
     }
 
     private fun loadRows(): List<Row> =
-        json.parseToJsonElement(resourceText("retrieval/qa_questions_bn.json")).jsonArray.map { el ->
-            val o = el as JsonObject
+        resourceText("qa_bn.jsonl").lineSequence().filter { it.isNotBlank() }.map { line ->
+            val o = json.parseToJsonElement(line) as JsonObject
             fun s(k: String) = (o[k] as? JsonPrimitive)?.contentOrNull
+            val expect = o["expect"] as JsonObject
+            val question = checkNotNull(s("question"))
             Row(
                 id = checkNotNull(s("id")),
                 source = checkNotNull(s("source")),
-                question = checkNotNull(s("question")),
-                nativeQuery = checkNotNull(s("native_query")),
-                englishQuery = s("english_query"),
-                acceptable = when (val a = o["acceptable"]) {
-                    is JsonArray -> a.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }.toSet()
-                    else -> null
-                },
-                qaStatus = s("qa_status"),
+                question = question,
+                nativeQuery = question,
+                englishQuery = null,
+                acceptable = (expect["cards"] as? JsonArray)
+                    ?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }?.toSet(),
             )
-        }
+        }.toList()
 
     private fun loadModules(): List<ModuleEntity> =
         json.parseToJsonElement(resourceText("retrieval/audit_corpus_2026-08.json")).jsonArray.mapNotNull { el ->

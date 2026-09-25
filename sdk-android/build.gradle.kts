@@ -77,6 +77,13 @@ android {
     testOptions {
         unitTests.isReturnDefaultValues = true
     }
+
+    sourceSets {
+        getByName("test") {
+            // The shared question bank lives with the eval harness; the JVM replay reads the same file.
+            resources.srcDir("../chat-eval/banks")
+        }
+    }
 }
 
 afterEvaluate {

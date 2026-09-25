@@ -403,9 +403,6 @@ data class MicroCoachingConfig internal constructor(
  *           is replaced by the BM25 card content. Set equal to [groundednessFloor]
  *           for a single uniform floor; set to 0 to always show the model's answer on
  *           strong retrieval.
- * @property minFallbackServeScore Minimum BM25 score required before the on-device path
- *           is allowed to serve retrieved clinician-authored text as a fallback.
- *           Prevents weak off-topic hits from turning into confident card-body serves.
  * @property streamCapChars Hard cap on streamed response length before generation is
  *           aborted. Sized so a complete 2–4 sentence answer isn't cut mid-sentence.
  * @property maxResponseWords L4 length cap; responses longer than this are rejected
@@ -427,7 +424,6 @@ data class ChatTuning(
     val strongRetrievalScore: Float = 6.0f,
     val groundednessFloor: Float = 0.35f,
     val strongRetrievalGroundednessFloor: Float = 0.25f,
-    val minFallbackServeScore: Float = 20.0f,
     val streamCapChars: Int = 1100,
     val maxResponseWords: Int = 280,
     val enableDosageGuard: Boolean = true,
@@ -438,7 +434,7 @@ data class ChatTuning(
 
 /**
  * Score bounds for the offline serve/refuse decision
- * ([com.medtroniclabs.microcoaching.ai.retrieval.ServeDecision]). Evidence decides
+ * ([com.medtroniclabs.microcoaching.ai.retrieval.ServeGate]). Evidence decides
  * whether a card may be served at all; these decide when a match is too weak to
  * trust regardless.
  *

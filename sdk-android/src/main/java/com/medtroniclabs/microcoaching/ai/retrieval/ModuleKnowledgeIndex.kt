@@ -80,7 +80,7 @@ class ModuleKnowledgeIndex private constructor(
      * @param scoreThreshold absolute floor on the combined field-weighted score.
      *   `0f` (used by unit tests) bypasses the gate to isolate "was it indexed?" from
      *   production tuning. The default [DEFAULT_SCORE_THRESHOLD] is deliberately low —
-     *   the semantic backstop is [ServeDecision] (topical evidence) plus the
+     *   the semantic backstop is [ServeGate] (topical evidence) plus the
      *   downstream groundedness gate, not a hand-tuned BM25 magnitude.
      * @param language which per-language index to score against.
      */
@@ -256,7 +256,7 @@ class ModuleKnowledgeIndex private constructor(
 
         /**
          * Production retrieval floor on the combined score. Low by design: the real
-         * semantic guards are [ServeDecision] and the groundedness gate, so a low
+         * semantic guards are [ServeGate] and the groundedness gate, so a low
          * floor here cuts false refusals without admitting hallucination — the model
          * never sees un-retrieved content.
          */

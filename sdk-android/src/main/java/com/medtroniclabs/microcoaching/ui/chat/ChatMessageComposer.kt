@@ -18,7 +18,6 @@ import com.medtroniclabs.microcoaching.ai.retrieval.ChatRefusal
 import com.medtroniclabs.microcoaching.ai.retrieval.GroundingChunk
 import com.medtroniclabs.microcoaching.ai.retrieval.GroundingSelector
 import com.medtroniclabs.microcoaching.ai.retrieval.ModuleKnowledgeIndex
-import com.medtroniclabs.microcoaching.ai.retrieval.ServeDecision
 import com.medtroniclabs.microcoaching.ai.retrieval.ScopeClassifier
 import com.medtroniclabs.microcoaching.ai.voice.CoachingTtsHelper
 import com.medtroniclabs.microcoaching.network.RagQueryRequest
@@ -113,90 +112,48 @@ internal suspend fun ChatViewModel.serveRefusal(
 }
 
 /**
- * Serve the BM25-selected clinician content when the model's own answer is
- * rejected by a post-stream gate (the groundedness floor or the L4 validator).
- * BM25 already surfaced relevant cards, so the CHW gets the authoritative
- * answer instead of an "I don't have this" refusal. Order matters for tone:
- *   1) a linked quiz EXPLANATION (concise, already answer-shaped) — far better
- *      than a long third-person card body; served in the CHW's language directly.
- *   2) else the retrieved CARD body, clipped to a complete sentence so it never
- *      ends mid-sentence.
- *   3) else (no usable text at all) an honest Unsafe refusal.
- * Shared by the L3c groundedness gate and the L4 validator.
+ * Serve the card the model was given, verbatim, when a post-model check rejects the model's
+ * answer (the groundedness floor or the output validator).
+ *
+ * The card already passed the gate, so nothing here re-judges it: the checks decide which
+ * text the CHW sees, never which card. The card's linked quiz explanation is served when it
+ * has one, since it is already answer-shaped; otherwise its body, clipped to a complete
+ * sentence. A card with no text at all refuses as unsafe.
  */
-internal suspend fun ChatViewModel.serveGroundingFallbackOrRefuse(
-    grounding: List<GroundingChunk>,
+internal suspend fun ChatViewModel.serveCardVerbatim(
+    card: GroundingChunk,
     isBangla: Boolean,
     validatorReason: String?,
-    queryForSafety: String,
-    clinicalTerms: Set<String>,
 ) {
-    // The model's own answer has already been rejected, so the card is all that is left
-    // to serve. The same [ServeDecision] the serve paths use decides whether any card
-    // has real question↔evidence — groundedness and the L4 validator both compare the
-    // answer to the references, so a faithful summary of the wrong card passes them.
-    // On top of the evidence gate, the fallback keeps its own minimum score.
-    val decision = ServeDecision.decide(
-        query = queryForSafety,
-        hits = grounding,
-        clinicalTerms = clinicalTerms,
-        tuning = config.chatTuning.serve,
-        isBanglaTurn = isBangla,
-    )
-    val fallbackHit = (decision as? ServeDecision.Decision.Serve)?.hit
-        ?.takeIf { it.score >= config.chatTuning.minFallbackServeScore }
-    if (fallbackHit == null) {
-        val why = when (decision) {
-            is ServeDecision.Decision.Refuse -> "no evidence-bearing grounding (${decision.reason})"
-            is ServeDecision.Decision.Serve -> "decided card below minFallbackServeScore"
-        }
-        Log.i(
-            ChatViewModel.TRACE_TAG,
-            "fallback-refusal: refusing instead of serving — $why " +
-                "topScore=${grounding.firstOrNull()?.score} reason=${validatorReason ?: "∅"}",
-        )
-        serveRefusal(
-            ChatRefusal.NoGround,
-            groundedFrom = grounding.map { it.chunkId },
-            topScore = grounding.firstOrNull()?.score,
-            validatorReason = listOfNotNull(validatorReason, "no_evidence").joinToString(";"),
-        )
-        return
-    }
-    val fbAttribution = resolveSourceAttribution(grounding)
-    val explanationChunk = grounding.firstOrNull {
-        it.chunkId == fallbackHit.chunkId && it.hasExplanation()
-    }
-    val cardFallback = grounding.firstOrNull {
-        it.chunkId == fallbackHit.chunkId &&
-            it.source == GroundingChunk.Source.CARD &&
-            (!it.bodyBn.isNullOrBlank() || !it.bodyEn.isNullOrBlank())
-    }
+    val attribution = resolveSourceAttribution(listOf(card))
+    val explanation = if (card.hasExplanation()) resolveExplanation(card, isBangla) else null
+    val hasBody = card.source == GroundingChunk.Source.CARD &&
+        (!card.bodyBn.isNullOrBlank() || !card.bodyEn.isNullOrBlank())
     when {
-        explanationChunk != null -> serveFallback(
-            bodyBn = resolveExplanation(explanationChunk, isBangla).orEmpty(),
-            groundedFrom = listOf(explanationChunk.chunkId),
+        explanation != null -> serveFallback(
+            bodyBn = explanation,
+            groundedFrom = listOf(card.chunkId),
             validatorReason = validatorReason,
             fallbackKind = "fallback_quiz_explanation",
-            sourceDocuments = fbAttribution.docs,
-            groundingModuleFamilyId = fbAttribution.familyId,
-            groundingModuleId = fbAttribution.moduleId,
-            startPage = fbAttribution.startPage,
+            sourceDocuments = attribution.docs,
+            groundingModuleFamilyId = attribution.familyId,
+            groundingModuleId = attribution.moduleId,
+            startPage = attribution.startPage,
         )
-        cardFallback != null -> serveFallback(
-            bodyBn = clipToCompleteSentence(resolveCardBody(cardFallback, isBangla)),
-            groundedFrom = listOf(cardFallback.chunkId),
+        hasBody -> serveFallback(
+            bodyBn = clipToCompleteSentence(resolveCardBody(card, isBangla)),
+            groundedFrom = listOf(card.chunkId),
             validatorReason = validatorReason,
             fallbackKind = "fallback_card_body",
-            sourceDocuments = fbAttribution.docs,
-            groundingModuleFamilyId = fbAttribution.familyId,
-            groundingModuleId = fbAttribution.moduleId,
-            startPage = fbAttribution.startPage,
+            sourceDocuments = attribution.docs,
+            groundingModuleFamilyId = attribution.familyId,
+            groundingModuleId = attribution.moduleId,
+            startPage = attribution.startPage,
         )
         else -> serveRefusal(
             ChatRefusal.Unsafe,
-            groundedFrom = grounding.map { it.chunkId },
-            topScore = grounding.firstOrNull()?.score,
+            groundedFrom = listOf(card.chunkId),
+            topScore = card.score,
             validatorReason = validatorReason,
         )
     }

@@ -46,7 +46,7 @@ internal class ChatKnowledgeIndexBootstrap(
     /**
      * Scope/evidence vocabulary over the SAME modules as [index]. The two must be built
      * from one corpus: retrieval can surface a card from any indexed module, and
-     * [com.medtroniclabs.microcoaching.ai.retrieval.ServeDecision] judges that card
+     * [com.medtroniclabs.microcoaching.ai.retrieval.ServeGate] judges that card
      * against this gazetteer. A narrower vocabulary here makes a card's own topic
      * invisible to the gate, which then reads the hit as having no evidence.
      */

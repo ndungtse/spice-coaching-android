@@ -6,10 +6,10 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Unit tests for [ServeDecision]: what counts as evidence, what vetoes a hit, and
+ * Unit tests for [ServeGate]: what counts as evidence, what vetoes a hit, and
  * which hit wins when several are servable.
  */
-class ServeDecisionTest {
+class ServeGateTest {
 
     private val gazetteer = setOf(
         "blood pressure", "রক্তচাপ", "diarrhoea", "ডায়রিয়া", "malaria", "ম্যালেরিয়া",
@@ -44,30 +44,30 @@ class ServeDecisionTest {
     )
 
     private fun decide(query: String, hits: List<GroundingChunk>, bangla: Boolean = true) =
-        ServeDecision.decide(query, hits, gazetteer, tuning, isBanglaTurn = bangla)
+        ServeGate.decide(query, hits, gazetteer, tuning, isBanglaTurn = bangla)
 
     // ── refusal basics ────────────────────────────────────────────────────────
 
     @Test
     fun `empty hits refuse with NO_HITS`() {
         val d = decide("রক্তচাপ বেশি হলে কি করব", emptyList())
-        assertTrue(d is ServeDecision.Decision.Refuse)
-        assertEquals(ServeDecision.RefuseReason.NO_HITS, (d as ServeDecision.Decision.Refuse).reason)
+        assertTrue(d is ServeGate.Decision.Refuse)
+        assertEquals(ServeGate.RefuseReason.NO_HITS, (d as ServeGate.Decision.Refuse).reason)
     }
 
     @Test
     fun `BP query matched to BP chunk serves`() {
         val hit = chunk("রক্তচাপ মাপার নিয়ম", "রক্তচাপ মাপতে হবে এবং বেশি হলে রেফার করতে হবে দ্রুত হাসপাতালে")
         val d = decide("রক্তচাপ বেশি হলে কি করব", listOf(hit))
-        assertTrue(d is ServeDecision.Decision.Serve)
+        assertTrue(d is ServeGate.Decision.Serve)
     }
 
     @Test
     fun `BP query matched only to a diarrhoea chunk refuses`() {
         val hit = chunk("ডায়রিয়ার ভয়াবহতা", "ডায়রিয়া হলে খাবার স্যালাইন দিতে হবে এবং পানি শূন্যতা দেখতে হবে")
         val d = decide("রক্তচাপ বেশি হলে কি করব", listOf(hit))
-        assertTrue(d is ServeDecision.Decision.Refuse)
-        assertEquals(ServeDecision.RefuseReason.NO_EVIDENCE, (d as ServeDecision.Decision.Refuse).reason)
+        assertTrue(d is ServeGate.Decision.Refuse)
+        assertEquals(ServeGate.RefuseReason.NO_EVIDENCE, (d as ServeGate.Decision.Refuse).reason)
     }
 
     @Test
@@ -75,8 +75,8 @@ class ServeDecisionTest {
         val wrong = chunk("ডায়রিয়ার ভয়াবহতা", "ডায়রিয়া হলে খাবার স্যালাইন দিতে হবে এবং পানি দেখতে হবে", score = 100f)
         val right = chunk("রক্তচাপ মাপার নিয়ম", "রক্তচাপ বেশি হলে দ্রুত রেফার করতে হবে হাসপাতালে যেতে হবে", score = 70f)
         val d = decide("রক্তচাপ বেশি হলে কি করব", listOf(wrong, right))
-        assertTrue(d is ServeDecision.Decision.Serve)
-        assertEquals(right.chunkId, (d as ServeDecision.Decision.Serve).hit.chunkId)
+        assertTrue(d is ServeGate.Decision.Serve)
+        assertEquals(right.chunkId, (d as ServeGate.Decision.Serve).hit.chunkId)
     }
 
     /** Score does not substitute for evidence below the mangled-input rescue band. */
@@ -88,7 +88,7 @@ class ServeDecisionTest {
             score = 10_000f,
         )
         val d = decide("রক্তচাপ বেশি হলে কি করব", listOf(hit))
-        assertTrue(d is ServeDecision.Decision.Refuse)
+        assertTrue(d is ServeGate.Decision.Refuse)
     }
 
     // ── demographic / template / numeric words are not evidence ──────────────
@@ -98,7 +98,7 @@ class ServeDecisionTest {
         // "লক্ষণ" (symptoms) is shared by every symptom card, whatever the disease.
         val hit = chunk("ডায়রিয়ার লক্ষণ", "ডায়রিয়ার লক্ষণগুলো হলো বার বার পাতলা পায়খানা হওয়া এবং পানি পিপাসা")
         val d = decide("হাইপোগ্লাইসেমিয়ার লক্ষণ সমুহ কি কি", listOf(hit))
-        assertTrue(d is ServeDecision.Decision.Refuse)
+        assertTrue(d is ServeGate.Decision.Refuse)
     }
 
     @Test
@@ -106,7 +106,7 @@ class ServeDecisionTest {
         // "প্রতিরোধে করণীয়" (what to do to prevent) is shared by every prevention card.
         val hit = chunk("ডেঙ্গু প্রতিরোধে করণীয়", "ডেঙ্গু প্রতিরোধে বাড়ির চারপাশ পরিষ্কার রাখুন এবং জমা পানি ফেলে দিন")
         val d = decide("হাইপোগ্লাইসেমিয়া প্রতিরোধে করণীয় কি কি", listOf(hit))
-        assertTrue(d is ServeDecision.Decision.Refuse)
+        assertTrue(d is ServeGate.Decision.Refuse)
     }
 
 
@@ -115,7 +115,7 @@ class ServeDecisionTest {
         // Both texts are about pregnant women; only one is about food.
         val hit = chunk("রক্তস্বল্পতার মাত্রা", "গর্ভবতী মায়ের রক্তস্বল্পতা হলে আয়রন বড়ি খেতে হবে প্রতিদিন নিয়ম করে")
         val d = decide("গর্ভবতী মা প্রতিদিন কি খাবেন", listOf(hit))
-        assertTrue(d is ServeDecision.Decision.Refuse)
+        assertTrue(d is ServeGate.Decision.Refuse)
     }
 
 
@@ -127,7 +127,7 @@ class ServeDecisionTest {
             "গ্লুকোজ নির্ণয় করা হয়ে থাকলে ফলাফল লিখতে হবে যেমন 7.0 মিলিমোল লিটার হিসেবে",
         )
         val d = decide("রক্তে গ্লকোজের পরিমান ৩.৯ মিলিমোল লিটার এর থেকে কম", listOf(hit))
-        assertTrue(d is ServeDecision.Decision.Refuse)
+        assertTrue(d is ServeGate.Decision.Refuse)
     }
 
     // ── population-scope veto ─────────────────────────────────────────────────
@@ -150,7 +150,7 @@ class ServeDecisionTest {
         for (r in rows) {
             val hit = chunk(r.cardTitle, "রক্তচাপ বেশি হলে ইডিমা দেখে রেফার করুন")
             val d = decide(r.question, listOf(hit))
-            assertEquals("card='${r.cardTitle}' question='${r.question}'", r.blocked, d is ServeDecision.Decision.Refuse)
+            assertEquals("card='${r.cardTitle}' question='${r.question}'", r.blocked, d is ServeGate.Decision.Refuse)
         }
     }
 
@@ -158,10 +158,10 @@ class ServeDecisionTest {
     fun `a scoped card needs two shared terms or a dominant cosine when the question names nobody`() {
         val card = "গর্ভবতী মায়ের রক্তচাপ"
         val body = "রক্তচাপ বেশি হলে ইডিমা দেখে রেফার করুন"
-        assertTrue(decide("রক্তচাপ বেশি হলে কি করব", listOf(chunk(card, body))) is ServeDecision.Decision.Refuse)
-        assertTrue(decide("রক্তচাপ ও ইডিমা বেশি হলে কি করব", listOf(chunk(card, body))) is ServeDecision.Decision.Serve)
-        assertTrue(decide("রক্তচাপ বেশি হলে কি করব", listOf(chunk(card, body, denseCos = 0.90f))) is ServeDecision.Decision.Serve)
-        assertTrue(decide("রক্তচাপ বেশি হলে কি করব", listOf(chunk(card, body, denseCos = 0.55f))) is ServeDecision.Decision.Refuse)
+        assertTrue(decide("রক্তচাপ বেশি হলে কি করব", listOf(chunk(card, body))) is ServeGate.Decision.Refuse)
+        assertTrue(decide("রক্তচাপ ও ইডিমা বেশি হলে কি করব", listOf(chunk(card, body))) is ServeGate.Decision.Serve)
+        assertTrue(decide("রক্তচাপ বেশি হলে কি করব", listOf(chunk(card, body, denseCos = 0.90f))) is ServeGate.Decision.Serve)
+        assertTrue(decide("রক্তচাপ বেশি হলে কি করব", listOf(chunk(card, body, denseCos = 0.55f))) is ServeGate.Decision.Refuse)
     }
 
     // ── Bangla compound containment + concept bridge ─────────────────────────
@@ -171,7 +171,7 @@ class ServeDecisionTest {
         // The inflected compound must count as evidence for its base term.
         val hit = chunk("রক্তচাপ ব্যবস্থাপনা", "রক্তচাপ বেশি থাকলে বিশ্রামে থাকতে বলুন এবং দ্রুত হাসপাতালে রেফার করুন")
         val d = decide("উচ্চরক্তচাপের রোগীর জন্য কি করব", listOf(hit))
-        assertTrue(d is ServeDecision.Decision.Serve)
+        assertTrue(d is ServeGate.Decision.Serve)
     }
 
     @Test
@@ -179,7 +179,7 @@ class ServeDecisionTest {
         // MLKit writes এডিমা where the corpus writes ইডিমা; the concept group bridges them.
         val hit = chunk("ইডিমা হলে পরামর্শ", "ইডিমা থাকলে পাতে আলগা লবণ খাওয়া যাবে না এবং পা উঁচু করে রাখতে হবে")
         val d = decide("মায়ের পা ফোলা এডিমা হয়েছে কি করব", listOf(hit))
-        assertTrue(d is ServeDecision.Decision.Serve)
+        assertTrue(d is ServeGate.Decision.Serve)
     }
 
     // ── title/hint evidence beats body keyword density ───────────────────────
@@ -198,8 +198,8 @@ class ServeDecisionTest {
             score = 144f,
         )
         val d = decide("প্রসবের পর মায়ের জরায়ু সংকুচিত হয়ে আগের অবস্থায় ফিরে আসছে কিনা কীভাবে বুঝবেন", listOf(incidental, exact))
-        assertTrue(d is ServeDecision.Decision.Serve)
-        assertEquals(exact.chunkId, (d as ServeDecision.Decision.Serve).hit.chunkId)
+        assertTrue(d is ServeGate.Decision.Serve)
+        assertEquals(exact.chunkId, (d as ServeGate.Decision.Serve).hit.chunkId)
     }
 
     @Test
@@ -216,8 +216,8 @@ class ServeDecisionTest {
             questionsBn = listOf("নবজাতকের বিপদজনক লক্ষণ কি কি"),
         )
         val d = decide("নবজাতকের বিপদজনক লক্ষণ কি কি এবং কখন রেফার করতে হবে", listOf(plain, hinted))
-        assertTrue(d is ServeDecision.Decision.Serve)
-        assertEquals(hinted.chunkId, (d as ServeDecision.Decision.Serve).hit.chunkId)
+        assertTrue(d is ServeGate.Decision.Serve)
+        assertEquals(hinted.chunkId, (d as ServeGate.Decision.Serve).hit.chunkId)
     }
 
     // ── floors ────────────────────────────────────────────────────────────────
@@ -225,15 +225,15 @@ class ServeDecisionTest {
     @Test
     fun `evidence below the per-language score floor refuses`() {
         val hit = chunk("রক্তচাপ মাপার নিয়ম", "রক্তচাপ বেশি হলে দ্রুত রেফার করতে হবে হাসপাতালে", score = 10f)
-        val d = ServeDecision.decide(
+        val d = ServeGate.decide(
             "রক্তচাপ বেশি হলে কি করব",
             listOf(hit),
             gazetteer,
             ServeTuning(bnScoreFloor = 25f, enScoreFloor = 40f),
             isBanglaTurn = true,
         )
-        assertTrue(d is ServeDecision.Decision.Refuse)
-        assertEquals(ServeDecision.RefuseReason.BELOW_SCORE_FLOOR, (d as ServeDecision.Decision.Refuse).reason)
+        assertTrue(d is ServeGate.Decision.Refuse)
+        assertEquals(ServeGate.RefuseReason.BELOW_SCORE_FLOOR, (d as ServeGate.Decision.Refuse).reason)
     }
 
     /** A question with no topical content has nothing to match, so nothing is served. */
@@ -241,7 +241,7 @@ class ServeDecisionTest {
     fun `query with only demographic words refuses instead of serving rank-1`() {
         val hit = chunk("রক্তস্বল্পতার মাত্রা", "গর্ভবতী মায়ের রক্তস্বল্পতা হলে আয়রন বড়ি খেতে হবে")
         val d = decide("গর্ভবতী মায়ের জন্য", listOf(hit))
-        assertTrue(d is ServeDecision.Decision.Refuse)
+        assertTrue(d is ServeGate.Decision.Refuse)
     }
 
     // ── dense (embedding) evidence channel ───────────────────────────────────
@@ -254,7 +254,7 @@ class ServeDecisionTest {
             denseCos = 0.60f,
         )
         val d = decide("মায়ের দুধ কম আসছে কি করব", listOf(hit))
-        assertTrue(d is ServeDecision.Decision.Serve)
+        assertTrue(d is ServeGate.Decision.Serve)
     }
 
     @Test
@@ -265,8 +265,8 @@ class ServeDecisionTest {
             denseCos = 0.30f,
         )
         val d = decide("মায়ের দুধ কম আসছে কি করব", listOf(hit))
-        assertTrue(d is ServeDecision.Decision.Refuse)
-        assertEquals(ServeDecision.RefuseReason.NO_EVIDENCE, (d as ServeDecision.Decision.Refuse).reason)
+        assertTrue(d is ServeGate.Decision.Refuse)
+        assertEquals(ServeGate.RefuseReason.NO_EVIDENCE, (d as ServeGate.Decision.Refuse).reason)
     }
 
     @Test
@@ -277,7 +277,7 @@ class ServeDecisionTest {
             denseCos = 0.90f,
         )
         val d = decide("শিশুর রক্তচাপ বেশি পেলে কি করব", listOf(hit))
-        assertTrue(d is ServeDecision.Decision.Refuse)
+        assertTrue(d is ServeGate.Decision.Refuse)
     }
 
     @Test
@@ -288,14 +288,14 @@ class ServeDecisionTest {
             score = 0f,
             denseCos = 0.60f,
         )
-        val d = ServeDecision.decide(
+        val d = ServeGate.decide(
             "রক্তচাপ বেশি হলে কি করব",
             listOf(hit),
             gazetteer,
             ServeTuning(bnScoreFloor = 25f, enScoreFloor = 40f),
             isBanglaTurn = true,
         )
-        assertTrue(d is ServeDecision.Decision.Serve)
+        assertTrue(d is ServeGate.Decision.Serve)
     }
 
     // ── dense dominance outranks hint density ────────────────────────────────
@@ -331,8 +331,8 @@ class ServeDecisionTest {
         val rival = hintDenseRival(denseCos = 0.59f)
         val match = semanticMatch(denseCos = 0.69f)
         val d = decide(dangerQuery, listOf(rival, match))
-        assertTrue(d is ServeDecision.Decision.Serve)
-        assertEquals(match.chunkId, (d as ServeDecision.Decision.Serve).hit.chunkId)
+        assertTrue(d is ServeGate.Decision.Serve)
+        assertEquals(match.chunkId, (d as ServeGate.Decision.Serve).hit.chunkId)
     }
 
     @Test
@@ -340,8 +340,8 @@ class ServeDecisionTest {
         val rival = hintDenseRival(denseCos = 0.52f)
         val match = semanticMatch(denseCos = 0.62f)
         val d = decide(dangerQuery, listOf(rival, match))
-        assertTrue(d is ServeDecision.Decision.Serve)
-        assertEquals(rival.chunkId, (d as ServeDecision.Decision.Serve).hit.chunkId)
+        assertTrue(d is ServeGate.Decision.Serve)
+        assertEquals(rival.chunkId, (d as ServeGate.Decision.Serve).hit.chunkId)
     }
 
     @Test
@@ -349,8 +349,8 @@ class ServeDecisionTest {
         val rival = hintDenseRival(denseCos = 0.68f)
         val match = semanticMatch(denseCos = 0.69f)
         val d = decide(dangerQuery, listOf(rival, match))
-        assertTrue(d is ServeDecision.Decision.Serve)
-        assertEquals(rival.chunkId, (d as ServeDecision.Decision.Serve).hit.chunkId)
+        assertTrue(d is ServeGate.Decision.Serve)
+        assertEquals(rival.chunkId, (d as ServeGate.Decision.Serve).hit.chunkId)
     }
 
     @Test
@@ -358,8 +358,8 @@ class ServeDecisionTest {
         val rival = hintDenseRival(denseCos = null)
         val match = semanticMatch(denseCos = 0.69f)
         val d = decide(dangerQuery, listOf(rival, match))
-        assertTrue(d is ServeDecision.Decision.Serve)
-        assertEquals(match.chunkId, (d as ServeDecision.Decision.Serve).hit.chunkId)
+        assertTrue(d is ServeGate.Decision.Serve)
+        assertEquals(match.chunkId, (d as ServeGate.Decision.Serve).hit.chunkId)
     }
 
     @Test
@@ -370,7 +370,7 @@ class ServeDecisionTest {
             denseCos = 0.95f,
         )
         val d = decide("শিশুর রক্তচাপ বেশি পেলে কি করব", listOf(vetoed))
-        assertTrue(d is ServeDecision.Decision.Refuse)
+        assertTrue(d is ServeGate.Decision.Refuse)
     }
 
     @Test
@@ -378,7 +378,61 @@ class ServeDecisionTest {
         val rival = hintDenseRival(denseCos = null)
         val match = semanticMatch(denseCos = null)
         val d = decide(dangerQuery, listOf(rival, match))
-        assertTrue(d is ServeDecision.Decision.Serve)
-        assertEquals(rival.chunkId, (d as ServeDecision.Decision.Serve).hit.chunkId)
+        assertTrue(d is ServeGate.Decision.Serve)
+        assertEquals(rival.chunkId, (d as ServeGate.Decision.Serve).hit.chunkId)
+    }
+
+    // ── ranker before gate ────────────────────────────────────────────────────
+
+    @Test
+    fun `a pick that fails the gate refuses instead of serving a lower candidate`() {
+        // The maternal card outranks on BM25 score with equal evidence, so the ranker picks
+        // it; the question names a child, so the gate vetoes it. The servable card below it
+        // is not served in its place.
+        val vetoed = chunk(
+            "গর্ভবতী মায়ের রক্তচাপ",
+            "রক্তচাপ বেশি হলে হাসপাতালে পাঠান",
+            score = 200f,
+        )
+        val servable = chunk(
+            "রক্তচাপ মাপার নিয়ম",
+            "রক্তচাপ বেশি হলে হাসপাতালে পাঠান",
+            score = 150f,
+        )
+        val d = decide("শিশুর রক্তচাপ বেশি পেলে কি করব", listOf(vetoed, servable))
+        assertTrue(d is ServeGate.Decision.Refuse)
+        d as ServeGate.Decision.Refuse
+        assertEquals(ServeGate.RefuseReason.NO_EVIDENCE, d.reason)
+        assertEquals(vetoed.chunkId, d.pick?.hit?.chunkId)
+    }
+
+    @Test
+    fun `the gate line names the refused pick`() {
+        val vetoed = chunk("গর্ভবতী মায়ের রক্তচাপ", "রক্তচাপ বেশি হলে হাসপাতালে পাঠান", score = 200f)
+        val line = ServeGate.describeGate(decide("শিশুর রক্তচাপ বেশি পেলে কি করব", listOf(vetoed)))
+        assertEquals("GATE refuse ${vetoed.shortKey} reason=NO_EVIDENCE", line)
+    }
+
+    @Test
+    fun `no hits prints a refusal with no pick`() {
+        assertEquals("GATE refuse - reason=NO_HITS", ServeGate.describeGate(decide("রক্তচাপ", emptyList())))
+    }
+
+    @Test
+    fun `the rank line records the pick, its fused rank and the band`() {
+        val a = chunk("ডায়রিয়ার ভয়াবহতা", "ডায়রিয়া হলে খাবার স্যালাইন দিতে হবে এবং পানি দেখতে হবে", score = 100f)
+        val b = chunk("রক্তচাপ মাপার নিয়ম", "রক্তচাপ বেশি হলে দ্রুত রেফার করতে হবে হাসপাতালে যেতে হবে", score = 70f)
+        val line = ServeGate.describeRank(decide("রক্তচাপ বেশি হলে কি করব", listOf(a, b)))!!
+        assertTrue(line, line.startsWith("RANK pick=${b.shortKey} fused=2 band=[${a.shortKey},${b.shortKey}] | "))
+    }
+
+    @Test
+    fun `a zero-score dense entrant on top still ranks by the comparator`() {
+        // The top fused hit has no BM25 score, so every candidate is in the band.
+        val denseOnly = chunk("রক্তচাপ মাপার নিয়ম", "রক্তচাপ বেশি হলে দ্রুত রেফার করতে হবে", score = 0f, denseCos = 0.60f)
+        val bm25 = chunk("ডায়রিয়ার ভয়াবহতা", "ডায়রিয়া হলে খাবার স্যালাইন দিতে হবে", score = 90f)
+        val d = decide("রক্তচাপ বেশি হলে কি করব", listOf(denseOnly, bm25))
+        assertTrue(d is ServeGate.Decision.Serve)
+        assertEquals(denseOnly.chunkId, (d as ServeGate.Decision.Serve).hit.chunkId)
     }
 }

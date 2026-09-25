@@ -27,7 +27,7 @@ import java.util.Locale
  * a backend, or synced data.
  *
  * It is deliberately a thin shell: every ranking decision comes from the production
- * classes ([ModuleKnowledgeIndex], [GroundingSelector], [ServeDecision]) rather than a
+ * classes ([ModuleKnowledgeIndex], [GroundingSelector], [ServeGate]) rather than a
  * re-implementation. Re-implementations drift, and a prototype that disagrees with the
  * shipped tokenizer produces confident but false conclusions about ranking changes.
  *
@@ -181,7 +181,7 @@ object DevRetrievalServer {
 
         // Serve decision — the single evidence gate both production paths consume.
         val guardQuery = if (crossQuery != null) "$typed $nativeQuery" else typed
-        val decision = ServeDecision.decide(
+        val decision = ServeGate.decide(
             query = guardQuery,
             hits = grounding,
             clinicalTerms = scope.scopeTerms(),
@@ -189,23 +189,23 @@ object DevRetrievalServer {
             isBanglaTurn = banglaOverride == null,
         )
         val evidences = when (decision) {
-            is ServeDecision.Decision.Serve -> decision.all
-            is ServeDecision.Decision.Refuse -> decision.evidence
+            is ServeGate.Decision.Serve -> decision.all
+            is ServeGate.Decision.Refuse -> decision.evidence
         }.associateBy { it.chunkId }
 
         return when (decision) {
-            is ServeDecision.Decision.Refuse -> {
+            is ServeGate.Decision.Refuse -> {
                 step(
-                    "ServeDecision", "REFUSE",
-                    "${decision.reason} — " + ServeDecision.describe(decision),
+                    "ServeGate", "REFUSE",
+                    "${decision.reason} — " + ServeGate.describe(decision),
                 )
                 result(steps, grounding, outcome = "REFUSAL", refusalKey = "refused_no_ground",
                     index = index, query = nativeQuery, evidences = evidences)
             }
-            is ServeDecision.Decision.Serve -> {
+            is ServeGate.Decision.Serve -> {
                 val top = decision.hit
                 step(
-                    "ServeDecision", "SERVE",
+                    "ServeGate", "SERVE",
                     "${top.chunkId} — ${if (top.chunkId == grounding.first().chunkId) "BM25 rank 1" else "promoted over rank 1"} · " +
                         decision.evidence.describe(),
                 )
@@ -225,7 +225,7 @@ object DevRetrievalServer {
         body: String? = null,
         index: ModuleKnowledgeIndex? = null,
         query: String? = null,
-        evidences: Map<String, ServeDecision.Evidence> = emptyMap(),
+        evidences: Map<String, CardEvidence.Evidence> = emptyMap(),
     ): JsonObject = buildJsonObject {
         put("outcome", outcome)
         refusalKey?.let { put("refusalKey", it) }

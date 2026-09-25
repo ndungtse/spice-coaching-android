@@ -18,7 +18,7 @@ import com.medtroniclabs.microcoaching.ai.retrieval.ChatRefusal
 import com.medtroniclabs.microcoaching.ai.retrieval.GroundingChunk
 import com.medtroniclabs.microcoaching.ai.retrieval.GroundingSelector
 import com.medtroniclabs.microcoaching.ai.retrieval.ModuleKnowledgeIndex
-import com.medtroniclabs.microcoaching.ai.retrieval.ServeDecision
+import com.medtroniclabs.microcoaching.ai.retrieval.ServeGate
 import com.medtroniclabs.microcoaching.ai.voice.CoachingTtsHelper
 import com.medtroniclabs.microcoaching.network.RagQueryRequest
 import com.medtroniclabs.microcoaching.network.SourceDocumentRef
@@ -113,11 +113,11 @@ internal suspend fun ChatViewModel.handleLocalGemmaMessage(
 
     // L1 — Scope allow-list. Advisory only: refusing here on a keyword miss rejects
     // legitimate clinical questions whose vocabulary the gazetteer has not seen. The
-    // backstops that do refuse are L2 retrieval (no grounding) and [ServeDecision]
+    // backstops that do refuse are L2 retrieval (no grounding) and [ServeGate]
     // (grounding without topical evidence); L0 still blocks out-of-scope topics hard.
     val l1InScope = scopeClassifier.isInScope(trimmed) || scopeClassifier.isInScope(englishCurrent)
     if (!l1InScope) {
-        Log.d(ChatViewModel.TAG, "L1 advisory: scope keyword miss — deferring to retrieval + ServeDecision")
+        Log.d(ChatViewModel.TAG, "L1 advisory: scope keyword miss — deferring to retrieval + ServeGate")
     }
 
     // L2 — Retrieval. Module content is Bengali-first, so retrieval always anchors
@@ -172,6 +172,7 @@ internal suspend fun ChatViewModel.handleLocalGemmaMessage(
         translatedHits.forEachIndexed { i, h -> Log.i(ChatViewModel.TRACE_TAG, traceChunk("  translated", i, h)) }
     }
     Log.i(ChatViewModel.TRACE_TAG, "BM25 grounding chosen=${selection.chosenLabel} size=${grounding.size}")
+    Log.i(ChatViewModel.TRACE_TAG, GroundingSelector.describeFused(selection.fused))
 
     val guardQuery = when {
         banglaQuery != null -> "$trimmed $banglaQuery"          // English mode: EN typed + BN translation
@@ -182,16 +183,17 @@ internal suspend fun ChatViewModel.handleLocalGemmaMessage(
     // card a CHW would otherwise have been shown verbatim, and a refusal costs no
     // inference. Honest-refusal policy: the on-device model never answers ungrounded
     // clinical content, nor from a card that shares no topic with the question.
-    val decision = ServeDecision.decide(
+    val decision = ServeGate.decide(
         query = guardQuery,
         hits = grounding,
         clinicalTerms = scopeClassifier.scopeTerms(),
         tuning = config.chatTuning.serve,
         isBanglaTurn = sdk.language == Language.BANGLA,
     )
-    Log.i(ChatViewModel.TRACE_TAG, ServeDecision.describe(decision))
+    ServeGate.describeRank(decision)?.let { Log.i(ChatViewModel.TRACE_TAG, it) }
+    Log.i(ChatViewModel.TRACE_TAG, ServeGate.describeGate(decision))
     val guardPrimary = when (decision) {
-        is ServeDecision.Decision.Refuse -> {
+        is ServeGate.Decision.Refuse -> {
             serveRefusal(
                 ChatRefusal.NoGround,
                 groundedFrom = grounding.map { it.chunkId },
@@ -200,7 +202,7 @@ internal suspend fun ChatViewModel.handleLocalGemmaMessage(
             )
             return
         }
-        is ServeDecision.Decision.Serve -> decision.hit
+        is ServeGate.Decision.Serve -> decision.hit
     }
     // Translated to English before it reaches either the prompt or the groundedness check.
     // The corpus is Bengali-authored and the model is always prompted in English, so
@@ -365,6 +367,12 @@ internal suspend fun ChatViewModel.handleLocalGemmaMessage(
         return
     }
 
+    // One POST line per assisted turn: what the post-model checks found and which text the
+    // CHW is shown. The checks choose the text; the card was fixed by the gate.
+    var groundednessNote = "-"
+    fun postLine(validator: String, translation: String, shown: String) =
+        "POST groundedness=$groundednessNote validator=$validator translation=$translation shown=$shown"
+
     // L3c — Groundedness gate (grounded mode only). The [[REFUSE_NO_GROUND]] sentinel
     // relies on the model NOTICING that the references don't cover the question; when
     // the references are merely adjacent, a small model answers fluently from
@@ -389,6 +397,7 @@ internal suspend fun ChatViewModel.handleLocalGemmaMessage(
         val floor =
             if (strongRetrieval) tuning.strongRetrievalGroundednessFloor
             else tuning.groundednessFloor
+        groundednessNote = "%.2f floor=%.2f".format(Locale.US, groundedness, floor)
         Log.i(
             ChatViewModel.TRACE_TAG,
             "groundedness=%.2f floor=%.2f strongRetrieval=%b topScore=%.2f grounded=%s".format(
@@ -407,12 +416,11 @@ internal suspend fun ChatViewModel.handleLocalGemmaMessage(
                 "groundedness %.2f < floor %.2f → serving BM25 card fallback"
                     .format(Locale.US, groundedness, floor),
             )
-            serveGroundingFallbackOrRefuse(
-                grounding = promptGrounding,
+            Log.i(ChatViewModel.TRACE_TAG, postLine(validator = "skipped", translation = "skipped", shown = "card"))
+            serveCardVerbatim(
+                card = ordered.first(),
                 isBangla = isBangla,
                 validatorReason = "groundedness:%.2f".format(Locale.US, groundedness),
-                queryForSafety = guardQuery,
-                clinicalTerms = scopeClassifier.scopeTerms(),
             )
             return
         }
@@ -436,20 +444,21 @@ internal suspend fun ChatViewModel.handleLocalGemmaMessage(
     )
     if (!validation.isValid) {
         Log.w(ChatViewModel.TAG, "L4 validator rejected: ${validation.failureReason}")
-        serveGroundingFallbackOrRefuse(
-            grounding = promptGrounding,
+        Log.i(ChatViewModel.TRACE_TAG, postLine(validator = validation.failureReason ?: "rejected", translation = "skipped", shown = "card"))
+        serveCardVerbatim(
+            card = ordered.first(),
             isBangla = isBangla,
             validatorReason = validation.failureReason,
-            queryForSafety = guardQuery,
-            clinicalTerms = scopeClassifier.scopeTerms(),
         )
         return
     }
 
+    var translationNote = if (isBangla) "ok" else "n/a"
     val responseText = if (isBangla && rawResponse.isNotBlank()) {
         val outResult = sdk.translator.translateEnToBnResult(rawResponse)
         if (!outResult.translated) {
             translationPassthrough = true
+            translationNote = "passthrough"
             Log.w(ChatViewModel.TAG, "EN→BN output passthrough — untranslated English shown to the CHW")
         }
         val bn = outResult.text.ifBlank { rawResponse }
@@ -460,6 +469,7 @@ internal suspend fun ChatViewModel.handleLocalGemmaMessage(
         // actionable rather than a blank Bangla bubble.
         val latinShare = bn.count { it.code in 0x41..0x7A }.toFloat() / bn.length.coerceAtLeast(1).toFloat()
         if (latinShare > 0.3f) {
+            translationNote = "degraded"
             Log.w(ChatViewModel.TAG, "L5 translation degraded — latinShare=$latinShare; falling back to EN+prefix")
             localizedString(R.string.chat_translation_degraded)
                 .format(rawResponse)
@@ -467,6 +477,7 @@ internal suspend fun ChatViewModel.handleLocalGemmaMessage(
             bn
         }
     } else rawResponse
+    Log.i(ChatViewModel.TRACE_TAG, postLine(validator = "ok", translation = translationNote, shown = "rewrite"))
 
     // No typewriter reveal: the assistant bubble renders markdown (**bold**,
     // bullet/numbered lists), and progressively revealing half-typed markdown
@@ -577,7 +588,7 @@ internal suspend fun ChatViewModel.handleLocalGemmaMessage(
  *
  * Mirrors that path's scope filters (L0 deny-list, L1 allow-list in Strict mode) and skips the
  * layers that exist to police generated text — the L3 sentinels and the L4 validator — because
- * there is no generated text to police. [ServeDecision] still applies, so an unrelated
+ * there is no generated text to police. [ServeGate] still applies, so an unrelated
  * top-scoring card is refused rather than served.
  */
 internal suspend fun ChatViewModel.handleRetrievalOnlyMessage(trimmed: String) {
@@ -640,19 +651,21 @@ internal suspend fun ChatViewModel.handleRetrievalOnlyMessage(trimmed: String) {
     )
     val grounding = selection.hits
     Log.i(ChatViewModel.TRACE_TAG, "BM25 retrieval-only[$searchLang] hits=${grounding.size} chosen=${selection.chosenLabel}")
+    Log.i(ChatViewModel.TRACE_TAG, GroundingSelector.describeFused(selection.fused))
     grounding.forEachIndexed { i, h -> Log.i(ChatViewModel.TRACE_TAG, traceChunk("  hit", i, h)) }
     // The same call the LLM path makes, so both paths answer a given question from
     // the same card: served only with topical evidence, otherwise refused.
-    val decision = ServeDecision.decide(
+    val decision = ServeGate.decide(
         query = guardQuery,
         hits = grounding,
         clinicalTerms = scopeClassifier.scopeTerms(),
         tuning = config.chatTuning.serve,
         isBanglaTurn = isBangla,
     )
-    Log.i(ChatViewModel.TRACE_TAG, ServeDecision.describe(decision))
+    ServeGate.describeRank(decision)?.let { Log.i(ChatViewModel.TRACE_TAG, it) }
+    Log.i(ChatViewModel.TRACE_TAG, ServeGate.describeGate(decision))
     val top = when (decision) {
-        is ServeDecision.Decision.Refuse -> {
+        is ServeGate.Decision.Refuse -> {
             serveRefusal(
                 ChatRefusal.NoGround,
                 groundedFrom = grounding.map { it.chunkId },
@@ -661,7 +674,7 @@ internal suspend fun ChatViewModel.handleRetrievalOnlyMessage(trimmed: String) {
             )
             return
         }
-        is ServeDecision.Decision.Serve -> decision.hit
+        is ServeGate.Decision.Serve -> decision.hit
     }
     Log.d(ChatViewModel.TAG, "Serving retrieval-only — chunkId=${top.chunkId} score=${top.score}")
     val attribution = resolveSourceAttribution(listOf(top))

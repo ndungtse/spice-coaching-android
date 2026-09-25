@@ -75,6 +75,9 @@ data class GroundingChunk(
     /** Identifier suitable for telemetry / debugging. Stable per (module, source, position). */
     val chunkId: String = "$moduleFamilyId:${source.name.lowercase()}:$positionalId"
 
+    /** The card's short trace key, `family8:index`, as every stage's trace line prints it. */
+    val shortKey: String get() = "${moduleFamilyId.take(8)}:$positionalId"
+
     /** First positive page number (document id ignored) — for callers that only need a page anchor. */
     val firstPageNumber: Int? get() = sourcePages?.firstOrNull { it.pageNumber > 0 }?.pageNumber
 
