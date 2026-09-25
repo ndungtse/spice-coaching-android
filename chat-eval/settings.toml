@@ -1,0 +1,20 @@
+# Capture behaviour. Every value here can be read in the run header of a capture.
+[capture]
+turn_timeout_s = 120
+poll_interval_s = 2
+screen_recover_tries = 6
+consecutive_crash_stop = 3
+logcat_tags = ["ChatTrace", "ChatViewModel", "MicroCoachingSDK"]
+package = "org.medtroniclabs.uhis.dev"
+launcher_activity = "org.medtroniclabs.uhis.ui.landing.LandingActivity"
+appium_server = "http://127.0.0.1:4723"
+
+# Card checks after the gate, over the answerable rows of the bank.
+[bar.card_after_gate]
+exact_min_fraction = 0.789   # 75 of 95
+other_max = 4
+refused_max = 3
+off_topic_refused_all = true
+
+[bar.capture]
+warned_rows_max = 0

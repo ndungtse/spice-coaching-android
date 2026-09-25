@@ -1,0 +1,6 @@
+{"modules": [
+ {"module_family_id": "aaaaaaaa-0000-0000-0000-000000000001", "cards": [
+  {"card_order": "1", "title_bn": "ডায়রিয়ার কারণ", "body_bn": "জীবাণুর আক্রমণে ডায়রিয়া হয়।", "device_chunk_id": "aaaaaaaa-0000-0000-0000-000000000001:card:1"},
+  {"card_order": "2", "title_bn": "ডায়রিয়ার লক্ষণ", "body_bn": "ঘন ঘন পাতলা পায়খানা।", "device_chunk_id": ""}]},
+ {"module_family_id": "dddddddd-0000-0000-0000-000000000004", "cards": "[]"}
+]}
