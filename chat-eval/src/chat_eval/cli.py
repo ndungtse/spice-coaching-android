@@ -55,7 +55,7 @@ SUBCOMMANDS["bank"] = (_bank_configure, _bank_run)
 
 def _check_configure(p: argparse.ArgumentParser) -> None:
     p.add_argument("run", help="run folder")
-    p.add_argument("--corpus", required=True)
+    p.add_argument("--corpus", help="corpus JSON; defaults to the run's own modules.json")
     p.add_argument("--bank", default="banks/qa_bn.jsonl")
 
 
@@ -64,8 +64,9 @@ def _check_run(args: argparse.Namespace) -> int:
 
     from chat_eval import bank, check, corpus, files, judge
     from chat_eval.files import PROJECT_ROOT
+    from chat_eval import modules_export
     run_dir = Path(args.run)
-    corp = corpus.load(args.corpus)
+    corp = corpus.load(modules_export.resolve_corpus(run_dir, args.corpus))
     header = files.read_json(run_dir / "run.json")
     if header.get("corpus_sha256") and header["corpus_sha256"] != corp.sha256:
         print("corpus hash differs from the one recorded for this run", file=sys.stderr)
@@ -108,7 +109,7 @@ SUBCOMMANDS["verdicts"] = (_verdicts_configure, _verdicts_run)
 
 def _report_configure(p: argparse.ArgumentParser) -> None:
     p.add_argument("run")
-    p.add_argument("--corpus", required=True)
+    p.add_argument("--corpus", help="corpus JSON; defaults to the run's own modules.json")
     p.add_argument("--bank", default="banks/qa_bn.jsonl")
     p.add_argument("--vs", help="another run folder to compare with")
 
@@ -119,7 +120,9 @@ def _report_run(args: argparse.Namespace) -> int:
     from chat_eval import bank, corpus, files, report
     from chat_eval.files import PROJECT_ROOT
     run_dir = Path(args.run)
-    report.render(run_dir, bank.load(PROJECT_ROOT / args.bank), corpus.load(args.corpus), files.load_settings())
+    from chat_eval import modules_export
+    corp = corpus.load(modules_export.resolve_corpus(run_dir, args.corpus))
+    report.render(run_dir, bank.load(PROJECT_ROOT / args.bank), corp, files.load_settings())
     print(f"wrote {run_dir / 'report.md'}")
     if args.vs:
         (run_dir / "diff.md").write_text(report.diff(Path(args.vs), run_dir), encoding="utf-8")

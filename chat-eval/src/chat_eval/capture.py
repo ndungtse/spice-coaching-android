@@ -6,7 +6,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from chat_eval import app, device, files, trace
+from chat_eval import app, device, files, modules_export, trace
 
 MODES = {"assisted": "ON_DEVICE_ASSISTED", "direct": "ON_DEVICE_DIRECT"}
 
@@ -65,6 +65,11 @@ def run(settings: dict, serial: str, bank_rows: list[dict], source: str, mode: s
         "device": device.probe(serial), "apk": device.apk_version(serial, cap["package"]),
         "airplane_on": device.adb(serial, "shell", "settings", "get", "global", "airplane_mode_on").stdout.strip() in {"1", "true"},
         "repo": _repo_state(), "capture": cap, "started_at": _now()}
+    if not header_path.exists():
+        corpus_hash = modules_export.snapshot(serial, cap["package"], out_dir / "modules.json")
+        if corpus_hash is None:
+            print("could not export the device's modules (not a debug build?); pass --corpus to check")
+        header |= {"corpus_file": "modules.json" if corpus_hash else None, "corpus_sha256": corpus_hash}
     files.write_json(header_path, header)
     driver = app.connect(settings, serial)
     crashes = 0
@@ -104,5 +109,14 @@ def run(settings: dict, serial: str, bank_rows: list[dict], source: str, mode: s
                 raise RuntimeError(f"{crashes} consecutive crashes; stopping the run")
     finally:
         driver.quit()
-        files.write_json(header_path, files.read_json(header_path) | {"ended_at": _now()})
+        end = {"ended_at": _now()}
+        start_hash = files.read_json(header_path).get("corpus_sha256")
+        end_path = out_dir / "modules.end.json"
+        end_hash = modules_export.snapshot(serial, cap["package"], end_path) if start_hash else None
+        if end_hash and end_hash == start_hash:
+            end_path.unlink()
+        elif end_hash:
+            end["corpus_changed_during_run"] = True
+            print("the device's modules changed during the run (a sync?); see modules.end.json")
+        files.write_json(header_path, files.read_json(header_path) | end)
     return out_dir

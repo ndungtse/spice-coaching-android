@@ -29,7 +29,7 @@ SEL = {
     "style_assisted": ("Explained in simple words", "সহজ ভাষায় বুঝিয়ে দেওয়া"),
     "exact_confirm": ("Use exact wording", "হুবহু লেখা ব্যবহার করুন"),
     "download": ("Download both", "Download AI Model", "Download"),
-    "dialog_ok": ("Allow", "ALLOW", "Yes", "OK", "Continue"),
+    "dialog_ok": ("Allow", "ALLOW", "Yes", "OK", "Continue", "ঠিক আছে", "হ্যাঁ"),
 }
 # Texts that are part of the chat screen itself, never an answer.
 CHROME = {"AI Coach", "এআই কোচ", "Online", "Offline", "অনলাইন", "অফলাইন", "More options", "আরও বিকল্প",

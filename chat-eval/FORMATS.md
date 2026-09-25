@@ -1,7 +1,7 @@
 # File formats
 
 Every file is UTF-8. JSONL files hold one JSON object per line. A run folder holds `run.json`,
-`turns.jsonl`, `checks.jsonl`, `judge_sheet.jsonl`, `judge_sheet.md`, `verdicts/`,
+`modules.json`, `turns.jsonl`, `checks.jsonl`, `judge_sheet.jsonl`, `judge_sheet.md`, `verdicts/`,
 `summary.json` and `report.md`. Nothing in a run folder is edited after the stage that wrote it,
 except `run.json`, which `check` extends once with the corpus hash.
 
@@ -34,7 +34,15 @@ A card key is `family8:index`: the first 8 hex characters of the module family i
 | `repo` | repository commit and whether the tree was dirty |
 | `capture` | the `[capture]` settings used |
 | `started_at`, `ended_at` | UTC timestamps |
-| `corpus_sha256` | added by `check` |
+| `corpus_file`, `corpus_sha256` | `modules.json` and its hash, exported from the device at the start; null when the build is not debuggable |
+| `corpus_changed_during_run` | true when the end-of-run export differs, which keeps `modules.end.json` |
+
+## `modules.json`
+
+The modules in the SDK's database on the device when the run started, in the corpus format
+`corpus.load` reads: `module_id`, `module_family_id`, `version`, `title_bn`, `title_json`,
+`cards_json`, `search_metadata_json`, and `retired` (the family is in the SDK's retired list).
+`check` and `report` use it when `--corpus` is not given.
 
 ## `turns.jsonl`
 

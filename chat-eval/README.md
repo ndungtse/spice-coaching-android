@@ -57,8 +57,8 @@ chat-eval doctor
 chat-eval setup --mode direct        # or --mode assisted
 chat-eval run --source qa-uc2-2026-09-17 --mode direct \
     --only uc2_q001,uc2_q002,uc2_q003,uc2_q004,uc2_q096 --out runs/smoke-direct
-chat-eval check runs/smoke-direct --corpus <corpus.json>
-chat-eval report runs/smoke-direct --corpus <corpus.json>
+chat-eval check runs/smoke-direct
+chat-eval report runs/smoke-direct
 ```
 
 `setup` signs in if needed, opens the assistant, picks "on this phone" and the answer style
@@ -67,8 +67,12 @@ so the encoder is loaded, and turns airplane mode on. It never ticks the option 
 the downloaded model. It does not accept the "simple words" download offer for you; if that
 offer is showing, accept it on the device and setup waits.
 
-The corpus is the published module export the device synced: either the SDK's audit corpus
-format or the QA team's `published_modules_lean.json`. It is passed by path, never committed.
+Each run exports the modules that were in the SDK's database on the device into
+`runs/<run>/modules.json`, at the start and again at the end, and `check` and `report` score
+against it. If a sync changed the modules mid-run, `run.json` says so and `modules.end.json` is
+kept. This needs a debug build of the host, since it reads the database with `run-as`. On other
+builds, pass `--corpus` with a module export: either the SDK's audit corpus format or the QA
+team's `published_modules_lean.json`. Corpora are never committed.
 
 Expected: `turns.jsonl` has 5 rows with empty `warnings`, `check` reports 0 warned, and
 `report.md` lists every question.
