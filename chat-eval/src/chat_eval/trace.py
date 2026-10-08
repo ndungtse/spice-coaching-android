@@ -18,6 +18,8 @@ _OUTCOME = re.compile(r"OUTCOME=(\w+)(?: (?:kind|key)=(\w+))?")
 _OLD_SERVE = re.compile(r"SERVE-DECISION serve (\S+)")
 _OLD_REFUSE = re.compile(r"SERVE-DECISION refuse reason=(\w+)(?: (\S+))?")
 _LLM_RAW = re.compile(r'LLM raw: .*?text="(.*)"$')
+_LLM_FULL = re.compile(r'LLM answer len=\d+ text="(.*)"$')
+_SHOWN = re.compile(r'SHOWN len=\d+ text="(.*)"$')
 _CRASH = ("Fatal signal", "has died", "ndk_translation")
 
 
@@ -45,7 +47,8 @@ def anchored_block(lines: list[str], question: str) -> list[str] | None:
 
 def parse_block(block: list[str]) -> dict:
     out: dict = {"mode": None, "fused": None, "pick": None, "gate": None, "post": None,
-                 "outcome": None, "text_en": None, "crash": None}
+                 "outcome": None, "text_en": None, "text_shown_log": None, "crash": None}
+    full_en = None
     for raw in block:
         line = strip(raw)
         if any(marker in raw for marker in _CRASH) and out["crash"] is None:
@@ -78,10 +81,16 @@ def parse_block(block: list[str]) -> dict:
         elif (m := _POST.search(line)):
             out["post"] = {"groundedness": m.group(1), "floor": m.group(2), "validator": m.group(3),
                            "translation": m.group(4), "shown": m.group(5)}
+        elif (m := _LLM_FULL.search(line)):
+            full_en = m.group(1).replace("⏎", "\n")
+        elif (m := _SHOWN.search(line)):
+            out["text_shown_log"] = m.group(1).replace("⏎", "\n")
         elif (m := _LLM_RAW.search(line)):
             out["text_en"] = m.group(1)
         elif (m := _OUTCOME.search(line)) and out["outcome"] is None:
             out["outcome"] = {"kind": m.group(1), "detail": m.group(2)}
+    if full_en is not None:
+        out["text_en"] = full_en  # the preview line is cut at 220 characters
     # A refusal outcome with no gate line was refused before the gate ran: the deny-list,
     # whose own line is logged under a tag a capture may not keep.
     if out["gate"] is None and out["outcome"] and out["outcome"]["kind"] == "REFUSAL":

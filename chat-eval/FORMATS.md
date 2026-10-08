@@ -58,10 +58,12 @@ One line per question asked; a rerun appends another line for the same id, and t
 | `gate` | the `GATE` line: `{result: serve|refuse, key, reason}`; `reason` is `DENY` for the deny-list |
 | `post` | the `POST` line: `{groundedness, floor, validator, translation, shown}`; assisted only |
 | `outcome` | `{kind, detail}` from `OUTCOME=`: `served_grounded`, `FALLBACK` with its kind, or `REFUSAL` with its key |
-| `text_en` | the model's English answer preview, for diagnosis only |
-| `text_shown` | the answer bubble the CHW saw |
+| `text_en` | the model's whole English answer (the `LLM answer` line, else the 220-character `LLM raw` preview), for diagnosis only |
+| `text_shown` | the answer bubble the CHW saw. For a rewrite this is the `SHOWN` line's text when the screen capture is part of it, because a rendered list is one text view per item and the capture reads one |
+| `text_shown_ui` | the screen capture as read |
+| `text_shown_log` | the `SHOWN` line's text; null on a verbatim card or refusal |
 | `latency_ms` | send to outcome |
-| `warnings` | `no_anchor`, `timeout`, `mode_mismatch`, `crash`, `no_text` |
+| `warnings` | `no_anchor`, `timeout`, `mode_mismatch`, `crash`, `no_text`, `shown_mismatch` (the capture is not part of the `SHOWN` text) |
 | `trace` | this turn's log lines, prefixes removed |
 | `captured_at` | UTC timestamp |
 

@@ -22,10 +22,24 @@ def fresh_lines(before: list[str], after: list[str]) -> list[str]:
     return [ln for ln in after if ln not in seen]
 
 
+def _flat(text: str) -> str:
+    return " ".join(text.replace("*", "").split())
+
+
 def build_turn(row: dict, lines: list[str], run_mode: str, text_shown: str, latency_ms: int) -> dict:
     block = trace.anchored_block(lines, row["question"])
     parsed = trace.parse_block(block) if block else trace.parse_block([])
     warnings = []
+    # A rendered list is one text view per item, so the screen capture holds only part of it.
+    # The SHOWN line is the whole text the SDK put in the bubble; it replaces the capture when
+    # the capture is part of it, and a capture it does not contain is kept and warned.
+    text_shown_ui = text_shown
+    logged = parsed["text_shown_log"]
+    if logged and text_shown.strip():
+        if _flat(text_shown) in _flat(logged):
+            text_shown = logged
+        else:
+            warnings.append("shown_mismatch")
     if block is None:
         warnings.append("no_anchor")
     else:
@@ -39,7 +53,7 @@ def build_turn(row: dict, lines: list[str], run_mode: str, text_shown: str, late
         if served and parsed["outcome"] and not text_shown.strip():
             warnings.append("no_text")
     return {"id": row["id"], "question": row["question"], "anchored": block is not None, **parsed,
-            "text_shown": text_shown, "latency_ms": latency_ms, "warnings": warnings,
+            "text_shown": text_shown, "text_shown_ui": text_shown_ui, "latency_ms": latency_ms, "warnings": warnings,
             "trace": [trace.strip(ln) for ln in (block or [])], "captured_at": _now()}
 
 

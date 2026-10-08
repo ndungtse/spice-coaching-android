@@ -32,3 +32,22 @@ def test_an_earlier_complete_block_for_the_same_question_is_never_matched():
     t = capture.build_turn(ROW, fresh, "ON_DEVICE_ASSISTED", "", 1)
     assert t["anchored"] and t["outcome"] is None and "timeout" in t["warnings"]
     assert capture.build_turn(ROW, capture.fresh_lines(before, before), "ON_DEVICE_ASSISTED", "", 1)["warnings"] == ["no_anchor"]
+
+
+def _rewrite_lines(shown: str):
+    return [P + f'──── turn ──── mode=ON_DEVICE_ASSISTED q="{ROW["question"]}"', P + "GATE serve aaaaaaaa:0",
+            P + f'SHOWN len={len(shown)} text="{shown.replace(chr(10), "⏎")}"',
+            P + 'OUTCOME=served_grounded served len=5 text="x"']
+
+
+def test_a_rendered_list_is_taken_whole_from_the_shown_line():
+    # The bubble renders each list item as its own text view, so the screen capture holds one item.
+    shown = "1. প্রথম কাজটি করুন।  \n2. দ্বিতীয় কাজটি করুন।"
+    t = capture.build_turn(ROW, _rewrite_lines(shown), "ON_DEVICE_ASSISTED", "প্রথম কাজটি করুন।", 900)
+    assert t["text_shown"] == shown and t["text_shown_ui"] == "প্রথম কাজটি করুন।" and t["warnings"] == []
+
+
+def test_a_capture_the_shown_line_does_not_contain_is_kept_and_warned():
+    shown = "1. প্রথম কাজটি করুন।"
+    t = capture.build_turn(ROW, _rewrite_lines(shown), "ON_DEVICE_ASSISTED", "আগের প্রশ্নের উত্তর", 900)
+    assert t["text_shown"] == "আগের প্রশ্নের উত্তর" and "shown_mismatch" in t["warnings"]

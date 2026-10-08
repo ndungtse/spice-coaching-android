@@ -341,6 +341,9 @@ internal suspend fun ChatViewModel.handleLocalGemmaMessage(
             "maxTokens=${variant.maxTokens ?: config.maxInferenceTokens} " +
             "text=\"${tracePreview(untrimmedResponse, 220)}\"",
     )
+    // The whole answer, one line, for evaluation tools: the preview above is cut at 220
+    // characters. The stream cap bounds its length well inside one log entry.
+    Log.i(ChatViewModel.TRACE_TAG, "LLM answer len=${untrimmedResponse.length} text=\"${untrimmedResponse.replace('\n', '⏎')}\"")
     if (rawResponse.length != untrimmedResponse.length) {
         Log.i(
             ChatViewModel.TRACE_TAG,
@@ -478,6 +481,8 @@ internal suspend fun ChatViewModel.handleLocalGemmaMessage(
         }
     } else rawResponse
     Log.i(ChatViewModel.TRACE_TAG, postLine(validator = "ok", translation = translationNote, shown = "rewrite"))
+    // The exact text the CHW is shown, one line, for evaluation tools.
+    Log.i(ChatViewModel.TRACE_TAG, "SHOWN len=${responseText.length} text=\"${responseText.replace('\n', '⏎')}\"")
 
     // No typewriter reveal: the assistant bubble renders markdown (**bold**,
     // bullet/numbered lists), and progressively revealing half-typed markdown

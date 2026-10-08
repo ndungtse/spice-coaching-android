@@ -100,3 +100,15 @@ def test_refusal_outcome_without_a_gate_line_is_a_refusal():
     assert trace.parse_block(block)["gate"] == {"result": "refuse", "key": None, "reason": "DENY"}
     other = [block[0], P + "OUTCOME=REFUSAL key=refused_unsafe topScore=12.0"]
     assert trace.parse_block(other)["gate"] == {"result": "refuse", "key": None, "reason": "refused_unsafe"}
+
+
+def test_full_answer_and_shown_lines_replace_the_preview():
+    long_en = "A" * 300
+    block = [P + f'──── turn ──── mode=ON_DEVICE_ASSISTED q="{Q2}"',
+             P + f'LLM raw: len=300 latencyMs=1 sawEndOfTurn=true temp=0.2 maxTokens=1536 text="{"A" * 220}…(300 chars)"',
+             P + f'LLM answer len=300 text="{long_en}"',
+             P + 'SHOWN len=12 text="প্রথম লাইন⏎দ্বিতীয়"',
+             P + 'OUTCOME=served_grounded served len=12 text="x"']
+    t = trace.parse_block(block)
+    assert t["text_en"] == long_en
+    assert t["text_shown_log"] == "প্রথম লাইন\nদ্বিতীয়"
