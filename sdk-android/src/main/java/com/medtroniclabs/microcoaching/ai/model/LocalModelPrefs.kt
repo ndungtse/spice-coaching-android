@@ -88,13 +88,16 @@ class LocalModelPrefs(context: Context) {
      * @param networkAvailable gates the offer on connectivity, because accepting it starts a
      *   download of hundreds of megabytes. Offered offline, the one action it invites is the
      *   one action that cannot happen.
+     * @param hasRoom false when the download would not fit in free storage with headroom. The
+     *   answering sheet still offers it, and the download there fails with the space message.
      */
-    fun shouldOfferModel(deviceEligible: Boolean, networkAvailable: Boolean): Boolean =
+    fun shouldOfferModel(deviceEligible: Boolean, networkAvailable: Boolean, hasRoom: Boolean = true): Boolean =
         shouldOfferLocalModel(
             deviceEligible = deviceEligible,
             networkAvailable = networkAvailable,
             choice = _choice.value,
             dismissCount = offerDismissCount,
+            hasRoom = hasRoom,
         )
 
     internal companion object {
@@ -122,14 +125,19 @@ class LocalModelPrefs(context: Context) {
  * hardware it advertises something unrunnable, offline it invites a download that cannot start,
  * after a decision it re-asks a settled question, and past the dismissal budget it becomes a
  * card that will not go away.
+ *
+ * @param hasRoom false when the download would not fit in free storage with headroom. The
+ *   answering sheet still offers it, and the download there fails with the space message.
  */
 internal fun shouldOfferLocalModel(
     deviceEligible: Boolean,
     networkAvailable: Boolean,
     choice: LocalModelChoice,
     dismissCount: Int,
+    hasRoom: Boolean = true,
 ): Boolean =
     deviceEligible &&
         networkAvailable &&
+        hasRoom &&
         choice == LocalModelChoice.UNDECIDED &&
         dismissCount < LocalModelPrefs.MAX_OFFER_DISMISSALS

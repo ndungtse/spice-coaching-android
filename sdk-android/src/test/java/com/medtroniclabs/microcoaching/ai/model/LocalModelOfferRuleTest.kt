@@ -19,7 +19,8 @@ class LocalModelOfferRuleTest {
         networkAvailable: Boolean = true,
         choice: LocalModelChoice = LocalModelChoice.UNDECIDED,
         dismissCount: Int = 0,
-    ) = shouldOfferLocalModel(deviceEligible, networkAvailable, choice, dismissCount)
+        hasRoom: Boolean = true,
+    ) = shouldOfferLocalModel(deviceEligible, networkAvailable, choice, dismissCount, hasRoom)
 
     @Test
     fun `offered to an eligible connected device that has not decided`() {
@@ -60,6 +61,8 @@ class LocalModelOfferRuleTest {
             offer(networkAvailable = false),
             offer(choice = LocalModelChoice.DISABLED),
             offer(dismissCount = LocalModelPrefs.MAX_OFFER_DISMISSALS),
+            // The card is a nudge; it must not nudge towards a download the space check refuses.
+            offer(hasRoom = false),
         )
         assertTrue(suppressors.none { it })
     }

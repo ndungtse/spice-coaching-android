@@ -8,7 +8,10 @@ from pathlib import Path
 
 from chat_eval import app, device, files, modules_export, trace
 
-MODES = {"assisted": "ON_DEVICE_ASSISTED", "direct": "ON_DEVICE_DIRECT"}
+MODES = {"assisted": "ON_DEVICE_ASSISTED", "direct": "ON_DEVICE_DIRECT",
+         "standard": "ON_DEVICE_DIRECT", "enhanced": "ON_DEVICE_DIRECT"}
+# Whether a mode's turns must use dense retrieval; absent means either is fine.
+DENSE_EXPECTED = {"standard": False, "enhanced": True}
 
 
 def _now() -> str:
@@ -26,7 +29,8 @@ def _flat(text: str) -> str:
     return " ".join(text.replace("*", "").split())
 
 
-def build_turn(row: dict, lines: list[str], run_mode: str, text_shown: str, latency_ms: int) -> dict:
+def build_turn(row: dict, lines: list[str], run_mode: str, text_shown: str, latency_ms: int,
+               dense_expected: bool | None = None) -> dict:
     block = trace.anchored_block(lines, row["question"])
     parsed = trace.parse_block(block) if block else trace.parse_block([])
     warnings = []
@@ -47,6 +51,10 @@ def build_turn(row: dict, lines: list[str], run_mode: str, text_shown: str, late
             warnings.append("timeout")
         if parsed["mode"] != run_mode:
             warnings.append("mode_mismatch")
+        if dense_expected is True and parsed["dense"] != "on":
+            warnings.append("dense_off")
+        if dense_expected is False and parsed["dense"] == "on":
+            warnings.append("dense_on")
         if parsed["crash"]:
             warnings.append("crash")
         served = (parsed["gate"] or {}).get("result") == "serve"
@@ -112,7 +120,7 @@ def run(settings: dict, serial: str, bank_rows: list[dict], source: str, mode: s
             latency = int((time.time() - sent) * 1000)
             time.sleep(1.5)  # the answer bubble renders just after the outcome is logged
             shown = app.newest_answer(driver, before, row["question"])
-            t = build_turn(row, lines, run_mode, shown, latency)
+            t = build_turn(row, lines, run_mode, shown, latency, dense_expected=DENSE_EXPECTED.get(mode))
             files.append_jsonl(turns_path, t)
             print(f"{row['id']}: gate={(t['gate'] or {}).get('result')} {(t['gate'] or {}).get('key')} "
                   f"outcome={(t['outcome'] or {}).get('kind')} warnings={t['warnings']}")

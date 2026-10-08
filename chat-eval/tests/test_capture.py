@@ -51,3 +51,19 @@ def test_a_capture_the_shown_line_does_not_contain_is_kept_and_warned():
     shown = "1. প্রথম কাজটি করুন।"
     t = capture.build_turn(ROW, _rewrite_lines(shown), "ON_DEVICE_ASSISTED", "আগের প্রশ্নের উত্তর", 900)
     assert t["text_shown"] == "আগের প্রশ্নের উত্তর" and "shown_mismatch" in t["warnings"]
+
+
+def _direct_lines(dense: str):
+    return [P + f'──── turn ──── mode=ON_DEVICE_DIRECT q="{ROW["question"]}"', P + dense,
+            P + "GATE serve aaaaaaaa:0", P + 'OUTCOME=served_retrieval_only served len=5 text="x"']
+
+
+def test_a_turn_on_the_wrong_search_path_is_warned():
+    off = _direct_lines("DENSE off (index=false embedder=true)")
+    on = _direct_lines("DENSE hits=8 top=aaaaaaaa:0@0.71")
+    assert "dense_off" in capture.build_turn(ROW, off, "ON_DEVICE_DIRECT", "উত্তর", 1,
+                                             dense_expected=capture.DENSE_EXPECTED["enhanced"])["warnings"]
+    assert "dense_on" in capture.build_turn(ROW, on, "ON_DEVICE_DIRECT", "উত্তর", 1,
+                                            dense_expected=capture.DENSE_EXPECTED["standard"])["warnings"]
+    assert capture.build_turn(ROW, on, "ON_DEVICE_DIRECT", "উত্তর", 1,
+                              dense_expected=capture.DENSE_EXPECTED["enhanced"])["warnings"] == []

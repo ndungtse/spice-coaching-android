@@ -28,6 +28,9 @@ SEL = {
     "style_direct": ("Exact words from your guide", "নির্দেশিকার হুবহু লেখা"),
     "style_assisted": ("Explained in simple words", "সহজ ভাষায় বুঝিয়ে দেওয়া"),
     "exact_confirm": ("Use exact wording", "হুবহু লেখা ব্যবহার করুন"),
+    "search_standard": ("Standard search", "সাধারণ খোঁজা"),
+    "search_smarter": ("Smarter search", "উন্নত খোঁজা"),
+    "search_confirm": ("Use standard search", "সাধারণ খোঁজা ব্যবহার করুন"),
     "download": ("Download both", "Download AI Model", "Download"),
     "dialog_ok": ("Allow", "ALLOW", "Yes", "OK", "Continue", "ঠিক আছে", "হ্যাঁ"),
 }
@@ -146,14 +149,14 @@ def open_assistant(driver, package: str, timeout_s: float = 600) -> None:
     raise TimeoutException("the chat screen never became ready")
 
 
-def _keep_download_and_confirm(driver) -> None:
-    """Switching to exact words asks whether to also remove the downloaded model, with the
-    box ticked. It is unticked first, so a test run never deletes the model."""
+def _keep_download_and_confirm(driver, confirm: tuple[str, ...]) -> None:
+    """Turning the download off asks whether to also remove it, with the box ticked. It is
+    unticked first, so a test run never deletes the download."""
     for box in driver.find_elements(AppiumBy.ANDROID_UIAUTOMATOR, "new UiSelector().checkable(true)"):
         if box.get_attribute("checked") == "true":
             box.click()
             time.sleep(0.5)
-    _click_text(driver, SEL["exact_confirm"], timeout=5)
+    _click_text(driver, confirm, timeout=5)
 
 
 def wait_ready(driver, timeout_s: float = 600) -> None:
@@ -170,7 +173,8 @@ def wait_ready(driver, timeout_s: float = 600) -> None:
 
 def set_answer_mode(driver, mode: str, style: str | None = None) -> None:
     """Selects online or on this phone, and for on this phone the answer style: `direct`
-    (exact words from the guide) or `assisted` (explained in simple words)."""
+    (exact words from the guide) or `assisted` (explained in simple words) on a build with the
+    rewrite on; `standard` (standard search) or `enhanced` (smarter search) on one with it off."""
     target = SEL["mode_online"] if mode == "online" else SEL["mode_on_device"]
     if not any(_present(driver, AppiumBy.ANDROID_UIAUTOMATOR, f'new UiSelector().textContains("{t}")')
                for t in SEL["mode_sheet_title"]):
@@ -181,12 +185,15 @@ def set_answer_mode(driver, mode: str, style: str | None = None) -> None:
         raise TimeoutException(f"answer mode option not found: {target}")
     time.sleep(0.5)
     if style:
-        labels = SEL["style_direct"] if style == "direct" else SEL["style_assisted"]
+        labels = {"direct": SEL["style_direct"], "assisted": SEL["style_assisted"],
+                  "standard": SEL["search_standard"], "enhanced": SEL["search_smarter"]}[style]
         if not _click_text(driver, labels, timeout=8):
             raise TimeoutException(f"answer style option not found: {labels}")
         time.sleep(1)
         if style == "direct":
-            _keep_download_and_confirm(driver)
+            _keep_download_and_confirm(driver, SEL["exact_confirm"])
+        elif style == "standard":
+            _keep_download_and_confirm(driver, SEL["search_confirm"])
     if not _click_desc(driver, SEL["sheet_close"], timeout=2) and not _click_text(driver, SEL["sheet_close"], timeout=1):
         driver.press_keycode(4)
 

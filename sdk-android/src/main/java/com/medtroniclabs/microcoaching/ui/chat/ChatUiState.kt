@@ -53,6 +53,9 @@ sealed class ChatUiState {
      * @param showModelOffer whether to render the dismissible offer. Only ever true on
      *   hardware that can host the model, while connected, and before the user has decided —
      *   accepting it starts a download of hundreds of megabytes.
+     * @param rewriteAvailable whether the host turned on the language model. False makes every
+     *   on-device control and label about smarter search.
+     * @param smarterSearchActive whether the next on-device turn will use dense retrieval.
      * @param suggestedQuestions quick-start chips.
      * @param feedback per-message thumbs state, keyed by [ChatMessage.id]: `true` = up,
      *   `false` = down, absent = unrated. In-memory only, so it resets on history reload.
@@ -71,6 +74,8 @@ sealed class ChatUiState {
         val modelEligible: Boolean = false,
         val modelEnabled: Boolean = false,
         val showModelOffer: Boolean = false,
+        val rewriteAvailable: Boolean = false,
+        val smarterSearchActive: Boolean = false,
         val suggestedQuestions: List<SuggestedQuestion> = emptyList(),
         val feedback: Map<Long, Boolean> = emptyMap(),
         val feedbackNotes: Map<Long, String> = emptyMap(),

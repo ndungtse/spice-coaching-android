@@ -138,6 +138,8 @@ internal fun ReadyChatContent(
             networkAvailable = networkAvailable,
             preferOnline = preferOnline,
             modelDownload = uiState.modelDownload,
+            smarterSearch = uiState.smarterSearchActive,
+            rewriteAvailable = uiState.rewriteAvailable,
             onOpenSheet = { showAnsweringSheet = true },
             onPauseDownload = onPauseDownload,
             onResumeDownload = onResumeDownload,
@@ -156,6 +158,7 @@ internal fun ReadyChatContent(
         if (uiState.showModelOffer) {
             LocalModelOfferCard(
                 sizeBytes = uiState.modelSizeBytes,
+                smarterSearch = !uiState.rewriteAvailable,
                 onSetUp = onEnableLocalModel,
                 onDismiss = onDismissModelOffer,
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
@@ -327,8 +330,15 @@ internal fun ReadyChatContent(
             // Eligibility is inferred from the state the ViewModel already publishes: a device
             // that can never host the model is never offered it and never has a file for it.
             modelEligible = uiState.modelEligible,
-            modelEnabled = uiState.answerMode == AnswerMode.ON_DEVICE_ASSISTED ||
-                uiState.modelDownload.isModelTransferInFlight(),
+            // Smarter search is never an AnswerMode, so with the rewrite off the resolved mode
+            // cannot stand in for the choice, and consent selects the row instead.
+            modelEnabled = if (uiState.rewriteAvailable) {
+                uiState.answerMode == AnswerMode.ON_DEVICE_ASSISTED ||
+                    uiState.modelDownload.isModelTransferInFlight()
+            } else {
+                uiState.modelEnabled || uiState.modelDownload.isModelTransferInFlight()
+            },
+            rewriteAvailable = uiState.rewriteAvailable,
             modelDownload = uiState.modelDownload,
             modelSizeBytes = uiState.modelSizeBytes,
             modelOnDiskBytes = uiState.modelOnDiskBytes,

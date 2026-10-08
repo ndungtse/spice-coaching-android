@@ -16,11 +16,22 @@ connectivity, device memory, consent and model state:
 | Mode | When | What answers |
 |---|---|---|
 | `ONLINE` | the user prefers online and a network is available | backend RAG (`POST /coaching/rag-query`) |
-| `ON_DEVICE_ASSISTED` | device has ≥ 3 GB RAM, the user opted in, the model file is present and the engine is loaded | on-device retrieval, then the small model rewords the one card the gate chose |
+| `ON_DEVICE_ASSISTED` | `enableOnDeviceRewrite` is on (off by default), the device has ≥ 3 GB RAM, the user opted in, the model file is present and the engine is loaded | on-device retrieval, then the small model rewords the one card the gate chose |
 | `ON_DEVICE_DIRECT` | anything else | on-device retrieval, then the card is served as written |
 
 Direct is the floor every other mode falls back to. Retrieval picks the same card in both
 on-device modes; the model rewords the result, it does not choose it.
+
+Direct mode has two search paths. **Standard search** is BM25 alone, on every phone.
+**Smarter search** adds dense retrieval. It runs when:
+- the user has opted in on a phone that meets the encoder's device rule
+  (`OnDeviceSetup.smarterSearchActive`: a 64-bit process, and at least `smarterSearchMinRamMb`
+  of RAM, default 1536 MiB, which admits 2 GB phones);
+- the card vectors have synced;
+- the query encoder is on disk.
+
+With the rewrite off, the opt-in downloads the encoder alone (~176 MB). The mode bar reads
+"On this phone · smarter search" when dense retrieval will run on the next turn.
 
 The on-device model is the catalog default, Qwen3-0.6B mixed INT4 on LiteRT-LM
 (`ModelCatalog.DEFAULT_ID`). Gemma 3 entries in the catalog are rollback targets. The

@@ -112,3 +112,13 @@ def test_full_answer_and_shown_lines_replace_the_preview():
     t = trace.parse_block(block)
     assert t["text_en"] == long_en
     assert t["text_shown_log"] == "প্রথম লাইন\nদ্বিতীয়"
+
+
+def test_dense_line_is_parsed():
+    on = [P + f'──── turn ──── mode=ON_DEVICE_DIRECT q="{Q2}"', P + "DENSE hits=8 top=aaaaaaaa:0@0.71 embedMs=412"]
+    off = [P + f'──── turn ──── mode=ON_DEVICE_DIRECT q="{Q2}"', P + "DENSE off (smarter search not enabled)"]
+    assert trace.parse_block(on)["dense"] == "on"
+    assert trace.parse_block(on)["dense_ms"] == 412
+    assert trace.parse_block(off)["dense"] == "off"
+    assert trace.parse_block(off)["dense_ms"] is None
+    assert trace.parse_block(on[:1])["dense"] is None

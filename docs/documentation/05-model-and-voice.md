@@ -8,6 +8,27 @@ The on-device LLM (Gemma) powers the chat. It is downloaded at runtime, not bund
 
 ---
 
+## Offline answering: standard and smarter search
+
+Offline chat shows the clinician-authored card as written. It finds the card one of two ways:
+
+| Path | How the card is found | Download | Devices |
+|---|---|---|---|
+| Standard search | BM25 over the synced module text | none | every phone |
+| Smarter search | BM25 + EmbeddingGemma query vectors | the query encoder, ~176 MB, once, after the user opts in | 64-bit app process with at least `smarterSearchMinRamMb` of RAM (default 1536 MiB, which admits 2 GB phones), and a Hugging Face token configured |
+
+The opt-in is the chat's offer card or its answering sheet. `sdk.localModelPrefs.choice` stores
+it, as before.
+
+The language model that rewords the card ("simple words") is off by default. Turn it on with
+`.enableOnDeviceRewrite(true)`; the opt-in then covers the language model and the encoder in one
+download, and the rest of this page applies as written. With it off, `sdk.localModelEnabled` is
+always `false`, and `modelManager.state` describes the encoder download: `Ready.modelFile` is the
+encoder's `.tflite`. A language model left on disk by an earlier build is deleted on the next
+start.
+
+---
+
 ## On-device model overview
 
 | Aspect | Detail |
@@ -126,13 +147,19 @@ CoachingChatBottomSheet.show(parentFragmentManager)
 
 If you do want a custom surface *outside* the chat (e.g. an onboarding download step), use `.modelDownloadStrategy(ModelDownloadStrategy.MANUAL)` and drive `modelManager.triggerDownload()` / `state` yourself — but don't duplicate the consent inside the default `ON_FIRST_USE` flow.
 
-Related host-readable state: `sdk.localModelEnabled` (device capable **and** user opted in) and `sdk.localModelPrefs.choice`.
+Related host-readable state: `sdk.localModelPrefs.choice` (the user's opt-in), and
+`sdk.localModelEnabled` (the language model may be used: rewrite on, device capable, user opted in).
 
 ---
 
 ## Low-end devices
 
 Devices under ~3 GB RAM cannot host the Gemma model. The SDK detects this at construction and runs the chat in **retrieval-only mode** (BM25 lookup over the indexed corpus, pre-authored Bangla card bodies, no LLM round-trip).
+
+The 3 GB floor applies to the language model only. Smarter search has its own rule: a 64-bit
+app process and at least `smarterSearchMinRamMb` of RAM (default 1536 MiB, which admits phones
+sold as 2 GB). So a 2 GB phone can be offered smarter search while it never sees the language
+model. `isLowEndDevice` reports the language model's tier.
 
 ```kotlin
 if (MicroCoachingSDK.getInstance().isLowEndDevice) {

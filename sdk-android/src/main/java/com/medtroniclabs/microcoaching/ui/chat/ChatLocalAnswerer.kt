@@ -747,25 +747,31 @@ internal suspend fun ChatViewModel.banglaRetrievalQueryOrError(trimmed: String):
 /**
  * Dense retrieval candidates for the TYPED question — the multilingual encoder
  * needs no MLKit translation, so the dense channel sees the CHW's own words in
- * both UI languages. Empty whenever any piece is missing (flag off, no synced
- * vectors, no encoder, un-embeddable text): the turn then runs BM25-only, and the
- * one DENSE trace line says which way it went for audit drivers.
+ * both UI languages. Empty whenever any piece is missing (flag off, smarter search
+ * not opted into, no synced vectors, no encoder, un-embeddable text): the turn then
+ * runs BM25-only, and the one DENSE trace line says which way it went for audit drivers.
  */
 internal suspend fun ChatViewModel.denseCandidates(typedText: String): List<Pair<GroundingChunk, Float>> {
-    if (!config.enableDenseRetrieval) return emptyList()
+    if (!sdk.smarterSearchEnabled) {
+        Log.i(ChatViewModel.TRACE_TAG, "DENSE off (smarter search not enabled)")
+        return emptyList()
+    }
     val index = sdk.chatDenseIndex.value
-    val embedder = sdk.queryEmbedder
+    val embedder = sdk.queryEmbedder()
     if (index == null || embedder == null) {
         Log.i(ChatViewModel.TRACE_TAG, "DENSE off (index=${index != null} embedder=${embedder != null})")
         return emptyList()
     }
+    // Includes the one-time load on the first turn after a download or a release.
+    val embedStarted = android.os.SystemClock.elapsedRealtime()
     val vec = embedder.embed(typedText)
+    val embedMs = android.os.SystemClock.elapsedRealtime() - embedStarted
     if (vec == null) {
-        Log.i(ChatViewModel.TRACE_TAG, "DENSE off (query not embeddable)")
+        Log.i(ChatViewModel.TRACE_TAG, "DENSE off (query not embeddable) embedMs=$embedMs")
         return emptyList()
     }
     val hits = index.search(vec, config.chatTuning.serve.denseTopK)
     val top = hits.firstOrNull()?.let { "%s@%.2f".format(it.first.chunkId, it.second) } ?: "-"
-    Log.i(ChatViewModel.TRACE_TAG, "DENSE hits=${hits.size} top=$top")
+    Log.i(ChatViewModel.TRACE_TAG, "DENSE hits=${hits.size} top=$top embedMs=$embedMs")
     return hits
 }

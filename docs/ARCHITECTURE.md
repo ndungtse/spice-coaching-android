@@ -232,13 +232,13 @@ graph TD
 
 ### 5.3 — Chat / AI pipeline
 
-Chat routes on **`AnswerMode`** (`domain/decision/AnswerModeResolver.kt`), a pure ladder over `(preferOnline, networkAvailable, deviceEligible, consent, modelReady, engineLoaded)`:
+Chat routes on **`AnswerMode`** (`domain/decision/AnswerModeResolver.kt`), a pure ladder over `(preferOnline, networkAvailable, deviceEligible, consent, modelReady, engineLoaded, rewriteEnabled)`:
 
 | Mode | Path | Needs |
 |---|---|---|
 | `ONLINE` | `ChatBackendAnswerer` → `POST /coaching/rag-query` (backend retrieval + generation) | Network |
-| `ON_DEVICE_ASSISTED` | `ChatLocalAnswerer` full L0→L5: deny-list → scope gate → BM25 + dense → fusion → ranker → `ServeGate` → LLM → groundedness and validators → BN↔EN round-trip | Downloaded model + consent |
-| `ON_DEVICE_DIRECT` | Same retrieval + gate, serving clinician-authored card text verbatim | Nothing but the local index — the hard floor |
+| `ON_DEVICE_ASSISTED` | `ChatLocalAnswerer` full L0→L5: deny-list → scope gate → BM25 + dense → fusion → ranker → `ServeGate` → LLM → groundedness and validators → BN↔EN round-trip | `enableOnDeviceRewrite` (off by default) + downloaded model + consent |
+| `ON_DEVICE_DIRECT` | Same retrieval + gate, serving clinician-authored card text verbatim; dense retrieval joins BM25 when smarter search is opted into and its encoder is on disk | Nothing but the local index — the hard floor |
 
 Key invariant: **`ServeGate` (`ai/retrieval/ServeGate.kt`) is the single serve/refuse authority for both offline paths, and it runs *before* any LLM call.** `CardRanker` picks one card from the fused candidates; the gate serves or refuses that card and never substitutes another. It demands shared clinical evidence (`CardEvidence`: condition terms + synonym concepts), applies per-language score floors (`ServeTuning`), and refuses with `NO_HITS` / `NO_EVIDENCE` / `BELOW_SCORE_FLOOR`. After the model, a rejected answer is replaced by the same card verbatim; nothing after the gate refuses it. The model can only reword a card the gate already served — "this mode gives up presentation, not accuracy."
 

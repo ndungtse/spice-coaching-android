@@ -110,23 +110,40 @@ data class MicroCoachingConfig internal constructor(
      */
     val wifiOnlyModelDownload: Boolean = false,
 
-    // ── Dense retrieval ───────────────────────────────────────────────────────
+    // ── Offline answering ─────────────────────────────────────────────────────
     /**
-     * Enables hybrid (BM25 + embedding) chat retrieval: syncs per-card embedding vectors
-     * from `/sync/card-embeddings`, and fetches the on-device query encoder as the second
-     * half of the "simple words" download.
+     * Enables smarter search: hybrid (BM25 + embedding) offline retrieval. Syncs per-card
+     * embedding vectors from `/sync/card-embeddings`, and makes the on-device query encoder
+     * (~176 MB) available to download.
      *
-     * On by default, and a kill switch rather than an opt-in — what actually decides whether
-     * a device fetches the ~176 MB encoder is the user enabling the local model plus the
-     * 3 GB RAM tier ([com.medtroniclabs.microcoaching.ai.embedding.EncoderModelRule]). A
-     * device that never turns on "simple words" never downloads it.
+     * On by default, and a kill switch rather than an opt-in. What decides whether a device
+     * fetches the encoder is the user opting in on a phone that meets the smarter-search device
+     * rule ([com.medtroniclabs.microcoaching.ai.model.OnDeviceSetup.encoderDeviceEligible]).
      *
-     * Turning it off keeps the pipeline byte-identical to BM25-only: no vector sync, no
-     * encoder, and every dense evidence channel structurally unreachable because nothing
-     * sets a cosine. Degradation is likewise structural — missing vectors, a missing encoder
-     * or a low-end device each leave chat on exactly that same behaviour.
+     * Turning it off keeps offline chat on BM25 alone: no vector sync, no encoder, and every
+     * dense evidence channel unreachable because nothing sets a cosine.
      */
     val enableDenseRetrieval: Boolean = true,
+
+    /**
+     * Lets the on-device language model reword the served card ("simple words").
+     *
+     * Off by default: offline chat then shows the card as written, found by standard or smarter
+     * search, and nothing offers, downloads or loads the language model. A language model left on
+     * disk by an earlier build is deleted on the next start. On, the opt-in covers the language
+     * model and the encoder in one download.
+     */
+    val enableOnDeviceRewrite: Boolean = false,
+
+    /**
+     * Smallest total RAM, in MiB, on which smarter search is offered and run.
+     *
+     * Separate from the language model's 3 GB tier, because the encoder holds about 110 MB while
+     * it runs. Phones sold as 2 GB report about 1,700–1,900 MiB, so the default admits them and
+     * leaves out 1 GB and 1.5 GB phones. The figure is backed by the 2 GB emulator measurement in
+     * `docs/eval/`.
+     */
+    val smarterSearchMinRamMb: Int = 1536,
 
     // ── Model Download Providers ──────────────────────────────────────────────
     /**

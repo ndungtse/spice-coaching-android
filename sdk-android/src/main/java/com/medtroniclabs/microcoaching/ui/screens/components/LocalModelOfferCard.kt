@@ -42,10 +42,17 @@ import com.medtroniclabs.microcoaching.R
  * either way. Both the size and the fact that it can be removed are stated up front — they are
  * what the decision turns on, and finding them out afterwards is what makes an optional
  * download feel imposed.
+ *
+ * With the rewrite off it offers smarter search, and promises what that delivers: guidance found
+ * even when the question is worded differently. It claims nothing about the answer's wording,
+ * which is the card either way.
+ *
+ * @param smarterSearch true when the opt-in is smarter search alone (the rewrite is off).
  */
 @Composable
 fun LocalModelOfferCard(
     sizeBytes: Long?,
+    smarterSearch: Boolean,
     onSetUp: () -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
@@ -75,7 +82,9 @@ fun LocalModelOfferCard(
                 )
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    text = stringResource(R.string.local_model_offer_title),
+                    text = stringResource(
+                        if (smarterSearch) R.string.search_offer_title else R.string.local_model_offer_title,
+                    ),
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSecondaryContainer,
@@ -87,11 +96,11 @@ fun LocalModelOfferCard(
                 // approximation as fact: the figure is the main thing being consented to.
                 text = if (sizeBytes != null && sizeBytes > 0L) {
                     stringResource(
-                        R.string.local_model_offer_body_sized,
+                        if (smarterSearch) R.string.search_offer_body_sized else R.string.local_model_offer_body_sized,
                         Formatter.formatShortFileSize(context, sizeBytes),
                     )
                 } else {
-                    stringResource(R.string.local_model_offer_body)
+                    stringResource(if (smarterSearch) R.string.search_offer_body else R.string.local_model_offer_body)
                 },
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

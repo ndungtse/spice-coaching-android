@@ -157,7 +157,7 @@ SUBCOMMANDS["device"] = (_device_configure, _device_run)
 
 
 def _setup_configure(p: argparse.ArgumentParser) -> None:
-    p.add_argument("--mode", choices=["assisted", "direct"], required=True)
+    p.add_argument("--mode", choices=["assisted", "direct", "standard", "enhanced"], required=True)
     p.add_argument("--install", action="store_true", help="install the APK from local.toml and clear data first")
     p.add_argument("--serial", help="device serial; defaults to local.toml")
 
@@ -178,8 +178,8 @@ def _setup_run(args: argparse.Namespace) -> int:
         app.login(driver, cap["package"], local.get("username", ""), local.get("password", ""))
         app.open_assistant(driver, cap["package"])
         app.set_answer_mode(driver, "on_device", style=args.mode)
-        if args.mode == "assisted":
-            print("Accept the 'simple words' offer on screen if it is showing; waiting for the chat to be ready…")
+        if args.mode in ("assisted", "enhanced"):
+            print("Accept the download offer on screen if it is showing; waiting for the chat to be ready…")
             app.wait_ready(driver, timeout_s=1800)
             app.restart(driver, serial, cap["package"], cap["launcher_activity"])
             app.open_assistant(driver, cap["package"])
@@ -199,7 +199,7 @@ SUBCOMMANDS["setup"] = (_setup_configure, _setup_run)
 
 def _run_configure(p: argparse.ArgumentParser) -> None:
     p.add_argument("--source", required=True, help="bank source to ask, e.g. qa-uc2-2026-09-17")
-    p.add_argument("--mode", choices=["assisted", "direct"], required=True)
+    p.add_argument("--mode", choices=["assisted", "direct", "standard", "enhanced"], required=True)
     p.add_argument("--bank", default="banks/qa_bn.jsonl")
     p.add_argument("--out", help="run folder; defaults to runs/<time>-<source>-<mode>")
     p.add_argument("--resume", action="store_true", help="skip questions already in turns.jsonl")

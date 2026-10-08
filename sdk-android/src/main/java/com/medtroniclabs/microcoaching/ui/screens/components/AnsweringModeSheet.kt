@@ -56,6 +56,8 @@ import com.medtroniclabs.microcoaching.domain.decision.AnswerMode
  *   download in flight stays pausable from the mode bar, which reports it regardless of mode.
  * @param modelEnabled the user's stored consent, which is what the radio reflects — not
  *   whether the engine happens to be loaded this second.
+ * @param rewriteAvailable false when the language model is switched off; the section then
+ *   chooses between standard and smarter search instead of between answer styles.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -65,6 +67,7 @@ fun AnsweringModeSheet(
     networkAvailable: Boolean,
     modelEligible: Boolean,
     modelEnabled: Boolean,
+    rewriteAvailable: Boolean,
     modelDownload: DownloadItemUiState,
     modelSizeBytes: Long?,
     modelOnDiskBytes: Long?,
@@ -140,6 +143,7 @@ fun AnsweringModeSheet(
                 Spacer(Modifier.height(14.dp))
                 AnswerStyleSection(
                     modelEnabled = modelEnabled,
+                    rewriteAvailable = rewriteAvailable,
                     modelDownload = modelDownload,
                     modelSizeBytes = modelSizeBytes,
                     modelOnDiskBytes = modelOnDiskBytes,
@@ -178,6 +182,7 @@ fun AnsweringModeSheet(
 
     if (showOptOutDialog) {
         OptOutDialog(
+            rewriteAvailable = rewriteAvailable,
             modelSizeBytes = modelOnDiskBytes ?: modelSizeBytes,
             onConfirm = { deleteFile ->
                 showOptOutDialog = false
@@ -197,6 +202,7 @@ fun AnsweringModeSheet(
 @Composable
 private fun AnswerStyleSection(
     modelEnabled: Boolean,
+    rewriteAvailable: Boolean,
     modelDownload: DownloadItemUiState,
     modelSizeBytes: Long?,
     modelOnDiskBytes: Long?,
@@ -210,7 +216,9 @@ private fun AnswerStyleSection(
 ) {
     val context = LocalContext.current
     Text(
-        text = stringResource(R.string.answering_sheet_style_title),
+        text = stringResource(
+            if (rewriteAvailable) R.string.answering_sheet_style_title else R.string.answering_sheet_search_title,
+        ),
         style = MaterialTheme.typography.labelLarge,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
@@ -219,8 +227,14 @@ private fun AnswerStyleSection(
     ModeRow(
         selected = !modelEnabled,
         icon = null,
-        title = stringResource(R.string.answering_sheet_style_direct_title),
-        subtitle = stringResource(R.string.answering_sheet_style_direct_body),
+        title = stringResource(
+            if (rewriteAvailable) R.string.answering_sheet_style_direct_title
+            else R.string.answering_sheet_search_standard_title,
+        ),
+        subtitle = stringResource(
+            if (rewriteAvailable) R.string.answering_sheet_style_direct_body
+            else R.string.answering_sheet_search_standard_body,
+        ),
         // Only meaningful as a change; re-selecting the active option must not open the
         // opt-out dialog.
         onClick = { if (modelEnabled) onChooseDirect() },
@@ -229,14 +243,21 @@ private fun AnswerStyleSection(
     ModeRow(
         selected = modelEnabled,
         icon = null,
-        title = stringResource(R.string.answering_sheet_style_assisted_title),
+        title = stringResource(
+            if (rewriteAvailable) R.string.answering_sheet_style_assisted_title
+            else R.string.answering_sheet_search_smarter_title,
+        ),
         subtitle = if (modelSizeBytes != null) {
             stringResource(
-                R.string.answering_sheet_style_assisted_body_sized,
+                if (rewriteAvailable) R.string.answering_sheet_style_assisted_body_sized
+                else R.string.answering_sheet_search_smarter_body_sized,
                 Formatter.formatShortFileSize(context, modelSizeBytes),
             )
         } else {
-            stringResource(R.string.answering_sheet_style_assisted_body)
+            stringResource(
+                if (rewriteAvailable) R.string.answering_sheet_style_assisted_body
+                else R.string.answering_sheet_search_smarter_body,
+            )
         },
         onClick = { if (!modelEnabled) onChooseAssisted() },
     )
@@ -248,7 +269,9 @@ private fun AnswerStyleSection(
         Spacer(Modifier.height(10.dp))
         DownloadItemCard(
             icon = DownloadItemIcon.AiSparkle,
-            title = stringResource(R.string.download_card_ai_title),
+            title = stringResource(
+                if (rewriteAvailable) R.string.download_card_ai_title else R.string.download_card_search_title,
+            ),
             sizeLabel = modelSizeLabel(
                 expectedBytes = modelSizeBytes,
                 onDiskBytes = modelOnDiskBytes,
@@ -310,6 +333,7 @@ private fun modelSizeLabel(expectedBytes: Long?, onDiskBytes: Long?): String {
  */
 @Composable
 private fun OptOutDialog(
+    rewriteAvailable: Boolean,
     modelSizeBytes: Long?,
     onConfirm: (deleteFile: Boolean) -> Unit,
     onDismiss: () -> Unit,
@@ -318,11 +342,19 @@ private fun OptOutDialog(
     var deleteFile by remember { mutableStateOf(true) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.answering_opt_out_title)) },
+        title = {
+            Text(
+                stringResource(
+                    if (rewriteAvailable) R.string.answering_opt_out_title else R.string.answering_search_opt_out_title,
+                ),
+            )
+        },
         text = {
             Column {
                 Text(
-                    text = stringResource(R.string.answering_opt_out_body),
+                    text = stringResource(
+                        if (rewriteAvailable) R.string.answering_opt_out_body else R.string.answering_search_opt_out_body,
+                    ),
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 Spacer(Modifier.height(12.dp))
@@ -349,7 +381,11 @@ private fun OptOutDialog(
         },
         confirmButton = {
             TextButton(onClick = { onConfirm(deleteFile) }) {
-                Text(stringResource(R.string.answering_opt_out_confirm))
+                Text(
+                    stringResource(
+                        if (rewriteAvailable) R.string.answering_opt_out_confirm else R.string.answering_search_opt_out_confirm,
+                    ),
+                )
             }
         },
         dismissButton = {

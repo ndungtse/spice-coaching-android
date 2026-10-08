@@ -35,10 +35,11 @@ internal object ModelDownloadNotifier {
         progress: Int,
         bytesDownloaded: Long,
         totalBytes: Long,
+        titleRes: Int = R.string.notification_model_download_title,
     ): Notification = DownloadNotifications.build(
         context = context,
         channelId = CHANNEL_ID,
-        titleRes = R.string.notification_model_download_title,
+        titleRes = titleRes,
         channelNameRes = R.string.notification_model_download_channel_name,
         channelDescRes = R.string.notification_model_download_channel_desc,
         progress = progress,

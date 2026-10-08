@@ -67,6 +67,11 @@ so the encoder is loaded, and turns airplane mode on. It never ticks the option 
 the downloaded model. It does not accept the "simple words" download offer for you; if that
 offer is showing, accept it on the device and setup waits.
 
+For a build with the rewrite off, use `--mode standard` (keyword search) or `--mode enhanced`
+(smarter search). Both answer through the direct path. `enhanced` waits for the smarter-search
+download, and warns `dense_off` on any turn that did not use dense retrieval; `standard` warns
+`dense_on` on any turn that did.
+
 Each run exports the modules that were in the SDK's database on the device into
 `runs/<run>/modules.json`, at the start and again at the end, and `check` and `report` score
 against it. If a sync changed the modules mid-run, `run.json` says so and `modules.end.json` is
