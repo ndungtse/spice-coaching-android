@@ -31,6 +31,7 @@ SEL = {
     "search_standard": ("Standard search", "সাধারণ খোঁজা"),
     "search_smarter": ("Smarter search", "উন্নত খোঁজা"),
     "search_confirm": ("Use standard search", "সাধারণ খোঁজা ব্যবহার করুন"),
+    "search_ready": ("On this phone · smarter search", "এই ফোনে · উন্নত খোঁজা"),
     "download": ("Download both", "Download AI Model", "Download"),
     "dialog_ok": ("Allow", "ALLOW", "Yes", "OK", "Continue", "ঠিক আছে", "হ্যাঁ"),
 }
@@ -79,6 +80,13 @@ def _present(driver, by: str, value: str) -> bool:
         return True
     except Exception:
         return False
+
+
+def dismiss_anr(driver) -> bool:
+    """Answers Android's "isn't responding" dialog with Wait. On a loaded emulator the chat can
+    stall drawing a long history for over five seconds, which raises it without the app being
+    stuck."""
+    return _click_text(driver, ("Wait",), timeout=0.5)
 
 
 def is_chat_ready(driver) -> bool:
@@ -171,6 +179,30 @@ def wait_ready(driver, timeout_s: float = 600) -> None:
     raise TimeoutException("the chat screen never became ready")
 
 
+def wait_smarter_search(driver, timeout_s: float = 1800) -> None:
+    """Waits until the mode bar says smarter search will answer the next turn: the encoder is
+    on disk and the card vectors are indexed. The chat accepts questions long before that, so
+    this, not the chat being ready, is what a run that needs the encoder waits on."""
+    end = time.time() + timeout_s
+    while time.time() < end:
+        if any(_present(driver, AppiumBy.ANDROID_UIAUTOMATOR, f'new UiSelector().text("{t}")')
+               for t in SEL["search_ready"]):
+            return
+        time.sleep(5)
+    raise TimeoutException("smarter search never became ready")
+
+
+def _click_mode_bar(driver) -> bool:
+    """Taps the mode bar's label. The whole bar opens the sheet, and on some screens its
+    "Change" text is not in the accessibility tree, while the label always is."""
+    for label in SEL["mode_on_device"] + SEL["mode_online"]:
+        found = driver.find_elements(AppiumBy.ANDROID_UIAUTOMATOR, f'new UiSelector().textStartsWith("{label}")')
+        if found:
+            found[0].click()
+            return True
+    return False
+
+
 def set_answer_mode(driver, mode: str, style: str | None = None) -> None:
     """Selects online or on this phone, and for on this phone the answer style: `direct`
     (exact words from the guide) or `assisted` (explained in simple words) on a build with the
@@ -178,7 +210,8 @@ def set_answer_mode(driver, mode: str, style: str | None = None) -> None:
     target = SEL["mode_online"] if mode == "online" else SEL["mode_on_device"]
     if not any(_present(driver, AppiumBy.ANDROID_UIAUTOMATOR, f'new UiSelector().textContains("{t}")')
                for t in SEL["mode_sheet_title"]):
-        if not _click_desc(driver, SEL["mode_sheet_open"], timeout=4) and not _click_text(driver, ("Change", "বদলান")):
+        if not (_click_desc(driver, SEL["mode_sheet_open"], timeout=4) or _click_text(driver, ("Change", "বদলান"))
+                or _click_mode_bar(driver)):
             raise TimeoutException("could not open the answer-mode sheet")
         time.sleep(0.8)
     if not _click_text(driver, target, timeout=8):

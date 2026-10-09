@@ -26,7 +26,7 @@ Direct mode has two search paths. **Standard search** is BM25 alone, on every ph
 **Smarter search** adds dense retrieval. It runs when:
 - the user has opted in on a phone that meets the encoder's device rule
   (`OnDeviceSetup.smarterSearchActive`: a 64-bit process, and at least `smarterSearchMinRamMb`
-  of RAM, default 1536 MiB, which admits 2 GB phones);
+  of RAM, default 3072 MiB; 1536 admits 2 GB phones);
 - the card vectors have synced;
 - the query encoder is on disk.
 

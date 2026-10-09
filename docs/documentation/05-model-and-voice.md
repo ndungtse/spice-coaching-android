@@ -15,7 +15,7 @@ Offline chat shows the clinician-authored card as written. It finds the card one
 | Path | How the card is found | Download | Devices |
 |---|---|---|---|
 | Standard search | BM25 over the synced module text | none | every phone |
-| Smarter search | BM25 + EmbeddingGemma query vectors | the query encoder, ~176 MB, once, after the user opts in | 64-bit app process with at least `smarterSearchMinRamMb` of RAM (default 1536 MiB, which admits 2 GB phones), and a Hugging Face token configured |
+| Smarter search | BM25 + EmbeddingGemma query vectors | the query encoder, ~176 MB, once, after the user opts in | 64-bit app process with at least `smarterSearchMinRamMb` of RAM (default 3072 MiB; 1536 admits 2 GB phones, see below), and a Hugging Face token configured |
 
 The opt-in is the chat's offer card or its answering sheet. `sdk.localModelPrefs.choice` stores
 it, as before.
@@ -157,9 +157,12 @@ Related host-readable state: `sdk.localModelPrefs.choice` (the user's opt-in), a
 Devices under ~3 GB RAM cannot host the Gemma model. The SDK detects this at construction and runs the chat in **retrieval-only mode** (BM25 lookup over the indexed corpus, pre-authored Bangla card bodies, no LLM round-trip).
 
 The 3 GB floor applies to the language model only. Smarter search has its own rule: a 64-bit
-app process and at least `smarterSearchMinRamMb` of RAM (default 1536 MiB, which admits phones
-sold as 2 GB). So a 2 GB phone can be offered smarter search while it never sees the language
-model. `isLowEndDevice` reports the language model's tier.
+app process and at least `smarterSearchMinRamMb` of RAM. The default, 3072 MiB, matches the
+language model's tier: on a 2 GB emulator the encoder added about 190 MB to SPICE's memory, over
+the 150 MB budget set for it (`docs/eval/2026-10-09-smarter-search-2gb-emulator.md`). A host that
+accepts that cost can set `.smarterSearchMinRamMb(1536)`, which admits phones sold as 2 GB; those
+then get smarter search without ever seeing the language model. `isLowEndDevice` reports the
+language model's tier.
 
 ```kotlin
 if (MicroCoachingSDK.getInstance().isLowEndDevice) {

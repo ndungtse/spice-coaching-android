@@ -65,7 +65,7 @@ One line per question asked; a rerun appends another line for the same id, and t
 | `text_shown_ui` | the screen capture as read |
 | `text_shown_log` | the `SHOWN` line's text; null on a verbatim card or refusal |
 | `latency_ms` | send to outcome |
-| `warnings` | `no_anchor`, `timeout`, `mode_mismatch`, `crash`, `no_text`, `shown_mismatch` (the capture is not part of the `SHOWN` text), `dense_off` (an enhanced run's turn without dense retrieval), `dense_on` (a standard run's turn with it) |
+| `warnings` | `no_anchor`, `timeout`, `mode_mismatch`, `crash`, `no_text`, `shown_mismatch` (the capture is not part of the `SHOWN` text), `dense_off` (an enhanced run's turn without dense retrieval, other than a deny-list refusal), `dense_on` (a standard run's turn with it) |
 | `trace` | this turn's log lines, prefixes removed |
 | `captured_at` | UTC timestamp |
 

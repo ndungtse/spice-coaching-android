@@ -1260,7 +1260,7 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
         private var wifiOnlyModelDownload: Boolean = false
         private var enableDenseRetrieval: Boolean = true
         private var enableOnDeviceRewrite: Boolean = false
-        private var smarterSearchMinRamMb: Int = 1536
+        private var smarterSearchMinRamMb: Int = 3072
         private var modelProviders: List<ModelProvider> = ModelProvider.DEFAULT_ORDER
         private var huggingFaceToken: String = ""
         private var huggingFaceModelUrl: String = ""

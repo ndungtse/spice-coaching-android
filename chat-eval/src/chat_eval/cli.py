@@ -181,6 +181,8 @@ def _setup_run(args: argparse.Namespace) -> int:
         if args.mode in ("assisted", "enhanced"):
             print("Accept the download offer on screen if it is showing; waiting for the chat to be ready…")
             app.wait_ready(driver, timeout_s=1800)
+            if args.mode == "enhanced":
+                app.wait_smarter_search(driver, timeout_s=1800)
             app.restart(driver, serial, cap["package"], cap["launcher_activity"])
             app.open_assistant(driver, cap["package"])
         device.set_airplane(serial, True)

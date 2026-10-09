@@ -51,7 +51,9 @@ def build_turn(row: dict, lines: list[str], run_mode: str, text_shown: str, late
             warnings.append("timeout")
         if parsed["mode"] != run_mode:
             warnings.append("mode_mismatch")
-        if dense_expected is True and parsed["dense"] != "on":
+        # The deny-list refuses before retrieval, so such a turn has no DENSE line to judge.
+        refused_early = (parsed["gate"] or {}).get("reason") == "DENY"
+        if dense_expected is True and parsed["dense"] != "on" and not refused_early:
             warnings.append("dense_off")
         if dense_expected is False and parsed["dense"] == "on":
             warnings.append("dense_on")
@@ -100,6 +102,8 @@ def run(settings: dict, serial: str, bank_rows: list[dict], source: str, mode: s
             if row["id"] in done and only is None:
                 continue
             if not app.is_chat_ready(driver):
+                if app.dismiss_anr(driver):
+                    print(f"{row['id']}: dismissed an 'isn't responding' dialog")
                 for _ in range(cap["screen_recover_tries"]):
                     driver.press_keycode(4)
                     time.sleep(1)

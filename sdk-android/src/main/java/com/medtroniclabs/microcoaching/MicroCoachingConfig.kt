@@ -138,12 +138,12 @@ data class MicroCoachingConfig internal constructor(
     /**
      * Smallest total RAM, in MiB, on which smarter search is offered and run.
      *
-     * Separate from the language model's 3 GB tier, because the encoder holds about 110 MB while
-     * it runs. Phones sold as 2 GB report about 1,700–1,900 MiB, so the default admits them and
-     * leaves out 1 GB and 1.5 GB phones. The figure is backed by the 2 GB emulator measurement in
-     * `docs/eval/`.
+     * Separate from the language model's 3 GB tier, so it can be lowered on its own. The default is
+     * the 3 GB tier: on a 2 GB emulator the encoder added about 190 MB to SPICE's PSS, over the
+     * 150 MB budget (`docs/eval/2026-10-09-smarter-search-2gb-emulator.md`). Phones sold as 2 GB
+     * report about 1,700–1,900 MiB, so a host that accepts that cost can admit them with 1536.
      */
-    val smarterSearchMinRamMb: Int = 1536,
+    val smarterSearchMinRamMb: Int = 3072,
 
     // ── Model Download Providers ──────────────────────────────────────────────
     /**

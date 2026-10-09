@@ -67,3 +67,11 @@ def test_a_turn_on_the_wrong_search_path_is_warned():
                                             dense_expected=capture.DENSE_EXPECTED["standard"])["warnings"]
     assert capture.build_turn(ROW, on, "ON_DEVICE_DIRECT", "উত্তর", 1,
                               dense_expected=capture.DENSE_EXPECTED["enhanced"])["warnings"] == []
+
+
+def test_a_turn_refused_before_retrieval_is_not_warned_dense_off():
+    # An off-topic question is refused before retrieval, so it has no DENSE line at all.
+    lines = [P + f'──── turn ──── mode=ON_DEVICE_DIRECT q="{ROW["question"]}"',
+             P + "OUTCOME=REFUSAL key=refused_scope"]
+    t = capture.build_turn(ROW, lines, "ON_DEVICE_DIRECT", "উত্তর", 1, dense_expected=True)
+    assert "dense_off" not in t["warnings"]

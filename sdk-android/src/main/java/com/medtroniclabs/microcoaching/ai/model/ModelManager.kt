@@ -482,9 +482,13 @@ class ModelManager(private val config: MicroCoachingConfig) {
     /** Off: the encoder is the whole download, and nothing touches the language model. */
     private val rewriteEnabled: Boolean get() = config.enableOnDeviceRewrite
 
-    /** Below the language model's 3 GB tier. The encoder's rule is [encoderEligible]. */
-    private fun isLowEnd(): Boolean =
+    /**
+     * Below the language model's 3 GB tier, probed once. The encoder's rule is
+     * [encoderEligible]. The chat reads this on every download progress update.
+     */
+    private val isLowEnd: Boolean by lazy {
         config.forceLowEndMode ?: DeviceCapability.isLowEndDevice(config.context)
+    }
 
     /**
      * Why the query encoder will or will not be fetched on this device.
@@ -533,7 +537,7 @@ class ModelManager(private val config: MicroCoachingConfig) {
      */
     fun setupAvailable(): Boolean = OnDeviceSetup.setupAvailable(
         rewriteEnabled = rewriteEnabled,
-        isLowEndDevice = isLowEnd(),
+        isLowEndDevice = isLowEnd,
         encoderVerdict = encoderVerdict(),
     )
 
