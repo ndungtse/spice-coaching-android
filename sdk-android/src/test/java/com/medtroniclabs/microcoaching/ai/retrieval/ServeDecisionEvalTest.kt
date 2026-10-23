@@ -15,7 +15,7 @@ import org.junit.Test
  * The merge gate for offline serve/refuse behaviour: a change that serves more wrong
  * cards, or loses an answer it used to get right, fails here.
  *
- * Runs the real retrieval-only pipeline ([GroundingSelector] + [ServeDecision]) over a
+ * Runs the real retrieval-only pipeline ([GroundingSelector] + [ServeGate]) over a
  * labelled question set and a corpus snapshot, both committed as test resources — so
  * unlike [RealCorpusProbeTest] and [GoldenBengaliBenchmarkTest] this needs no
  * environment and always runs in CI.
@@ -35,7 +35,7 @@ import org.junit.Test
  * including serving where it should refuse), MISS (refused although an acceptable
  * card exists).
  *
- * @see ServeDecision
+ * @see ServeGate
  */
 class ServeDecisionEvalTest {
 
@@ -153,15 +153,15 @@ class ServeDecisionEvalTest {
                 "${q.question} ${q.englishQuery}"
             else -> q.question
         }
-        val decision = ServeDecision.decide(
+        val decision = ServeGate.decide(
             query = guardQuery,
             hits = hits,
             clinicalTerms = scope.scopeTerms(),
             tuning = com.medtroniclabs.microcoaching.ServeTuning(),
             isBanglaTurn = q.lang == "bn",
         )
-        val why = ServeDecision.describe(decision)
-        val top = (decision as? ServeDecision.Decision.Serve)?.hit ?: return null to why
+        val why = ServeGate.describe(decision)
+        val top = (decision as? ServeGate.Decision.Serve)?.hit ?: return null to why
         return "${top.moduleFamilyId.take(8)}:${top.positionalId}" to why
     }
 

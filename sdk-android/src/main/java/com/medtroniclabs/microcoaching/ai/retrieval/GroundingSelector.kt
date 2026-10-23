@@ -1,5 +1,7 @@
 package com.medtroniclabs.microcoaching.ai.retrieval
 
+import java.util.Locale
+
 /**
  * Shared grounding selection for both offline chat paths.
  *
@@ -18,9 +20,39 @@ object GroundingSelector {
         val nativeHits: List<GroundingChunk>,
         val englishHits: List<GroundingChunk>,
         val chosenLabel: String,
+        val fused: List<FusedEntry> = emptyList(),
     ) {
         val primary: GroundingChunk? get() = hits.firstOrNull()
     }
+
+    /** One fused candidate as the `FUSED` trace line reports it; a channel that did not return it is null. */
+    data class FusedEntry(
+        val key: String,
+        val bm25Rank: Int?,
+        val bm25Score: Float,
+        val denseRank: Int?,
+        val cos: Float?,
+    )
+
+    internal fun fusedEntries(
+        bm25Side: List<GroundingChunk>,
+        admittedDense: List<Pair<GroundingChunk, Float>>,
+        fused: List<GroundingChunk>,
+    ): List<FusedEntry> {
+        val bm25Rank = bm25Side.withIndex().associate { (i, c) -> c.chunkId to i + 1 }
+        val denseRank = admittedDense.withIndex().associate { (i, p) -> p.first.chunkId to i + 1 }
+        return fused.map {
+            FusedEntry(it.shortKey, bm25Rank[it.chunkId], it.score, denseRank[it.chunkId], it.denseCos)
+        }
+    }
+
+    /** `FUSED n=<count> order=[<key> bm25=<rank>/<score> dense=<rank>/<cos>, …]`; `-` for a channel that missed. */
+    fun describeFused(entries: List<FusedEntry>): String =
+        "FUSED n=${entries.size} order=[" + entries.joinToString(", ") { e ->
+            val bm25 = e.bm25Rank?.let { "$it/${"%.1f".format(Locale.US, e.bm25Score)}" } ?: "-"
+            val dense = e.denseRank?.let { "$it/${"%.2f".format(Locale.US, e.cos ?: 0f)}" } ?: "-"
+            "${e.key} bm25=$bm25 dense=$dense"
+        } + "]"
 
     fun select(
         nativeQuery: String,
@@ -72,15 +104,12 @@ object GroundingSelector {
         }
 
         val admittedDense = dense.filter { (_, cos) -> cos >= denseAdmitFloor }
-        val merged = fuseWithDense(
-            applyNativeAnchor(
-                mergeAndRerank(nativeHits, englishHits, nativeQuery, runEnglishSearch),
-                nativeHits,
-                nativeQuery,
-            ),
-            admittedDense,
-            rrfK,
+        val bm25Side = applyNativeAnchor(
+            mergeAndRerank(nativeHits, englishHits, nativeQuery, runEnglishSearch),
+            nativeHits,
+            nativeQuery,
         )
+        val merged = fuseWithDense(bm25Side, admittedDense, rrfK)
         val chosenLabel = when {
             merged.isEmpty() -> "none"
             admittedDense.isNotEmpty() -> "hybrid"
@@ -94,6 +123,7 @@ object GroundingSelector {
             nativeHits = nativeHits,
             englishHits = englishHits,
             chosenLabel = chosenLabel,
+            fused = fusedEntries(bm25Side, admittedDense, merged.take(k)),
         )
     }
 

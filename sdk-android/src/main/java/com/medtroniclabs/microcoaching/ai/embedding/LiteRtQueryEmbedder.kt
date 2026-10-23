@@ -34,22 +34,35 @@ internal class LiteRtQueryEmbedder(private val modelDir: File) : QueryEmbedder {
     @Volatile
     private var loadFailed = false
 
+    /** Set by [release]. A released embedder stays empty; the holder resolves a fresh one. */
+    @Volatile
+    private var released = false
+
     private var interpreter: Interpreter? = null
     private var tokenizer: SentencePieceBpeTokenizer? = null
     private var padId: Int = 0
 
     override val isAvailable: Boolean
-        get() = !loadFailed && EncoderModel.filesPresent(modelDir)
+        get() = !loadFailed && !released && EncoderModel.filesPresent(modelDir) &&
+            graphStamp() !in failedGraphs
+
+    /** Identifies the graph on disk, so a failed load is not retried until the file changes. */
+    private fun graphStamp(): String =
+        File(modelDir, EncoderModel.TFLITE_FILE_NAME).let { "${it.absolutePath}:${it.length()}:${it.lastModified()}" }
 
     override suspend fun embed(text: String): FloatArray? {
         if (text.isBlank() || !isAvailable) return null
         return withContext(Dispatchers.Default) {
             lock.withLock {
+                // Checked under the lock: an embed that raced a release must not map the
+                // weights again into an embedder nothing holds.
+                if (released) return@withLock null
                 val ready = runCatching { load() }.getOrElse { cause ->
                     // A corrupt or truncated graph throws here; one attempt is enough,
                     // since retrying maps the same bytes again.
                     Log.e(TAG, "encoder load failed, disabling dense branch: ${cause.message}")
                     loadFailed = true
+                    failedGraphs += graphStamp()
                     close()
                     false
                 }
@@ -75,6 +88,7 @@ internal class LiteRtQueryEmbedder(private val modelDir: File) : QueryEmbedder {
             // against 110 MB on CPU, which no target tier can hold.
             numThreads = INFERENCE_THREADS
         }
+        val loadStarted = android.os.SystemClock.elapsedRealtime()
         val loaded = Interpreter(File(modelDir, EncoderModel.TFLITE_FILE_NAME), options)
         val vocab = SentencePieceVocab.fromModelProto(
             File(modelDir, EncoderModel.TOKENIZER_FILE_NAME).readBytes(),
@@ -84,7 +98,8 @@ internal class LiteRtQueryEmbedder(private val modelDir: File) : QueryEmbedder {
         padId = vocab.padId
         Log.i(
             TAG,
-            "encoder loaded: input=${loaded.getInputTensor(0).shape().toList()} " +
+            "encoder loaded: loadMs=${android.os.SystemClock.elapsedRealtime() - loadStarted} " +
+                "input=${loaded.getInputTensor(0).shape().toList()} " +
                 "output=${loaded.getOutputTensor(0).shape().toList()}",
         )
         return true
@@ -107,6 +122,17 @@ internal class LiteRtQueryEmbedder(private val modelDir: File) : QueryEmbedder {
         return QueryEncoding.l2Normalize(output[0])
     }
 
+    /**
+     * [close] under [lock], so the interpreter is never freed while a query is being encoded
+     * on it.
+     */
+    override suspend fun release() {
+        lock.withLock {
+            released = true
+            close()
+        }
+    }
+
     /** Releases the mapped weights. Safe to call more than once. */
     fun close() {
         runCatching { interpreter?.close() }
@@ -116,6 +142,9 @@ internal class LiteRtQueryEmbedder(private val modelDir: File) : QueryEmbedder {
 
     private companion object {
         const val TAG = "LiteRtQueryEmbedder"
+
+        /** Graphs that failed to load in this process, by [graphStamp]. */
+        val failedGraphs: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
 
         /**
          * Two threads: the published single-query CPU latency at this sequence length

@@ -1,0 +1,5 @@
+# Copy to local.toml (gitignored) and fill in. Never commit local.toml.
+serial = "emulator-5554"
+apk = ""                  # path to the host APK for `setup --install`
+username = ""
+password = ""

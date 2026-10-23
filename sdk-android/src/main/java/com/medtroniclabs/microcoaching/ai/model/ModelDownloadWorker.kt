@@ -8,6 +8,7 @@ import android.os.Build
 import android.util.Log
 import androidx.work.CoroutineWorker
 import com.medtroniclabs.microcoaching.BuildConfig
+import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.ai.download.DownloadResult
 import com.medtroniclabs.microcoaching.ai.download.ResumableHttpDownloader
 import com.medtroniclabs.microcoaching.network.NetworkModule
@@ -60,6 +61,14 @@ class ModelDownloadWorker(
     /** Artifact currently transferring; chooses the label under the bar. */
     private var currentPhase: DownloadPhase = DownloadPhase.LANGUAGE_MODEL
 
+    /** Notification title: smarter search when the language model is not part of the plan. */
+    private val notificationTitleRes: Int
+        get() = if (inputData.getBoolean(KEY_INCLUDE_LANGUAGE_MODEL, false)) {
+            R.string.notification_model_download_title
+        } else {
+            R.string.notification_search_download_title
+        }
+
     override suspend fun getForegroundInfo(): ForegroundInfo =
         buildForegroundInfo(progress = 0, bytesDownloaded = 0L, totalBytes = 0L)
 
@@ -84,12 +93,17 @@ class ModelDownloadWorker(
             ?: ModelCatalog.default()
 
         val includeEncoder = inputData.getBoolean(KEY_INCLUDE_ENCODER, false)
-        val plan = DownloadPlan.artifacts(variant, includeEncoder)
+        val includeLanguageModel = inputData.getBoolean(KEY_INCLUDE_LANGUAGE_MODEL, false)
+        val plan = DownloadPlan.artifacts(variant, includeEncoder, includeLanguageModel)
+        if (plan.isEmpty()) {
+            Log.w(TAG, "doWork: nothing to download (languageModel=false, encoder=false)")
+            return Result.failure(workDataOf(KEY_ERROR to "Nothing to download on this device"))
+        }
 
         Log.i(
             TAG,
             "doWork start — providers=${providers.map { it::class.simpleName }}, model=${variant.id} " +
-                "(${variant.fileName}), artifacts=${plan.size}, encoder=$includeEncoder",
+                "(${variant.fileName}), artifacts=${plan.size}, languageModel=$includeLanguageModel, encoder=$includeEncoder",
         )
         logNetworkSnapshot("doWork")
 
@@ -141,9 +155,16 @@ class ModelDownloadWorker(
                         Log.e(TAG, "Language model failed: ${outcome.reason}")
                         return Result.failure(workDataOf(KEY_ERROR to outcome.reason))
                     }
-                    // The encoder is an improvement to retrieval, not the capability the
-                    // user asked for. Losing it must not strand a language model that has
-                    // already arrived, so the work succeeds and dense retrieval stays off.
+                    // Without a language model in the plan the encoder is the whole download,
+                    // so losing it fails the work.
+                    if (!includeLanguageModel) {
+                        Log.e(TAG, "Encoder artifact ${artifact.fileName} failed: ${outcome.reason}")
+                        return Result.failure(workDataOf(KEY_ERROR to "${artifact.fileName}: ${outcome.reason}"))
+                    }
+                    // Alongside a language model the encoder is an improvement to retrieval,
+                    // not the capability the user asked for. Losing it must not strand a
+                    // language model that has already arrived, so the work succeeds and dense
+                    // retrieval stays off.
                     Log.w(TAG, "Encoder artifact ${artifact.fileName} failed: ${outcome.reason}")
                     encoderError = "${artifact.fileName}: ${outcome.reason}"
                     break
@@ -151,13 +172,15 @@ class ModelDownloadWorker(
             }
         }
 
-        val modelFile = languageModelFile
-            ?: return Result.failure(workDataOf(KEY_ERROR to "Language model missing after download"))
-
+        if (includeLanguageModel && languageModelFile == null) {
+            return Result.failure(workDataOf(KEY_ERROR to "Language model missing after download"))
+        }
+        // KEY_FILE_PATH names the language model only. An encoder-only run leaves it out, and
+        // ModelManager checks the encoder files on disk instead.
         return Result.success(
             workDataOf(
                 KEY_PROGRESS to 100,
-                KEY_FILE_PATH to modelFile.absolutePath,
+                KEY_FILE_PATH to languageModelFile?.absolutePath,
                 KEY_ENCODER_ERROR to encoderError,
             ),
         )
@@ -439,6 +462,7 @@ class ModelDownloadWorker(
             progress = progress,
             bytesDownloaded = bytesDownloaded,
             totalBytes = totalBytes,
+            titleRes = notificationTitleRes,
         )
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             ForegroundInfo(
@@ -532,6 +556,13 @@ class ModelDownloadWorker(
         const val KEY_MODEL_ID = "model_id"
         /** Boolean. Whether the dense-retrieval encoder rides along with the language model. */
         const val KEY_INCLUDE_ENCODER = "include_encoder"
+
+        /**
+         * Whether the plan includes the language model. Absent from requests enqueued by a build
+         * where the language model was not optional; those read as false, because this build
+         * may not use it, and [ModelManager] re-plans on its next schedule.
+         */
+        const val KEY_INCLUDE_LANGUAGE_MODEL = "include_language_model"
 
         // ── WorkManager progress / output keys ────────────────────────────────
         /** Int 0–100. Reports 100 only on [androidx.work.WorkInfo.State.SUCCEEDED]. */

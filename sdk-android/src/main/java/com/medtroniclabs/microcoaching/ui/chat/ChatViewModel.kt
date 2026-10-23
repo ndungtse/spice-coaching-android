@@ -14,6 +14,7 @@ import com.medtroniclabs.microcoaching.ui.chat.MessageSource
 import com.medtroniclabs.microcoaching.data.repository.ChatRepositoryImpl
 import com.medtroniclabs.microcoaching.ai.model.LocalModelChoice
 import com.medtroniclabs.microcoaching.ai.model.ModelState
+import com.medtroniclabs.microcoaching.ai.model.OnDeviceSetup
 import com.medtroniclabs.microcoaching.ai.model.isTransferInFlight
 import com.medtroniclabs.microcoaching.ai.inference.SharedInferenceRouter
 import com.medtroniclabs.microcoaching.domain.decision.AnswerMode
@@ -228,7 +229,9 @@ class ChatViewModel(
                 chatModePrefs.preferOnline,
                 sdk.networkAvailable,
                 sdk.localModelPrefs.choice,
-            ) { preferOnline, connected, choice -> Triple(preferOnline, connected, choice) }
+                // The smarter-search label appears once the card vectors are indexed.
+                sdk.chatDenseIndex,
+            ) { preferOnline, connected, choice, _ -> Triple(preferOnline, connected, choice) }
                 // The first emission repeats what chat open already published; dropping it
                 // avoids overwriting a freshly built state with an identical one.
                 .drop(1)
@@ -278,11 +281,12 @@ class ChatViewModel(
                         ),
                         modelSizeBytes = expectedModelSizeBytes(modelState),
                         modelOnDiskBytes = sdk.modelManager.localModelSizeBytes(),
-                        modelEligible = !sdk.isLowEndDevice,
+                        modelEligible = sdk.modelManager.setupAvailable(),
                         modelEnabled = sdk.localModelPrefs.choice.value == LocalModelChoice.ENABLED,
                         // A model in any state at all answers the offer's question, so the
                         // card stops competing with the progress it would sit next to.
                         showModelOffer = shouldOfferModel(),
+                        smarterSearchActive = sdk.smarterSearchReady(),
                     ) ?: current
                 }
             }
@@ -315,10 +319,13 @@ class ChatViewModel(
 
     /** Whether the dismissible model offer may be shown right now. */
     internal fun shouldOfferModel(): Boolean =
-        sdk.localModelPrefs.shouldOfferModel(
-            deviceEligible = !sdk.isLowEndDevice,
-            networkAvailable = sdk.isNetworkAvailable(),
-        )
+        sdk.localModelPrefs.choice.value == LocalModelChoice.UNDECIDED &&
+            sdk.localModelPrefs.shouldOfferModel(
+                deviceEligible = sdk.modelManager.setupAvailable(),
+                networkAvailable = sdk.isNetworkAvailable(),
+                // A StatFs probe, so only made once the user is still undecided.
+                hasRoom = sdk.modelManager.hasRoomForDownload(),
+            )
 
     /**
      * Resolves how the next message would be answered, from the state as it stands now.
@@ -335,6 +342,7 @@ class ChatViewModel(
             choice = sdk.localModelPrefs.choice.value,
             modelReady = sdk.modelManager.state.value is ModelState.Ready,
             engineLoaded = inferenceRouter.isModelAvailable,
+            rewriteEnabled = config.enableOnDeviceRewrite,
         ),
     )
 
@@ -405,7 +413,7 @@ class ChatViewModel(
      */
     private fun refreshAiSizeLabel() {
         // Nothing to label on hardware that will never be offered the model.
-        if (sdk.isLowEndDevice) return
+        if (!sdk.modelManager.setupAvailable()) return
         viewModelScope.launch {
             val resolved = runCatching { sdk.modelManager.resolveModelSizeBytes() }.getOrNull()
                 ?: return@launch
@@ -452,6 +460,19 @@ class ChatViewModel(
             loadInferenceEngine()
         }
 
+        // A consented phone with nothing on disk, typically one upgraded from "simple words"
+        // whose encoder never arrived, fetches the encoder now. It never fetches the language
+        // model, since the rewrite is off whenever this applies.
+        if (OnDeviceSetup.scheduleOnChatOpen(
+                rewriteEnabled = config.enableOnDeviceRewrite,
+                setupEnabled = sdk.onDeviceSetupEnabled,
+                state = sdk.modelManager.state.value,
+                cancelledByUser = sdk.modelManager.cancelledByUser(),
+            )
+        ) {
+            sdk.modelManager.scheduleDownloadIfNeeded()
+        }
+
         // History is keyed on CHW, not session — sessionId is fresh per VM (it drives
         // EventRecorder.sessionId for telemetry bucketing) and would always return an empty
         // list. See [ChatRepositoryImpl.getRecentHistory].
@@ -469,9 +490,11 @@ class ChatViewModel(
             ),
             modelSizeBytes = aiSizeBytes.value,
             modelOnDiskBytes = sdk.modelManager.localModelSizeBytes(),
-            modelEligible = !sdk.isLowEndDevice,
+            modelEligible = sdk.modelManager.setupAvailable(),
             modelEnabled = sdk.localModelPrefs.choice.value == LocalModelChoice.ENABLED,
             showModelOffer = shouldOfferModel(),
+            rewriteAvailable = config.enableOnDeviceRewrite,
+            smarterSearchActive = sdk.smarterSearchReady(),
             suggestedQuestions = loadSuggestions(),
         )
         backfillFaqTranslationsThenRefresh()
@@ -648,6 +671,7 @@ class ChatViewModel(
             choice = sdk.localModelPrefs.choice.value,
             modelReady = sdk.modelManager.state.value is ModelState.Ready,
             engineLoaded = inferenceRouter.isModelAvailable,
+            rewriteEnabled = config.enableOnDeviceRewrite,
         ),
     )
     /**
@@ -1112,8 +1136,8 @@ class ChatViewModel(
      * backed by a stored choice when it lands.
      */
     fun enableLocalModel() {
-        if (sdk.isLowEndDevice) {
-            Log.i(TAG, "enableLocalModel ignored — device is not eligible for the on-device model")
+        if (!sdk.modelManager.setupAvailable()) {
+            Log.i(TAG, "enableLocalModel ignored — the on-device setup is not available on this device")
             return
         }
         sdk.localModelPrefs.setChoice(LocalModelChoice.ENABLED)
@@ -1125,6 +1149,12 @@ class ChatViewModel(
         // and answering silently stays retrieval-only. Loading explicitly is what makes
         // re-opting-in work without deleting and refetching 304 MB.
         if (sdk.modelManager.state.value is ModelState.Ready) {
+            // With the rewrite off, Ready is the encoder and there is no engine to load: the
+            // next turn picks the encoder up on its own.
+            if (!sdk.localModelEnabled) {
+                refreshModelUi()
+                return
+            }
             Log.i(TRACE_TAG, "enableLocalModel: model already on disk — loading engine directly")
             viewModelScope.launch {
                 loadInferenceEngine()
@@ -1144,6 +1174,8 @@ class ChatViewModel(
      * crash, and unloading before withdrawing consent leaves a window where an in-flight
      * message reloads it.
      *
+     * The query encoder is released first, so its mapped weights are freed before the files go.
+     *
      * @param deleteFile true to remove the download and reclaim the space. When false the file
      *   is kept, so opting back in costs nothing and needs no network.
      */
@@ -1151,10 +1183,9 @@ class ChatViewModel(
         Log.i(TAG, "disableLocalModel(deleteFile=$deleteFile)")
         sdk.localModelPrefs.setChoice(LocalModelChoice.DISABLED)
         SharedInferenceRouter.forceUnload()
-        if (deleteFile) {
-            deleteLocalModel()
-        } else {
-            refreshModelUi()
+        viewModelScope.launch {
+            sdk.releaseQueryEmbedder()
+            if (deleteFile) deleteLocalModelFiles() else refreshModelUi()
         }
     }
 
@@ -1162,9 +1193,18 @@ class ChatViewModel(
      * Delete the model file and reclaim its space, leaving the stored choice untouched.
      *
      * Cancels an in-flight transfer first: without that, the worker would keep writing and
-     * recreate the file moments after it was removed.
+     * recreate the file moments after it was removed. The query encoder is released first, so
+     * its mapped weights are freed before the files go.
      */
     fun deleteLocalModel() {
+        viewModelScope.launch {
+            sdk.releaseQueryEmbedder()
+            deleteLocalModelFiles()
+        }
+    }
+
+    /** Cancels any transfer, then deletes the files. Callers release the embedder first. */
+    private fun deleteLocalModelFiles() {
         SharedInferenceRouter.forceUnload()
         if (sdk.modelManager.state.value.isTransferInFlight()) {
             sdk.modelManager.cancelDownload()
@@ -1192,6 +1232,7 @@ class ChatViewModel(
                 modelOnDiskBytes = sdk.modelManager.localModelSizeBytes(),
                 modelEnabled = sdk.localModelPrefs.choice.value == LocalModelChoice.ENABLED,
                 showModelOffer = shouldOfferModel(),
+                smarterSearchActive = sdk.smarterSearchReady(),
             ) ?: current
         }
     }
@@ -1204,8 +1245,8 @@ class ChatViewModel(
      * work nobody is doing.
      */
     fun requestModelDownload() {
-        if (sdk.isLowEndDevice) {
-            Log.i(TAG, "requestModelDownload ignored — device is not eligible for the on-device model")
+        if (!sdk.modelManager.setupAvailable()) {
+            Log.i(TAG, "requestModelDownload ignored — the on-device setup is not available on this device")
             return
         }
         sdk.modelManager.triggerDownload()

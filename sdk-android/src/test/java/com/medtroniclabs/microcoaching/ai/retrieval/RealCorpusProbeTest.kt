@@ -136,10 +136,10 @@ class RealCorpusProbeTest {
                     hits.firstOrNull()?.let { key(it) } ?: "∅",
                     verdict(
                         p, hits.firstOrNull(),
-                        refused = ServeDecision.decide(
+                        refused = ServeGate.decide(
                             p.bangla, hits.take(3), scope.scopeTerms(),
                             com.medtroniclabs.microcoaching.ServeTuning(), isBanglaTurn = true,
-                        ) !is ServeDecision.Decision.Serve,
+                        ) !is ServeGate.Decision.Serve,
                     ),
                 )
             )

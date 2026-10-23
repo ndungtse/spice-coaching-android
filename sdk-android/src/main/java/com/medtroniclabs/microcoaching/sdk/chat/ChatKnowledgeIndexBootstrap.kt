@@ -14,6 +14,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.launch
@@ -46,7 +47,7 @@ internal class ChatKnowledgeIndexBootstrap(
     /**
      * Scope/evidence vocabulary over the SAME modules as [index]. The two must be built
      * from one corpus: retrieval can surface a card from any indexed module, and
-     * [com.medtroniclabs.microcoaching.ai.retrieval.ServeDecision] judges that card
+     * [com.medtroniclabs.microcoaching.ai.retrieval.ServeGate] judges that card
      * against this gazetteer. A narrower vocabulary here makes a card's own topic
      * invisible to the gate, which then reads the hit as having no evidence.
      */
@@ -77,12 +78,13 @@ internal class ChatKnowledgeIndexBootstrap(
             if (started) return
             started = true
         }
-        // Rebuilds after each inbound module sync. `conflate()` + the trailing throttle coalesce
-        // invalidation bursts (e.g. per-row thumbnail updates) into one rebuild of the LATEST
-        // list. `retryWhen` keeps the collector alive across a transient read failure (Room flows
+        // Rebuilds after each inbound module sync, and when card vectors are written: a sync can
+        // store the modules before the vectors, and the dense index needs both. `conflate()` +
+        // the trailing throttle coalesce invalidation bursts (e.g. per-row thumbnail updates)
+        // into one rebuild of the LATEST list. `retryWhen` keeps the collector alive across a transient read failure (Room flows
         // terminate on error).
         scope.launch {
-            moduleDao().getAllActive()
+            combine(moduleDao().getAllActive(), cardEmbeddingDao().observeCount()) { modules, _ -> modules }
                 .retryWhen { cause, attempt ->
                     Log.w(TAG, "Module flow failed (attempt ${attempt + 1}) — retrying: ${cause.message}")
                     delay(1_000L * (attempt + 1))

@@ -3,6 +3,7 @@ package com.medtroniclabs.microcoaching.ai.retrieval
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class GroundingSelectorFusionTest {
@@ -64,5 +65,34 @@ class GroundingSelectorFusionTest {
         val entrant = fused.first { it.titleBn == "e" }
         assertEquals(0f, entrant.score)
         assertEquals(0.66f, entrant.denseCos)
+    }
+
+    @Test
+    fun `fused entries carry each channel's rank and a missing channel is null`() {
+        val a = chunk("a", 90f); val b = chunk("b", 80f); val d = chunk("d", 60f)
+        val bm25 = listOf(a, b, d)
+        val dense = listOf(d to 0.8f, a to 0.7f)
+        val fused = GroundingSelector.fuseWithDense(bm25, dense, rrfK = 60)
+        val entries = GroundingSelector.fusedEntries(bm25, dense, fused)
+        assertEquals(listOf(a.shortKey, d.shortKey, b.shortKey), entries.map { it.key })
+        assertEquals(1, entries[0].bm25Rank); assertEquals(2, entries[0].denseRank)
+        assertEquals(3, entries[1].bm25Rank); assertEquals(1, entries[1].denseRank)
+        assertEquals(2, entries[2].bm25Rank); assertNull(entries[2].denseRank)
+    }
+
+    @Test
+    fun `the fused line prints a dash for a channel that did not run`() {
+        val a = chunk("a", 90f)
+        val entries = GroundingSelector.fusedEntries(listOf(a), emptyList(), listOf(a))
+        assertEquals("FUSED n=1 order=[${a.shortKey} bm25=1/90.0 dense=-]", GroundingSelector.describeFused(entries))
+    }
+
+    @Test
+    fun `a dense-only entrant prints no bm25 rank`() {
+        val a = chunk("a", 90f); val e = chunk("e", 55f)
+        val dense = listOf(e to 0.62f)
+        val fused = GroundingSelector.fuseWithDense(listOf(a), dense, rrfK = 60)
+        val line = GroundingSelector.describeFused(GroundingSelector.fusedEntries(listOf(a), dense, fused))
+        assertTrue(line, line.contains("${e.shortKey} bm25=- dense=1/0.62"))
     }
 }

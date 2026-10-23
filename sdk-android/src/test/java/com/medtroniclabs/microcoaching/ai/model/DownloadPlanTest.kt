@@ -52,6 +52,26 @@ class DownloadPlanTest {
     }
 
     @Test
+    fun `without the language model the plan is the encoder alone, at the size the offer quotes`() {
+        val artifacts = DownloadPlan.artifacts(variant, includeEncoder = true, includeLanguageModel = false)
+        // Tokenizer first still holds: a bad token fails after 4.5 MB, not 171 MB.
+        assertEquals(
+            listOf(EncoderModel.TOKENIZER_FILE_NAME, EncoderModel.TFLITE_FILE_NAME),
+            artifacts.map { it.fileName },
+        )
+        assertEquals(EncoderModel.totalBytes, DownloadPlan.totalBytes(artifacts))
+    }
+
+    @Test
+    fun `an encoder-only plan ignores a language model already on disk`() {
+        val root = temp.newFolder("files")
+        write(root, "test-llm.litertlm", 500_000_000L)
+        val plan = DownloadPlan.artifacts(variant, includeEncoder = true, includeLanguageModel = false)
+        assertEquals(0L, DownloadPlan.presentBytes(root, plan))
+        assertEquals(EncoderModel.totalBytes, DownloadPlan.remainingBytes(root, plan))
+    }
+
+    @Test
     fun `the language model downloads before the embeddings`() {
         // The label switches when this order is honoured; reversing it would show
         // "smarter search" first and "simple words" second.

@@ -110,23 +110,40 @@ data class MicroCoachingConfig internal constructor(
      */
     val wifiOnlyModelDownload: Boolean = false,
 
-    // ── Dense retrieval ───────────────────────────────────────────────────────
+    // ── Offline answering ─────────────────────────────────────────────────────
     /**
-     * Enables hybrid (BM25 + embedding) chat retrieval: syncs per-card embedding vectors
-     * from `/sync/card-embeddings`, and fetches the on-device query encoder as the second
-     * half of the "simple words" download.
+     * Enables smarter search: hybrid (BM25 + embedding) offline retrieval. Syncs per-card
+     * embedding vectors from `/sync/card-embeddings`, and makes the on-device query encoder
+     * (~176 MB) available to download.
      *
-     * On by default, and a kill switch rather than an opt-in — what actually decides whether
-     * a device fetches the ~176 MB encoder is the user enabling the local model plus the
-     * 3 GB RAM tier ([com.medtroniclabs.microcoaching.ai.embedding.EncoderModelRule]). A
-     * device that never turns on "simple words" never downloads it.
+     * On by default, and a kill switch rather than an opt-in. What decides whether a device
+     * fetches the encoder is the user opting in on a phone that meets the smarter-search device
+     * rule ([com.medtroniclabs.microcoaching.ai.model.OnDeviceSetup.encoderDeviceEligible]).
      *
-     * Turning it off keeps the pipeline byte-identical to BM25-only: no vector sync, no
-     * encoder, and every dense evidence channel structurally unreachable because nothing
-     * sets a cosine. Degradation is likewise structural — missing vectors, a missing encoder
-     * or a low-end device each leave chat on exactly that same behaviour.
+     * Turning it off keeps offline chat on BM25 alone: no vector sync, no encoder, and every
+     * dense evidence channel unreachable because nothing sets a cosine.
      */
     val enableDenseRetrieval: Boolean = true,
+
+    /**
+     * Lets the on-device language model reword the served card ("simple words").
+     *
+     * Off by default: offline chat then shows the card as written, found by standard or smarter
+     * search, and nothing offers, downloads or loads the language model. A language model left on
+     * disk by an earlier build is deleted on the next start. On, the opt-in covers the language
+     * model and the encoder in one download.
+     */
+    val enableOnDeviceRewrite: Boolean = false,
+
+    /**
+     * Smallest total RAM, in MiB, on which smarter search is offered and run.
+     *
+     * Separate from the language model's 3 GB tier, so it can be lowered on its own. The default is
+     * the 3 GB tier: on a 2 GB emulator the encoder added about 190 MB to SPICE's PSS, over the
+     * 150 MB budget (`docs/eval/2026-10-09-smarter-search-2gb-emulator.md`). Phones sold as 2 GB
+     * report about 1,700–1,900 MiB, so a host that accepts that cost can admit them with 1536.
+     */
+    val smarterSearchMinRamMb: Int = 3072,
 
     // ── Model Download Providers ──────────────────────────────────────────────
     /**
@@ -403,9 +420,6 @@ data class MicroCoachingConfig internal constructor(
  *           is replaced by the BM25 card content. Set equal to [groundednessFloor]
  *           for a single uniform floor; set to 0 to always show the model's answer on
  *           strong retrieval.
- * @property minFallbackServeScore Minimum BM25 score required before the on-device path
- *           is allowed to serve retrieved clinician-authored text as a fallback.
- *           Prevents weak off-topic hits from turning into confident card-body serves.
  * @property streamCapChars Hard cap on streamed response length before generation is
  *           aborted. Sized so a complete 2–4 sentence answer isn't cut mid-sentence.
  * @property maxResponseWords L4 length cap; responses longer than this are rejected
@@ -427,7 +441,6 @@ data class ChatTuning(
     val strongRetrievalScore: Float = 6.0f,
     val groundednessFloor: Float = 0.35f,
     val strongRetrievalGroundednessFloor: Float = 0.25f,
-    val minFallbackServeScore: Float = 20.0f,
     val streamCapChars: Int = 1100,
     val maxResponseWords: Int = 280,
     val enableDosageGuard: Boolean = true,
@@ -438,7 +451,7 @@ data class ChatTuning(
 
 /**
  * Score bounds for the offline serve/refuse decision
- * ([com.medtroniclabs.microcoaching.ai.retrieval.ServeDecision]). Evidence decides
+ * ([com.medtroniclabs.microcoaching.ai.retrieval.ServeGate]). Evidence decides
  * whether a card may be served at all; these decide when a match is too weak to
  * trust regardless.
  *

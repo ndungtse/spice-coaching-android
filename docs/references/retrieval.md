@@ -5,8 +5,17 @@
 Before any answer is written, offline chat has to find the card that answers the question.
 Two searches run, independently, over every card in the synced corpus: a word-matching
 search (BM25) and a meaning-matching search (dense vectors). Their two rankings are merged
-by rank position, and the top three of the merged list go to the [serve gate](./serve-gate.md),
-which decides whether any of them is served.
+by rank position, and the top three of the merged list, in fused order, go to the ranker,
+which picks one; the [serve gate](./serve-gate.md) then serves or refuses that one card.
+
+Every turn logs the fused order in one line, with each channel's rank:
+
+```
+FUSED n=3 order=[952fbce0:7 bm25=1/177.4 dense=2/0.57, e660517c:2 bm25=2/173.6 dense=1/0.57, 952fbce0:0 bm25=3/111.6 dense=-]
+```
+
+`bm25=<rank>/<score>` and `dense=<rank>/<cosine>`; a `-` means that channel did not return
+the card.
 
 Neither search replaces the other. If the encoder is missing, no vectors have synced, or no
 dense candidate is close enough, the result is exactly the BM25-only ranking.
@@ -84,7 +93,7 @@ Fused:
 | Measuring uterine height | none | 3 → 1/63 | 0.0159 |
 
 BM25 alone would have served the postnatal-care overview. Hybrid serves the involution card.
-The gate's trace on the pick reads `score=70.1 … cos=0.60`: the BM25 score is the card's own,
+The ranker's trace on the pick reads `score=70.1 … cos=0.60`: the BM25 score is the card's own,
 and the cosine sits beside it as evidence.
 
 ### Three more cases from the same set
@@ -97,7 +106,7 @@ and the cosine sits beside it as evidence.
 - **Dominance is the one case dense outranks words.** On "child breathing fast, when to
   refer", BM25 had "counting breathing rate" at 154.2 over "when to refer" at 149.4. Dense
   had "when to refer" at 0.674 against 0.588, above the floor and past the margin, so the
-  gate picked "when to refer".
+  ranker picked "when to refer" and the gate served it.
 
 ---
 

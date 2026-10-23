@@ -118,7 +118,7 @@ class ScopeClassifierTest {
     // ── Title harvest must not admit function words as clinical terms ────────
     //
     // The `length >= 3` gate alone let "and"/"the" into the gazetteer (from
-    // titles like "Maternal and Neonatal Referral Process"), and ServeDecision
+    // titles like "Maternal and Neonatal Referral Process"), and ServeGate
     // then counted "and" as clinical overlap — the verified hole that let a
     // breast-engorgement query pass the garbage guard against a newborn-warmth
     // card whose only shared "clinical" token was "and".
@@ -157,7 +157,7 @@ class ScopeClassifierTest {
             bodyBn = null,
             score = 8.39f,
         )
-        val decision = ServeDecision.decide(
+        val decision = ServeGate.decide(
             query = "How can Breast Engorgement and Pain be managed?",
             hits = listOf(newbornWarmthChunk),
             clinicalTerms = classifier.scopeTerms(),
@@ -166,7 +166,7 @@ class ScopeClassifierTest {
         )
         assertTrue(
             "zero genuine clinical overlap must refuse — 'and' no longer counts",
-            decision is ServeDecision.Decision.Refuse,
+            decision is ServeGate.Decision.Refuse,
         )
     }
 

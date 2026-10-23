@@ -122,14 +122,14 @@ class BracJulyRegressionTest {
         )
         val clinicalTerms = setOf("nutrition", "diet", "পুষ্টি", "খাদ্য")
 
-        val decision = ServeDecision.decide(
+        val decision = ServeGate.decide(
             query = "How do I cook chicken biryani?",
             hits = listOf(weakHit),
             clinicalTerms = clinicalTerms,
             tuning = com.medtroniclabs.microcoaching.ServeTuning(),
             isBanglaTurn = false,
         )
-        val fallbackHit = (decision as? ServeDecision.Decision.Serve)?.hit?.takeIf { it.score >= 20f }
+        val fallbackHit = (decision as? ServeGate.Decision.Serve)?.hit?.takeIf { it.score >= 20f }
         assertTrue(fallbackHit == null)
     }
 

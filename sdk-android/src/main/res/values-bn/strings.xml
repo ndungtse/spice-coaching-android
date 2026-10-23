@@ -409,6 +409,8 @@
 
     <!-- ── Download item cards on the coaching setup screen ─────────────────────── -->
     <string name="download_card_ai_title">এআই মডেল</string>
+    <!-- TODO(bn-review) -->
+    <string name="download_card_search_title">উন্নত খোঁজা</string>
     <string name="download_card_ai_size_exact">%1$s</string>
     <string name="download_card_ai_size_partial">%2$s-এর মধ্যে %1$s</string>
     <string name="download_card_ai_damaged">ডাউনলোড অসম্পূর্ণ</string>
@@ -437,6 +439,8 @@
     <string name="notification_model_download_channel_name">এআই মডেল ডাউনলোড</string>
     <string name="notification_model_download_channel_desc">ব্যাকগ্রাউন্ডে এআই কোচিং মডেল ডাউনলোডের অগ্রগতি দেখায়।</string>
     <string name="notification_model_download_title">এআই কোচিং মডেল ডাউনলোড হচ্ছে</string>
+    <!-- TODO(bn-review) -->
+    <string name="notification_search_download_title">উন্নত খোঁজা ডাউনলোড হচ্ছে</string>
     <string name="notification_model_download_progress">%1$s / %2$s · %3$d%%</string>
     <string name="notification_model_download_progress_indeterminate">%1$s ডাউনলোড হয়েছে</string>
 
@@ -624,6 +628,8 @@
     <string name="chat_mode_bar_online">অনলাইন</string>
     <string name="chat_mode_bar_on_device_direct">এই ফোনে</string>
     <string name="chat_mode_bar_on_device_assisted">এই ফোনে · সহজ ভাষায়</string>
+    <!-- TODO(bn-review) -->
+    <string name="chat_mode_bar_on_device_search">এই ফোনে · উন্নত খোঁজা</string>
     <string name="chat_mode_bar_on_device_online_unavailable">এই ফোনে · অনলাইন পাওয়া যাচ্ছে না</string>
     <string name="chat_mode_bar_change">বদলান</string>
     <string name="chat_mode_bar_open_sheet">উত্তর কীভাবে পাওয়া যায় তা বদলান</string>
@@ -651,6 +657,18 @@
     <string name="answering_sheet_style_assisted_title">সহজ ভাষায় বুঝিয়ে দেওয়া</string>
     <string name="answering_sheet_style_assisted_body">একই নির্দেশনা, সহজ ভাষায় বলা।</string>
     <string name="answering_sheet_style_assisted_body_sized">একই নির্দেশনা, সহজ ভাষায় বলা। একবার %1$s ডাউনলোড।</string>
+    <!-- TODO(bn-review) -->
+    <string name="answering_sheet_search_title">খোঁজার ধরন</string>
+    <!-- TODO(bn-review) -->
+    <string name="answering_sheet_search_standard_title">সাধারণ খোঁজা</string>
+    <!-- TODO(bn-review) -->
+    <string name="answering_sheet_search_standard_body">আপনার প্রশ্নের শব্দ মিলিয়ে নির্দেশনা খোঁজে।</string>
+    <!-- TODO(bn-review) -->
+    <string name="answering_sheet_search_smarter_title">উন্নত খোঁজা</string>
+    <!-- TODO(bn-review) -->
+    <string name="answering_sheet_search_smarter_body">প্রশ্ন অন্য শব্দে লিখলেও নির্দেশনা খুঁজে পায়।</string>
+    <!-- TODO(bn-review) -->
+    <string name="answering_sheet_search_smarter_body_sized">প্রশ্ন অন্য শব্দে লিখলেও নির্দেশনা খুঁজে পায়। একবার %1$s ডাউনলোড।</string>
     <string name="answering_sheet_free_up_space">%1$s খালি করুন</string>
 
     <string name="answering_opt_out_title">নির্দেশিকার হুবহু লেখা ব্যবহার করবেন?</string>
@@ -659,12 +677,24 @@
     <string name="answering_opt_out_delete_sized">ডাউনলোডটি মুছে %1$s খালি করুন</string>
     <string name="answering_opt_out_confirm">হুবহু লেখা ব্যবহার করুন</string>
     <string name="answering_opt_out_cancel">বাতিল</string>
+    <!-- TODO(bn-review) -->
+    <string name="answering_search_opt_out_title">সাধারণ খোঁজা ব্যবহার করবেন?</string>
+    <!-- TODO(bn-review) -->
+    <string name="answering_search_opt_out_body">উত্তরে নির্দেশনা আগের মতোই হুবহু দেখানো হবে। প্রশ্ন নির্দেশিকার চেয়ে অন্য শব্দে লিখলে কম খুঁজে পেতে পারে।</string>
+    <!-- TODO(bn-review) -->
+    <string name="answering_search_opt_out_confirm">সাধারণ খোঁজা ব্যবহার করুন</string>
 
     <string name="local_model_offer_title">আপনার ফোন উত্তর সহজ ভাষায় বুঝিয়ে দিতে পারে</string>
     <string name="local_model_offer_body">ইন্টারনেট থাকুক বা না থাকুক কাজ করে। ওয়াই-ফাইতে চালু করা ভালো। যেকোনো সময় সরিয়ে ফেলতে পারবেন।</string>
     <string name="local_model_offer_body_sized">ইন্টারনেট থাকুক বা না থাকুক কাজ করে। একবার %1$s ডাউনলোড — ওয়াই-ফাইতে ভালো। যেকোনো সময় সরিয়ে ফেলতে পারবেন।</string>
     <string name="local_model_offer_accept">চালু করুন</string>
     <string name="local_model_offer_dismiss">এখন নয়</string>
+    <!-- TODO(bn-review) -->
+    <string name="search_offer_title">আরও বেশিবার সঠিক নির্দেশনা খুঁজে পান</string>
+    <!-- TODO(bn-review) -->
+    <string name="search_offer_body">প্রশ্ন নির্দেশিকার চেয়ে অন্য শব্দে লিখলেও নির্দেশনা খুঁজে পায়। ইন্টারনেট থাকুক বা না থাকুক কাজ করে। ওয়াই-ফাইতে চালু করা ভালো। যেকোনো সময় সরিয়ে ফেলতে পারবেন।</string>
+    <!-- TODO(bn-review) -->
+    <string name="search_offer_body_sized">প্রশ্ন নির্দেশিকার চেয়ে অন্য শব্দে লিখলেও নির্দেশনা খুঁজে পায়। ইন্টারনেট থাকুক বা না থাকুক কাজ করে। একবার %1$s ডাউনলোড — ওয়াই-ফাইতে ভালো। যেকোনো সময় সরিয়ে ফেলতে পারবেন।</string>
 
     <string name="download_card_status_waiting_wifi">ওয়াই-ফাইয়ের অপেক্ষায়</string>
     <string name="download_card_status_waiting_network">ইন্টারনেটের অপেক্ষায়</string>

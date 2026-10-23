@@ -42,6 +42,8 @@ import com.medtroniclabs.microcoaching.ai.model.ModelVariant
 import com.medtroniclabs.microcoaching.data.repository.ChatRepositoryImpl
 import com.medtroniclabs.microcoaching.data.repository.CoachingEventRepositoryImpl
 import com.medtroniclabs.microcoaching.ai.model.ModelManager
+import com.medtroniclabs.microcoaching.ai.model.OnDeviceSetup
+import com.medtroniclabs.microcoaching.ai.embedding.EncoderModel
 import com.medtroniclabs.microcoaching.domain.context.CHWWorkContext
 import com.medtroniclabs.microcoaching.domain.context.PatientSnapshot
 import com.medtroniclabs.microcoaching.domain.context.TodaysVisit
@@ -146,6 +148,19 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
         config.forceLowEndMode
             ?: DeviceCapability
                 .isLowEndDevice(config.context)
+
+    /**
+     * Whether this device can run the smarter-search encoder: a 64-bit process with at least
+     * [MicroCoachingConfig.smarterSearchMinRamMb] of RAM. Probed once, like [isLowEndDevice],
+     * and separate from it. See [OnDeviceSetup.encoderDeviceEligible].
+     */
+    internal val encoderDeviceEligible: Boolean =
+        OnDeviceSetup.encoderDeviceEligible(
+            forceLowEnd = config.forceLowEndMode,
+            is64BitProcess = DeviceCapability.is64BitProcess(),
+            totalMemBytes = DeviceCapability.totalMemBytes(config.context),
+            minRamMb = config.smarterSearchMinRamMb,
+        )
 
     /**
      * Active language for SDK UI and LLM prompts. Set via [Builder.language];
@@ -482,12 +497,18 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
     internal val chatDenseIndex: kotlinx.coroutines.flow.StateFlow<com.medtroniclabs.microcoaching.ai.retrieval.DenseVectorIndex?> =
         chatIndexBootstrap.denseIndex
 
-    /** Query encoder for hybrid retrieval; null whenever dense retrieval cannot run. */
-    internal val queryEmbedder: com.medtroniclabs.microcoaching.ai.inference.QueryEmbedder? by lazy {
+    private val queryEmbedderHolder = com.medtroniclabs.microcoaching.ai.inference.QueryEmbedderHolder {
         com.medtroniclabs.microcoaching.ai.inference.QueryEmbedders.resolve(
             config.context, config.enableDenseRetrieval,
         )
     }
+
+    /** Query encoder for hybrid retrieval; null whenever dense retrieval cannot run. */
+    internal suspend fun queryEmbedder(): com.medtroniclabs.microcoaching.ai.inference.QueryEmbedder? =
+        queryEmbedderHolder.get()
+
+    /** Frees the encoder's mapped weights, before its files are deleted or after an opt-out. */
+    internal suspend fun releaseQueryEmbedder() = queryEmbedderHolder.release()
 
     /**
      * Start (once) the background collector that builds and maintains [chatKnowledgeIndex].
@@ -533,14 +554,48 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
     val localModelPrefs: LocalModelPrefs by lazy { LocalModelPrefs(config.context) }
 
     /**
-     * True when this device may host the on-device model AND the user has opted into it.
+     * True when the on-device language model may be used: the host turned on
+     * [MicroCoachingConfig.enableOnDeviceRewrite], this device is at the 3 GB RAM tier, and the
+     * user opted in. Always false by default, since the rewrite is off by default.
      *
      * The pairing is what callers actually need: eligibility alone says the hardware could run
      * a model that may not be wanted, and consent alone says a model is wanted on hardware
      * that may not survive it.
      */
     val localModelEnabled: Boolean
-        get() = !isLowEndDevice && localModelPrefs.choice.value == LocalModelChoice.ENABLED
+        get() = OnDeviceSetup.rewriteActive(
+            rewriteEnabled = config.enableOnDeviceRewrite,
+            isLowEndDevice = isLowEndDevice,
+            choice = localModelPrefs.choice.value,
+        )
+
+    /**
+     * True when the user opted into the on-device setup and this device can hold it, whatever
+     * the setup contains on this build: the language model's tier with the rewrite on, the
+     * encoder's rule with it off. Gates scheduling its download.
+     */
+    internal val onDeviceSetupEnabled: Boolean
+        get() = localModelPrefs.choice.value == LocalModelChoice.ENABLED &&
+            if (config.enableOnDeviceRewrite) !isLowEndDevice else encoderDeviceEligible
+
+    /** True when chat turns may use dense retrieval. See [OnDeviceSetup.smarterSearchActive]. */
+    internal val smarterSearchEnabled: Boolean
+        get() = OnDeviceSetup.smarterSearchActive(
+            denseEnabled = config.enableDenseRetrieval,
+            deviceEligible = encoderDeviceEligible,
+            choice = localModelPrefs.choice.value,
+        )
+
+    /**
+     * True when the next on-device turn will use dense retrieval: opted in, the card vectors
+     * synced into the dense index, and the encoder files complete. What the mode bar's
+     * "smarter search" label promises.
+     */
+    internal fun smarterSearchReady(): Boolean =
+        smarterSearchEnabled &&
+            chatDenseIndex.value != null &&
+            config.context.getExternalFilesDir(null)
+                ?.let { EncoderModel.filesPresent(java.io.File(it, EncoderModel.DIR_NAME)) } == true
 
     /**
      * The on-device model this SDK will download/load — the source of truth for its
@@ -1204,6 +1259,8 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
         private var modelDownloadStrategy: ModelDownloadStrategy = ModelDownloadStrategy.ON_FIRST_USE
         private var wifiOnlyModelDownload: Boolean = false
         private var enableDenseRetrieval: Boolean = true
+        private var enableOnDeviceRewrite: Boolean = false
+        private var smarterSearchMinRamMb: Int = 3072
         private var modelProviders: List<ModelProvider> = ModelProvider.DEFAULT_ORDER
         private var huggingFaceToken: String = ""
         private var huggingFaceModelUrl: String = ""
@@ -1257,14 +1314,20 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
         fun wifiOnlyModelDownload(wifiOnly: Boolean) = apply { wifiOnlyModelDownload = wifiOnly }
 
         /**
-         * Turn hybrid (BM25 + embedding) chat retrieval off — vector sync, the on-device
-         * query encoder, and dense fusion all go with it.
-         *
-         * On by default. The encoder is fetched as the second half of the "simple words"
-         * download, so a host that leaves this alone still costs nothing on a device whose
-         * user never enables the local model.
+         * Turn smarter search off: vector sync, the on-device query encoder and dense fusion
+         * all go with it, and offline chat uses BM25 alone. On by default; the encoder is only
+         * fetched for a user who opts in.
          */
         fun enableDenseRetrieval(enabled: Boolean) = apply { enableDenseRetrieval = enabled }
+
+        /**
+         * Let the on-device language model reword the served card. Off by default, which keeps
+         * the language model out of the offer, the download and the answer path.
+         */
+        fun enableOnDeviceRewrite(enabled: Boolean) = apply { enableOnDeviceRewrite = enabled }
+
+        /** Smallest total RAM, in MiB, for smarter search. See [MicroCoachingConfig.smarterSearchMinRamMb]. */
+        fun smarterSearchMinRamMb(mb: Int) = apply { smarterSearchMinRamMb = mb }
         /**
          * Override provider priority or disable a provider entirely. Default order is
          * Backend → HuggingFace → Kaggle, but only HuggingFace can currently serve a
@@ -1432,6 +1495,8 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
                 modelDownloadStrategy = modelDownloadStrategy,
                 wifiOnlyModelDownload = wifiOnlyModelDownload,
                 enableDenseRetrieval = enableDenseRetrieval,
+                enableOnDeviceRewrite = enableOnDeviceRewrite,
+                smarterSearchMinRamMb = smarterSearchMinRamMb,
                 modelProviders = modelProviders,
                 huggingFaceToken = huggingFaceToken,
                 huggingFaceModelUrl = huggingFaceModelUrl,
@@ -1489,11 +1554,11 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
                 "modelPath=${config.modelPath.isNotBlank()} " +
                 "forcedMode=${config.forcedMode ?: "auto"}")
 
-            // Kick off the model download if configured for init. Gated on consent as well as
-            // on hardware: the model is optional, so a device merely being capable of running
-            // it is not a reason to spend the user's data and storage on it.
+            // Kick off the on-device download if configured for init. Gated on consent as well
+            // as on hardware: the download is optional, so a device merely being capable of
+            // holding it is not a reason to spend the user's data and storage on it.
             if (config.modelDownloadStrategy == ModelDownloadStrategy.ON_SDK_INIT &&
-                sdk.localModelEnabled
+                sdk.onDeviceSetupEnabled
             ) {
                 sdk.modelManager.scheduleDownloadIfNeeded()
             }

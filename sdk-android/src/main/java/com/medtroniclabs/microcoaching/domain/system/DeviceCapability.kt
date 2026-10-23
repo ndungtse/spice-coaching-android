@@ -46,4 +46,16 @@ object DeviceCapability {
         Log.d("DeviceCapability", "Total memory: ${info.totalMem}")
         return info.totalMem < MIN_RAM_BYTES_FOR_FULL_MODE
     }
+
+    /**
+     * Total RAM as the kernel reports it, or 0 when it can't be read. A phone sold as 2 GB
+     * reports about 1.7–1.9 GiB.
+     */
+    fun totalMemBytes(context: Context): Long {
+        val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager ?: return 0L
+        return ActivityManager.MemoryInfo().also(am::getMemoryInfo).totalMem
+    }
+
+    /** Whether this app runs as a 64-bit process, which the SDK's arm64-v8a-only native code needs. */
+    fun is64BitProcess(): Boolean = android.os.Process.is64Bit()
 }

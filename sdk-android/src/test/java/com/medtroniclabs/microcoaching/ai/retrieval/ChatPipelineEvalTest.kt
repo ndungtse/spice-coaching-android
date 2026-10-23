@@ -10,7 +10,7 @@ import org.junit.Test
 /**
  * Offline pipeline eval harness. It cannot run Gemma (native MediaPipe), so it
  * exercises the deterministic parts that govern the two field failures — retrieval
- * (right card / honest miss), the [ServeDecision] backstop, and source attribution
+ * (right card / honest miss), the [ServeGate] backstop, and source attribution
  * (exact doc + page). Run after any retrieval/gate change:
  *   ./gradlew :sdk-android:testDebugUnitTest --tests '*ChatPipelineEvalTest*'
  * and read the printed `falseRefusals=… falseServes=… attributionMisses=…` line.
@@ -104,14 +104,14 @@ class ChatPipelineEvalTest {
             val hits = index.search(case.query, k = 3)
             // Floors zeroed: this small inline corpus produces single-digit BM25
             // scores; the eval exercises scope/attribution, not score calibration.
-            val decision = ServeDecision.decide(
+            val decision = ServeGate.decide(
                 query = case.query,
                 hits = hits,
                 clinicalTerms = scope.scopeTerms(),
                 tuning = com.medtroniclabs.microcoaching.ServeTuning(bnScoreFloor = 0f, enScoreFloor = 0f),
                 isBanglaTurn = true,
             )
-            val top = (decision as? ServeDecision.Decision.Serve)?.hit
+            val top = (decision as? ServeGate.Decision.Serve)?.hit
             val served = top != null
 
             if (case.expectFamily == null) {
@@ -170,7 +170,7 @@ class ChatPipelineEvalTest {
             language = ModuleKnowledgeIndex.Lang.BN,
         )
         assertTrue("expected the anemia card to be retrieved at all", hits.isNotEmpty())
-        val decision = ServeDecision.decide(
+        val decision = ServeGate.decide(
             query = "গর্ভবতী মহিলা প্রতিদিন কী খাবার খাবেন",
             hits = hits,
             clinicalTerms = emptySet(),
@@ -179,7 +179,7 @@ class ChatPipelineEvalTest {
         )
         assertFalse(
             "a card sharing only গর্ভবতী/মহিলা must not be served",
-            decision is ServeDecision.Decision.Serve,
+            decision is ServeGate.Decision.Serve,
         )
     }
 }

@@ -38,7 +38,7 @@ internal data class DownloadArtifact(
 )
 
 /**
- * The set of files behind a single "simple words" download, and the arithmetic over them.
+ * The set of files behind the single on-device download, and the arithmetic over them.
  *
  * Everything the user is told about the download is computed here: the total they agree to
  * before opting in, what is still outstanding after a partial transfer, and the space to
@@ -50,12 +50,19 @@ internal object DownloadPlan {
     /**
      * Files to fetch, in transfer order.
      *
-     * The language model comes first because it is the capability the user actually asked
-     * for, and the label they see should name it. Within the encoder the 4.5 MB tokenizer
-     * precedes the 171 MB graph: both come from the same gated repo, so a missing or
-     * revoked token fails in a second instead of after the whole transfer.
+     * The language model comes first when included, because it is the capability the user
+     * asked for and the label they see should name it. Within the encoder, the 4.5 MB tokenizer
+     * precedes the 171 MB graph: both come from the same gated repo, so a missing or revoked
+     * token fails in a second instead of after the whole transfer.
+     *
+     * @param includeLanguageModel false when the on-device rewrite is off, which leaves the
+     *   encoder as the whole download.
      */
-    fun artifacts(variant: ModelVariant, includeEncoder: Boolean): List<DownloadArtifact> {
+    fun artifacts(
+        variant: ModelVariant,
+        includeEncoder: Boolean,
+        includeLanguageModel: Boolean = true,
+    ): List<DownloadArtifact> {
         val languageModel = DownloadArtifact(
             phase = DownloadPhase.LANGUAGE_MODEL,
             fileName = variant.fileName,
@@ -65,7 +72,6 @@ internal object DownloadPlan {
             requiresAccessToken = variant.requiresAccessToken,
             useProviderChain = true,
         )
-        if (!includeEncoder) return listOf(languageModel)
 
         fun encoder(fileName: String, bytes: Long, url: String) = DownloadArtifact(
             phase = DownloadPhase.EMBEDDINGS,
@@ -76,11 +82,12 @@ internal object DownloadPlan {
             requiresAccessToken = true,
             useProviderChain = false,
         )
-        return listOf(
-            languageModel,
+        val encoderArtifacts = listOf(
             encoder(EncoderModel.TOKENIZER_FILE_NAME, EncoderModel.TOKENIZER_BYTES, EncoderModel.TOKENIZER_URL),
             encoder(EncoderModel.TFLITE_FILE_NAME, EncoderModel.TFLITE_BYTES, EncoderModel.TFLITE_URL),
         )
+        return (if (includeLanguageModel) listOf(languageModel) else emptyList()) +
+            (if (includeEncoder) encoderArtifacts else emptyList())
     }
 
     /** Where [artifact] belongs under [root] (`getExternalFilesDir(null)`). */

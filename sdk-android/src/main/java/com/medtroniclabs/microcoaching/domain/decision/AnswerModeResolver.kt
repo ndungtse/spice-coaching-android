@@ -30,6 +30,8 @@ enum class AnswerMode {
  * @param engineLoaded whether the inference engine currently holds that file. Separate from
  *   [modelReady] because a present, valid file can still fail to load, and a mode that
  *   promises rewording without a live engine has nothing to reword with.
+ * @param rewriteEnabled [com.medtroniclabs.microcoaching.MicroCoachingConfig.enableOnDeviceRewrite].
+ *   Off, the language model never answers, even if a file and an engine are present.
  */
 data class AnswerModeInputs(
     val preferOnline: Boolean,
@@ -38,6 +40,7 @@ data class AnswerModeInputs(
     val choice: LocalModelChoice,
     val modelReady: Boolean,
     val engineLoaded: Boolean,
+    val rewriteEnabled: Boolean,
 )
 
 /**
@@ -57,7 +60,8 @@ fun resolveAnswerMode(inputs: AnswerModeInputs): AnswerMode = when {
     // network returns, and ignored while there isn't one.
     inputs.preferOnline && inputs.networkAvailable -> AnswerMode.ONLINE
 
-    inputs.deviceEligible &&
+    inputs.rewriteEnabled &&
+        inputs.deviceEligible &&
         inputs.choice == LocalModelChoice.ENABLED &&
         inputs.modelReady &&
         inputs.engineLoaded -> AnswerMode.ON_DEVICE_ASSISTED

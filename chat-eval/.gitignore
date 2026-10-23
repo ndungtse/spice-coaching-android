@@ -1,0 +1,6 @@
+runs/
+corpora/
+local.toml
+.venv/
+__pycache__/
+*.egg-info/

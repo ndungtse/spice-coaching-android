@@ -159,15 +159,15 @@ class ChwQuestionsEvalTest {
                 "${q.question} ${q.englishQuery}"
             else -> q.question
         }
-        val decision = ServeDecision.decide(
+        val decision = ServeGate.decide(
             query = guardQuery,
             hits = hits,
             clinicalTerms = scope.scopeTerms(),
             tuning = tuning,
             isBanglaTurn = q.lang == "bn",
         )
-        val why = ServeDecision.describe(decision)
-        val top = (decision as? ServeDecision.Decision.Serve)?.hit ?: return null to why
+        val why = ServeGate.describe(decision)
+        val top = (decision as? ServeGate.Decision.Serve)?.hit ?: return null to why
         return "${top.moduleFamilyId.take(8)}:${top.positionalId}" to why
     }
 

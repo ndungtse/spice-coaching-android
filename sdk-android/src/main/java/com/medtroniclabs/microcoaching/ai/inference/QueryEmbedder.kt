@@ -27,6 +27,9 @@ interface QueryEmbedder {
     val isAvailable: Boolean
 
     suspend fun embed(text: String): FloatArray?
+
+    /** Frees whatever the implementation holds in memory. Safe to call more than once. */
+    suspend fun release() = Unit
 }
 
 /**

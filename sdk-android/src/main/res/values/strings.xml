@@ -425,6 +425,7 @@
 
     <!-- ── Download item cards on the coaching setup screen ─────────────────────── -->
     <string name="download_card_ai_title">AI Model</string>
+    <string name="download_card_search_title">Smarter search</string>
     <!-- Expected download size, still approximate while the exact size is unresolved. -->
     <!-- Exact size, once known from the catalog or a server probe. -->
     <string name="download_card_ai_size_exact">%1$s</string>
@@ -457,6 +458,7 @@
     <string name="notification_model_download_channel_name">AI model download</string>
     <string name="notification_model_download_channel_desc">Shows progress while the on-device AI coaching model downloads in the background.</string>
     <string name="notification_model_download_title">Downloading AI coaching model</string>
+    <string name="notification_search_download_title">Downloading smarter search</string>
     <!-- Body when total size is known: "450 MB / 900 MB · 50%" -->
     <!-- Sizes are pre-formatted by the platform Formatter, matching the setup card. -->
     <string name="notification_model_download_progress">%1$s / %2$s · %3$d%%</string>
@@ -678,6 +680,7 @@
     <string name="chat_mode_bar_online">Online</string>
     <string name="chat_mode_bar_on_device_direct">On this phone</string>
     <string name="chat_mode_bar_on_device_assisted">On this phone · simple words</string>
+    <string name="chat_mode_bar_on_device_search">On this phone · smarter search</string>
     <string name="chat_mode_bar_on_device_online_unavailable">On this phone · online unavailable</string>
     <string name="chat_mode_bar_change">Change</string>
     <string name="chat_mode_bar_open_sheet">Change how answers are found</string>
@@ -706,6 +709,12 @@
     <string name="answering_sheet_style_assisted_title">Explained in simple words</string>
     <string name="answering_sheet_style_assisted_body">Same guidance, put into everyday language.</string>
     <string name="answering_sheet_style_assisted_body_sized">Same guidance, put into everyday language. %1$s one-time download.</string>
+    <string name="answering_sheet_search_title">Search</string>
+    <string name="answering_sheet_search_standard_title">Standard search</string>
+    <string name="answering_sheet_search_standard_body">Finds guidance that uses the words of your question.</string>
+    <string name="answering_sheet_search_smarter_title">Smarter search</string>
+    <string name="answering_sheet_search_smarter_body">Also finds guidance worded differently from your question.</string>
+    <string name="answering_sheet_search_smarter_body_sized">Also finds guidance worded differently from your question. %1$s one-time download.</string>
     <string name="answering_sheet_free_up_space">Free up %1$s</string>
 
     <string name="answering_opt_out_title">Use exact guideline wording?</string>
@@ -714,12 +723,18 @@
     <string name="answering_opt_out_delete_sized">Also remove the download and free up %1$s</string>
     <string name="answering_opt_out_confirm">Use exact wording</string>
     <string name="answering_opt_out_cancel">Cancel</string>
+    <string name="answering_search_opt_out_title">Use standard search?</string>
+    <string name="answering_search_opt_out_body">Answers will still show the guidance exactly as it is written. A question worded differently from the guide may find less.</string>
+    <string name="answering_search_opt_out_confirm">Use standard search</string>
 
     <string name="local_model_offer_title">Your phone can explain answers in simple words</string>
     <string name="local_model_offer_body">Works with or without internet. Best set up over Wi-Fi. You can remove it any time.</string>
     <string name="local_model_offer_body_sized">Works with or without internet. One-time %1$s download — best over Wi-Fi. You can remove it any time.</string>
     <string name="local_model_offer_accept">Set up</string>
     <string name="local_model_offer_dismiss">Not now</string>
+    <string name="search_offer_title">Find the right guidance more often</string>
+    <string name="search_offer_body">Finds guidance even when your question uses different words from the guide. Works with or without internet. Best set up over Wi-Fi. You can remove it any time.</string>
+    <string name="search_offer_body_sized">Finds guidance even when your question uses different words from the guide. Works with or without internet. One-time %1$s download — best over Wi-Fi. You can remove it any time.</string>
 
     <string name="download_card_status_waiting_wifi">Waiting for Wi-Fi</string>
     <string name="download_card_status_waiting_network">Waiting for internet</string>

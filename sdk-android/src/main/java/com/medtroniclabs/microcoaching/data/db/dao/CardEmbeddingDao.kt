@@ -5,6 +5,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import com.medtroniclabs.microcoaching.data.db.entity.CardEmbeddingEntity
+import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface CardEmbeddingDao {
@@ -17,6 +18,10 @@ interface CardEmbeddingDao {
 
     @Query("SELECT COUNT(*) FROM card_embedding")
     suspend fun count(): Int
+
+    /** Emits on every write to the table, so the dense index can rebuild when vectors land. */
+    @Query("SELECT COUNT(*) FROM card_embedding")
+    fun observeCount(): Flow<Int>
 
     /**
      * The encoder the stored vectors came from, or null when no row names one.

@@ -4,18 +4,12 @@ import com.medtroniclabs.microcoaching.ServeTuning
 import java.util.Locale
 
 /**
- * The serve/refuse decision for the offline chat paths.
+ * What a question and each retrieved card share, computed once per turn.
  *
- * The policy it enforces: **a card is served only when it demonstrably shares the
- * question's condition or topic; otherwise the chat refuses.** A refusal is a better
- * answer than a card about something else, because a CHW cannot tell a confidently
- * served wrong card from a right one.
+ * The ranker orders candidates by this evidence and the gate judges the one it picks. Both
+ * read the same [Evidence], so a card is never judged on facts the ranker did not see.
  *
- * [decide] is pure and is the only serve/refuse authority — both the retrieval-only
- * path and the on-device LLM path call it, so the model can only reword a card this
- * gate would already have served, and a refusal happens before any LLM call.
- *
- * A hit is servable when it carries **evidence**:
+ * Evidence is:
  *  1. condition terms — gazetteer terms present in both question and card, excluding
  *     demographics ([DEMOGRAPHIC_TERMS]), question-form and filler words
  *     ([TEMPLATE_TERMS]), and numbers/units. Bangla matches by containment so an
@@ -30,27 +24,8 @@ import java.util.Locale
  * (maternal, child, adult) is not servable for a question that names a different
  * population. A question naming no population may still receive a scoped card, but only
  * on two shared topic terms or a dominant cosine, never on one shared word.
- *
- * Among servable hits, title/hint overlap outranks BM25 score: authors write
- * retrieval hints as the questions a card answers, so that is stronger evidence than
- * body-keyword density. Score only breaks ties and enforces the [ServeTuning] floors,
- * which are per-language because native-Bangla scores run far below translated-query
- * scores against the same corpus.
  */
-object ServeDecision {
-
-    sealed class Decision {
-        /** [evidence] is the served hit's; [all] covers every candidate, for diagnosis. */
-        data class Serve(
-            val hit: GroundingChunk,
-            val evidence: Evidence,
-            val all: List<Evidence> = listOf(evidence),
-        ) : Decision()
-
-        data class Refuse(val reason: RefuseReason, val evidence: List<Evidence>) : Decision()
-    }
-
-    enum class RefuseReason { NO_HITS, NO_EVIDENCE, BELOW_SCORE_FLOOR }
+object CardEvidence {
 
     /** Why a hit is (or is not) servable — logged and surfaced in the retrieval lab. */
     data class Evidence(
@@ -222,24 +197,16 @@ object ServeDecision {
         ClinicalSynonymMap.conceptsFor(POPULATION_GROUPS.values.flatten())
 
     /**
-     * Decide what to serve for one turn.
-     *
-     * @param query the guard query: the typed question plus its other-language
-     *   translation, exactly as the call sites already assemble it.
-     * @param hits BM25 candidates from [GroundingSelector], rank order preserved.
-     * @param clinicalTerms the [ScopeClassifier] gazetteer.
-     * @param isBanglaTurn which per-language score floor applies (the SDK language
-     *   of the turn, not of any individual hit).
+     * Reads the question once and records, for every candidate, the evidence the ranker
+     * orders by and the gate judges. Candidates keep their input order.
      */
-    fun decide(
+    fun compute(
         query: String,
         hits: List<GroundingChunk>,
         clinicalTerms: Set<String>,
         tuning: ServeTuning,
-        isBanglaTurn: Boolean,
-    ): Decision {
-        if (hits.isEmpty()) return Decision.Refuse(RefuseReason.NO_HITS, emptyList())
-
+    ): List<Evidence> {
+        if (hits.isEmpty()) return emptyList()
         val queryTokens = topicalQueryTokens(query)
         // The gazetteer harvests module-title words verbatim, so it holds inflected
         // forms ("কার্ডের", "সময়ের") that an exact-match filter would let through.
@@ -247,64 +214,12 @@ object ServeDecision {
             .filterNotTo(mutableSetOf()) { term -> isTemplateOrDemographic(term) }
         val queryConcepts = ClinicalSynonymMap.conceptsFor(queryTokens)
         val queryPopulations = populationsIn(query)
-
-        val evidences = hits.map { hit ->
+        return hits.map { hit ->
             evidenceFor(
                 hit, queryTokens, queryGazetteer, queryConcepts, queryPopulations,
                 cosFloor = tuning.cosFloor,
             )
         }.let { stampDominance(it, tuning) }
-        val byChunk = evidences.associateBy { it.chunkId }
-
-        val servable = hits.filter { byChunk.getValue(it.chunkId).servable }
-        if (servable.isEmpty()) return Decision.Refuse(RefuseReason.NO_EVIDENCE, evidences)
-
-        // Selection, within the promote band of rank-1's score. A hit that matches the
-        // question's subject always beats one that only matches its population, however
-        // it scores — a card can be about the right people and the wrong thing. Below
-        // that, title/hint evidence beats body-keyword density, and raw score decides
-        // only what nothing else separates.
-        val topScore = hits.first().score
-        // Dense-agreed hits enter the band on their cosine: a dense-only entrant has
-        // no BM25 score to clear the promote ratio with, yet is exactly the candidate
-        // fusion added. BM25-only paths are unaffected (denseAgrees is never set).
-        val band = servable.filter {
-            it.score >= topScore * tuning.promoteRatio || byChunk.getValue(it.chunkId).denseAgrees
-        }.ifEmpty { listOf(servable.first()) }
-        val chosen = band.maxWithOrNull(
-            compareBy(
-                // A card the encoder puts far ahead of every rival answers the question even
-                // when a different card repeats more of its words. At most one hit per turn
-                // clears the dominance floor and margin.
-                { byChunk.getValue(it.chunkId).denseDominant },
-                // A card about the question's subject beats one about only its population.
-                { byChunk.getValue(it.chunkId).topicTermCount > 0 },
-                // Authors write hints as the questions a card answers, so a hint match
-                // outranks body-keyword density.
-                { byChunk.getValue(it.chunkId).titleHintOverlap },
-                { byChunk.getValue(it.chunkId).conditionTerms.size + byChunk.getValue(it.chunkId).sharedConcepts.size },
-                // Agreement short of dominance breaks ties among lexically comparable cards.
-                { byChunk.getValue(it.chunkId).denseAgrees },
-                { it.score },
-            ),
-        ) ?: servable.first()
-
-        val floor = if (isBanglaTurn) tuning.bnScoreFloor else tuning.enScoreFloor
-        val chosenEvidence = byChunk.getValue(chosen.chunkId)
-        // The per-language floor is a BM25-score calibration; a dense-only entrant has
-        // no BM25 score, and its cosine already cleared its own floor.
-        if (chosen.score < floor && !chosenEvidence.denseAgrees) {
-            return Decision.Refuse(RefuseReason.BELOW_SCORE_FLOOR, evidences)
-        }
-        return Decision.Serve(chosen, byChunk.getValue(chosen.chunkId), evidences)
-    }
-
-    /** One-line trace of the decision and the evidence behind it. */
-    fun describe(decision: Decision): String = when (decision) {
-        is Decision.Serve -> "SERVE-DECISION serve ${decision.evidence.describe()}"
-        is Decision.Refuse ->
-            "SERVE-DECISION refuse reason=${decision.reason} " +
-                decision.evidence.joinToString(" | ") { it.describe() }
     }
 
     // ── evidence computation ──────────────────────────────────────────────────
@@ -471,5 +386,4 @@ object ServeDecision {
 
     private fun String.isBanglaCharBigram(): Boolean =
         length == 2 && all { it.code in 0x0980..0x09FF }
-
 }

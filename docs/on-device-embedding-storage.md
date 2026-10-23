@@ -216,30 +216,42 @@ misses cost more than 153k sequential fused multiply-adds.
 
 ## Device tiers: what runs on 2 GB
 
-**Nothing. Dense retrieval never runs on a 2 GB device, by design.**
+**By default, nothing. Smarter search is offered from 3 GB, and a host can lower that to 2 GB.**
 
-`DeviceCapability.MIN_RAM_BYTES_FOR_FULL_MODE` is **3 GiB**, and `isLowEndDevice` is
-`totalMem < 3 GiB`. `EncoderModelRule.evaluate` returns `SKIPPED_LOW_END` for such a
-device, so the 171 MB encoder is never downloaded, no query vector is ever produced, and
-chat runs BM25-only — the same behaviour as with the feature flag off. A 2 GB phone is
-therefore unaffected by any number in this document.
+Smarter search has its own device rule, separate from the language model's tier
+(`OnDeviceSetup.encoderDeviceEligible`):
 
-That gate is doing real work rather than being conservative for its own sake. Were it
-removed, a 2 GB device would need to hold, simultaneously:
+- the app runs as a **64-bit process**. The SDK ships its native code for arm64-v8a only, so a
+  32-bit install could download the encoder but never load it;
+- total RAM is at least **`MicroCoachingConfig.smarterSearchMinRamMb`**. The default is 3072 MiB,
+  the same as the language model's tier. Phones sold as 2 GB report about 1,700–1,900 MiB, so
+  `.smarterSearchMinRamMb(1536)` admits them.
+
+`forceLowEndMode(true)` makes a device ineligible, and `forceLowEndMode(false)` skips the RAM
+check but not the 64-bit one. A device that fails the rule is never offered smarter search,
+never downloads the encoder, and answers with BM25 alone.
+
+**What the encoder costs on a 2 GB phone.** Measured on a 2 GB emulator
+(`docs/eval/2026-10-09-smarter-search-2gb-emulator.md`):
 
 | | cost |
 |---|---|
-| encoder weights (mapped native, not heap) | ~110 MB RSS at seq256 |
+| encoder, loaded (paired against a standard-search control) | ~190 MB of SPICE's PSS: ~86 MB native heap, ~77 MB of the mapped weights |
 | card vectors (**heap**) | 0.6 MB today, 112 MiB at 5,000 modules |
-| the host app itself — Compose, Room, SQLCipher, image caches | the rest |
+| the host app itself (Compose, Room, SQLCipher, image caches) | the rest |
 
-on a device whose per-app heap quota is typically **128 MB** at that RAM class. The
-vectors alone would exceed the quota somewhere around 30,000–40,000 cards, and the encoder
-would be competing for physical memory with the rest of the system long before that.
+The encoder came to about 190 MB against a 150 MB budget, which is why the default stays at
+3 GB. On the emulator, a 2 GB device still ran 100 questions in smarter search without a crash,
+and Android did not kill SPICE when switching apps. Under pressure, Android reclaims the mapped
+weights (clean pages), which slows encoding rather than killing the app.
 
-**The honest summary for the 3 GB+ tier that does run it:** today's 0.6 MB is free, and
-the arrangement stays comfortable to roughly 5,000–10,000 cards (650–1,300 modules). Beyond
-that the Java heap — not the scan, not the disk — is what needs attention.
+The heap is the other limit, and it arrives much sooner on 2 GB phones than on 3 GB ones. Their
+per-app heap quota is typically **128 MB**, and the card vectors live on the Java heap. They
+would exceed that quota somewhere around 30,000–40,000 cards.
+
+**For the 3 GB+ tier:** today's 0.6 MB is free, and the arrangement stays comfortable to roughly
+5,000–10,000 cards (650–1,300 modules). Beyond that the Java heap, not the scan and not the disk,
+is what needs attention.
 
 ---
 

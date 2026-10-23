@@ -23,8 +23,10 @@ class AnswerModeResolverTest {
         choice: LocalModelChoice = LocalModelChoice.ENABLED,
         modelReady: Boolean = true,
         engineLoaded: Boolean = true,
+        rewriteEnabled: Boolean = true,
     ) = AnswerModeInputs(
         preferOnline, networkAvailable, deviceEligible, choice, modelReady, engineLoaded,
+        rewriteEnabled = rewriteEnabled,
     )
 
     // ── ONLINE ───────────────────────────────────────────────────────────────
@@ -119,7 +121,9 @@ class AnswerModeResolverTest {
         val result = mutableListOf<AnswerModeInputs>()
         for (preferOnline in flags) for (network in flags) for (eligible in flags) {
             for (choice in LocalModelChoice.entries) for (ready in flags) for (loaded in flags) {
-                result += AnswerModeInputs(preferOnline, network, eligible, choice, ready, loaded)
+                for (rewrite in flags) {
+                    result += AnswerModeInputs(preferOnline, network, eligible, choice, ready, loaded, rewrite)
+                }
             }
         }
         return result
@@ -128,7 +132,7 @@ class AnswerModeResolverTest {
     @Test
     fun `every combination resolves`() {
         val all = allInputs()
-        assertEquals(2 * 2 * 2 * 3 * 2 * 2, all.size)
+        assertEquals(2 * 2 * 2 * 3 * 2 * 2 * 2, all.size)
         // A missing branch would throw rather than return, so reaching a mode is the assertion.
         all.forEach { assertNotEquals(null, resolveAnswerMode(it)) }
     }
@@ -144,6 +148,14 @@ class AnswerModeResolverTest {
     fun `assisted is never chosen without a loaded engine and a ready file`() {
         allInputs()
             .filter { !it.engineLoaded || !it.modelReady }
+            .forEach { assertNotEquals(AnswerMode.ON_DEVICE_ASSISTED, resolveAnswerMode(it)) }
+    }
+
+    /** A model left on disk by an earlier build must not answer when the switch is off. */
+    @Test
+    fun `assisted is never chosen with the rewrite switched off`() {
+        allInputs()
+            .filter { !it.rewriteEnabled }
             .forEach { assertNotEquals(AnswerMode.ON_DEVICE_ASSISTED, resolveAnswerMode(it)) }
     }
 
@@ -175,6 +187,7 @@ class AnswerModeResolverTest {
             choice = LocalModelChoice.DISABLED,
             modelReady = false,
             engineLoaded = false,
+            rewriteEnabled = false,
         )
         assertEquals(AnswerMode.ON_DEVICE_DIRECT, resolveAnswerMode(stripped))
     }

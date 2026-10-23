@@ -17,6 +17,7 @@ import com.medtroniclabs.microcoaching.MicroCoachingConfig
 import com.medtroniclabs.microcoaching.ModelDownloadStrategy
 import com.medtroniclabs.microcoaching.ai.embedding.EncoderModel
 import com.medtroniclabs.microcoaching.ai.embedding.EncoderModelRule
+import com.medtroniclabs.microcoaching.ai.embedding.EncoderVerdict
 import com.medtroniclabs.microcoaching.ai.embedding.EncoderWaitAction
 import com.medtroniclabs.microcoaching.domain.system.DeviceCapability
 import kotlinx.coroutines.CoroutineScope
@@ -82,7 +83,8 @@ class ModelManager(private val config: MicroCoachingConfig) {
      * the manager builds itself and which still need the right label.
      */
     @Volatile
-    private var lastKnownPhase: DownloadPhase = DownloadPhase.LANGUAGE_MODEL
+    private var lastKnownPhase: DownloadPhase =
+        if (config.enableOnDeviceRewrite) DownloadPhase.LANGUAGE_MODEL else DownloadPhase.EMBEDDINGS
 
     /**
      * The encoder half failed terminally on the last run.
@@ -101,6 +103,9 @@ class ModelManager(private val config: MicroCoachingConfig) {
         // thread during Application.onCreate). Guarded on Idle so a WorkInfo
         // emission that lands first (a live download) is not overwritten.
         scope.launch(Dispatchers.IO) {
+            // Outside the Idle guard: an ON_SDK_INIT schedule can emit a state first, and the
+            // language model still has to go.
+            removeLegacyLanguageModel()
             if (_state.value is ModelState.Idle) reconcileReadyState()
         }
         observeUniqueWork()
@@ -126,6 +131,10 @@ class ModelManager(private val config: MicroCoachingConfig) {
      * them apart — testable without a `Context` or WorkManager.
      */
     private fun reconcileReadyState() {
+        if (!rewriteEnabled) {
+            reconcileSearchSetup()
+            return
+        }
         val prefsReady = prefs.getBoolean(KEY_MODEL_READY, false)
         val file = findLocalModel()
         val paused = prefs.getBoolean(KEY_DOWNLOAD_PAUSED, false)
@@ -195,6 +204,12 @@ class ModelManager(private val config: MicroCoachingConfig) {
      * Variants with no validator are adopted without a structural check.
      */
     private fun emitReadyOrCorrupt(file: File) {
+        // With the rewrite off the encoder files are the whole outcome, and the language-model
+        // validator must never see them.
+        if (!rewriteEnabled) {
+            if (searchFilesComplete()) emitSearchReady()
+            return
+        }
         val defect = validateLocalModel(file)
         if (defect == null) {
             val expected = config.selectedModelVariant().sizeInBytes
@@ -369,13 +384,22 @@ class ModelManager(private val config: MicroCoachingConfig) {
      * show the catalog's approximate value.
      */
     suspend fun resolveModelSizeBytes(): Long? =
-        ModelSizeProbe.resolveSize(config.context, config.selectedModelVariant(), config.huggingFaceToken)
-            ?.let { it + encoderBytes() }
+        if (!rewriteEnabled) {
+            // An encoder-only download has a fixed size, so the probe is not needed.
+            encoderBytes().takeIf { it > 0L }
+        } else {
+            ModelSizeProbe.resolveSize(config.context, config.selectedModelVariant(), config.huggingFaceToken)
+                ?.let { it + encoderBytes() }
+        }
 
     /** Previously resolved size for the selected variant, without touching the network. */
     fun cachedModelSizeBytes(): Long? =
-        ModelSizeProbe.cachedSize(config.context, config.selectedModelVariant())
-            ?.let { it + encoderBytes() }
+        if (!rewriteEnabled) {
+            encoderBytes().takeIf { it > 0L }
+        } else {
+            ModelSizeProbe.cachedSize(config.context, config.selectedModelVariant())
+                ?.let { it + encoderBytes() }
+        }
 
     /**
      * The encoder's contribution to the figure quoted before opting in, or zero when this
@@ -425,6 +449,15 @@ class ModelManager(private val config: MicroCoachingConfig) {
             config.modelDownloadStrategy == ModelDownloadStrategy.MANUAL
         ) return
 
+        if (!rewriteEnabled) {
+            when {
+                searchFilesComplete() -> emitSearchReady()
+                includeEncoder() -> scheduleDownload()
+                else -> Log.i(TAG, "Smarter search unavailable here: ${encoderVerdict()}")
+            }
+            return
+        }
+
         val existing = findLocalModel()
         if (existing != null && encoderOutstanding()) {
             // The upgrade path: a device that already has the language model from before
@@ -446,27 +479,136 @@ class ModelManager(private val config: MicroCoachingConfig) {
         scheduleDownload()
     }
 
+    /** Off: the encoder is the whole download, and nothing touches the language model. */
+    private val rewriteEnabled: Boolean get() = config.enableOnDeviceRewrite
+
     /**
-     * Whether the query encoder rides along with the language model on this device.
-     *
-     * [EncoderModelRule] is the one home for this gate; the verdict it returns names the
-     * reason, which is the only way to tell a flag-off build from a device below the RAM
-     * tier from a host that forgot its Hugging Face token.
+     * Below the language model's 3 GB tier, probed once. The encoder's rule is
+     * [encoderEligible]. The chat reads this on every download progress update.
      */
-    private fun includeEncoder(): Boolean {
-        val dir = config.context.getExternalFilesDir(null)
-        val verdict = EncoderModelRule.evaluate(
-            enableDenseRetrieval = config.enableDenseRetrieval,
-            isLowEndDevice = config.forceLowEndMode ?: DeviceCapability.isLowEndDevice(config.context),
-            filesPresent = dir != null && EncoderModel.filesPresent(File(dir, EncoderModel.DIR_NAME)),
-            hasAccessToken = config.huggingFaceToken.isNotBlank(),
-        )
-        return with(EncoderModelRule) { verdict.wantsEncoder() }
+    private val isLowEnd: Boolean by lazy {
+        config.forceLowEndMode ?: DeviceCapability.isLowEndDevice(config.context)
     }
 
-    /** The files this download covers, language model first. */
+    /**
+     * Why the query encoder will or will not be fetched on this device.
+     *
+     * [EncoderModelRule] is the one home for this gate; the verdict names the reason, which is
+     * the only way to tell a flag-off build from a device below the RAM tier from a host that
+     * forgot its Hugging Face token.
+     */
+    private fun encoderVerdict(): EncoderVerdict = EncoderModelRule.evaluate(
+        enableDenseRetrieval = config.enableDenseRetrieval,
+        // The encoder's own device rule, not the language model's 3 GB tier.
+        isLowEndDevice = !encoderEligible,
+        filesPresent = searchFilesComplete(),
+        hasAccessToken = config.huggingFaceToken.isNotBlank(),
+    )
+
+    /** [OnDeviceSetup.encoderDeviceEligible] for this device, probed once: RAM and ABI don't change. */
+    private val encoderEligible: Boolean by lazy {
+        OnDeviceSetup.encoderDeviceEligible(
+            forceLowEnd = config.forceLowEndMode,
+            is64BitProcess = DeviceCapability.is64BitProcess(),
+            totalMemBytes = DeviceCapability.totalMemBytes(config.context),
+            minRamMb = config.smarterSearchMinRamMb,
+        )
+    }
+
+    /**
+     * Whether the user cancelled the last download and has not started another. Chat open does
+     * not restart a download the user stopped.
+     */
+    fun cancelledByUser(): Boolean = prefs.getBoolean(KEY_USER_CANCELLED, false)
+
+    /**
+     * Whether the outstanding download fits in free storage, with headroom. The offer card is
+     * not shown for a download that would be refused.
+     */
+    fun hasRoomForDownload(): Boolean = insufficientSpaceReason(logRefusal = false) == null
+
+    /** Whether the query encoder is part of this device's download. */
+    private fun includeEncoder(): Boolean = with(EncoderModelRule) { encoderVerdict().wantsEncoder() }
+
+    /**
+     * Whether this device may be offered the on-device setup. See
+     * [OnDeviceSetup.setupAvailable]; with the rewrite off, a device that cannot fetch the
+     * encoder has nothing to offer.
+     */
+    fun setupAvailable(): Boolean = OnDeviceSetup.setupAvailable(
+        rewriteEnabled = rewriteEnabled,
+        isLowEndDevice = isLowEnd,
+        encoderVerdict = encoderVerdict(),
+    )
+
+    private fun encoderDir(): File? =
+        config.context.getExternalFilesDir(null)?.let { File(it, EncoderModel.DIR_NAME) }
+
+    private fun searchFilesComplete(): Boolean = encoderDir()?.let { EncoderModel.filesPresent(it) } == true
+
+    /** Announces smarter search, with the encoder graph as the ready file. */
+    private fun emitSearchReady() {
+        val graph = File(encoderDir() ?: return, EncoderModel.TFLITE_FILE_NAME)
+        clearPaused()
+        Log.i(TAG, "Smarter search ready: ${graph.absolutePath}")
+        _state.value = ModelState.Ready(graph)
+    }
+
+    /** One sentence for a smarter-search request this device cannot satisfy. */
+    private fun encoderUnavailableReason(): String = when (encoderVerdict()) {
+        EncoderVerdict.SKIPPED_FLAG_OFF -> "Smarter search is turned off in this build"
+        EncoderVerdict.SKIPPED_LOW_END -> "This phone does not have enough memory for smarter search"
+        EncoderVerdict.BLOCKED_NO_TOKEN -> "Smarter search needs a Hugging Face token, and none is configured"
+        EncoderVerdict.READY, EncoderVerdict.DOWNLOAD -> "Smarter search could not start"
+    }
+
+    /** Deletes the encoder's files, complete or partial. */
+    private fun deleteEncoderFiles() {
+        val dir = config.context.getExternalFilesDir(null) ?: return
+        DownloadPlan.artifacts(config.selectedModelVariant(), includeEncoder = true, includeLanguageModel = false)
+            .map { DownloadPlan.fileFor(dir, it) }
+            .forEach { file ->
+                if (file.exists() && file.delete()) Log.i(TAG, "Deleted ${file.name}")
+            }
+    }
+
+    /**
+     * Deletes a language model left by a build where the rewrite was on. Nothing loads it on
+     * this build, since [com.medtroniclabs.microcoaching.MicroCoachingSDK.localModelEnabled]
+     * requires the rewrite.
+     */
+    private fun removeLegacyLanguageModel() {
+        val file = findLocalModel()
+        if (!SearchSetupRule.removeLegacyLanguageModel(rewriteEnabled, languageModelOnDisk = file != null)) return
+        val bytes = file!!.length()
+        if (file.delete()) {
+            Log.i(TAG, "Removed ${file.name} ($bytes bytes): the on-device rewrite is off on this build")
+        }
+        clearReadyFlag()
+    }
+
+    /** [reconcileReadyState] when the encoder is the whole download. */
+    private fun reconcileSearchSetup() {
+        val verdict = SearchSetupRule.verdict(
+            encoderComplete = searchFilesComplete(),
+            userPaused = prefs.getBoolean(KEY_DOWNLOAD_PAUSED, false),
+            downloadWorkActive = isDownloadWorkActive(),
+        )
+        Log.i(TAG, "Reconcile (smarter search): verdict=$verdict")
+        when (verdict) {
+            SearchSetupVerdict.READY -> emitSearchReady()
+            SearchSetupVerdict.RESUMABLE_PARTIAL -> {
+                val progress = prefs.getInt(KEY_DOWNLOAD_PAUSED_PROGRESS, 0)
+                lastKnownProgress = progress
+                _state.value = ModelState.Paused(progress, DownloadPhase.EMBEDDINGS)
+            }
+            SearchSetupVerdict.LEAVE_IN_FLIGHT, SearchSetupVerdict.IDLE -> Unit
+        }
+    }
+
+    /** The files this download covers, language model first when the rewrite is on. */
     private fun downloadPlan(): List<DownloadArtifact> =
-        DownloadPlan.artifacts(config.selectedModelVariant(), includeEncoder())
+        DownloadPlan.artifacts(config.selectedModelVariant(), includeEncoder(), includeLanguageModel = rewriteEnabled)
 
     /**
      * True when the encoder is wanted but not yet completely on disk.
@@ -510,6 +652,15 @@ class ModelManager(private val config: MicroCoachingConfig) {
         encoderGaveUp = false
         Log.i(TAG, "triggerDownload entry — currentState=${_state.value::class.simpleName}")
         logNetworkSnapshot("triggerDownload")
+
+        if (!rewriteEnabled) {
+            when {
+                searchFilesComplete() -> emitSearchReady()
+                !includeEncoder() -> _state.value = ModelState.DownloadFailed(encoderUnavailableReason())
+                else -> scheduleDownload()
+            }
+            return
+        }
 
         val current = _state.value
         if (current is ModelState.Corrupt) {
@@ -601,7 +752,7 @@ class ModelManager(private val config: MicroCoachingConfig) {
      * the same fail-open stance [com.medtroniclabs.microcoaching.data.asset.AssetCache] takes,
      * since a failed probe is not evidence of a full disk.
      */
-    private fun insufficientSpaceReason(): String? {
+    private fun insufficientSpaceReason(logRefusal: Boolean = true): String? {
         val dir = config.context.getExternalFilesDir(null) ?: return null
         // Every artifact still outstanding, under one headroom allowance — reserving it
         // per file would demand 128 MB of slack for a two-part download.
@@ -613,7 +764,8 @@ class ModelManager(private val config: MicroCoachingConfig) {
             return null
         }
         if (available >= needed) return null
-        Log.e(TAG, "Refusing download: need $needed bytes, $available available")
+        // The offer card asks on every state update; only a real refusal is worth a log line.
+        if (logRefusal) Log.e(TAG, "Refusing download: need $needed bytes, $available available")
         return "Not enough free space: ${needed / 1_048_576} MB required, " +
             "${available / 1_048_576} MB available"
     }
@@ -632,9 +784,14 @@ class ModelManager(private val config: MicroCoachingConfig) {
         }
         userPauseRequested = false  // ensure observer doesn't misread as pause
         clearPaused()
+        prefs.edit().putBoolean(KEY_USER_CANCELLED, true).apply()
         WorkManager.getInstance(config.context).cancelUniqueWork(UNIQUE_WORK_NAME)
-        findLocalModel()?.let { f ->
-            if (f.delete()) Log.w(TAG, "cancelDownload: deleted partial file ${f.name}")
+        if (rewriteEnabled) {
+            findLocalModel()?.let { f ->
+                if (f.delete()) Log.w(TAG, "cancelDownload: deleted partial file ${f.name}")
+            }
+        } else {
+            deleteEncoderFiles()
         }
         clearReadyFlag()
         lastKnownProgress = 0
@@ -653,6 +810,7 @@ class ModelManager(private val config: MicroCoachingConfig) {
         // The pause is over the moment new work is enqueued, and the flag has to go with it —
         // left set, it would later rescue an unrelated partial from deletion.
         clearPaused()
+        prefs.edit().remove(KEY_USER_CANCELLED).apply()
 
         val networkType = if (config.wifiOnlyModelDownload) {
             NetworkType.UNMETERED
@@ -677,6 +835,7 @@ class ModelManager(private val config: MicroCoachingConfig) {
                     ModelDownloadWorker.KEY_HF_URL to config.huggingFaceModelUrl,
                     ModelDownloadWorker.KEY_MODEL_ID to config.selectedModelId,
                     ModelDownloadWorker.KEY_INCLUDE_ENCODER to includeEncoder(),
+                    ModelDownloadWorker.KEY_INCLUDE_LANGUAGE_MODEL to rewriteEnabled,
                 )
             )
             .addTag(DOWNLOAD_TAG)
@@ -759,6 +918,22 @@ class ModelManager(private val config: MicroCoachingConfig) {
                             )
                         }
                         WorkInfo.State.SUCCEEDED -> {
+                            // An encoder-only run names no language model; the encoder files
+                            // on disk are the outcome.
+                            if (!rewriteEnabled) {
+                                withContext(Dispatchers.IO) {
+                                    when {
+                                        searchFilesComplete() -> emitSearchReady()
+                                        // Only a run this process watched can have failed; a
+                                        // replayed SUCCEEDED from an earlier build's download
+                                        // says nothing about the encoder.
+                                        current.isTransferInFlight() -> _state.value =
+                                            ModelState.DownloadFailed("Smarter search files incomplete after download")
+                                        else -> Log.i(TAG, "Ignoring a finished download that left no encoder")
+                                    }
+                                }
+                                return@collect
+                            }
                             // A successful download that could not fetch the encoder says so
                             // here. Recording it before the gate below is what lets Ready be
                             // announced on the language model alone rather than waiting for
@@ -770,7 +945,9 @@ class ModelManager(private val config: MicroCoachingConfig) {
                                     encoderGaveUp = true
                                 }
                             val path = info.outputData.getString(ModelDownloadWorker.KEY_FILE_PATH)
-                            val file = path?.let { File(it) }?.takeIf { it.exists() }
+                            // A request enqueued by an earlier build names no language model;
+                            // one already on disk is still the outcome.
+                            val file = path?.let { File(it) }?.takeIf { it.exists() } ?: findLocalModel()
                             if (file != null) {
                                 // The worker already validated before reporting success; re-checking
                                 // here costs milliseconds and closes the gap where a replayed
@@ -887,16 +1064,7 @@ class ModelManager(private val config: MicroCoachingConfig) {
         // The encoder came down as part of the same download and the space figure the user
         // was shown covers both, so opting out has to reclaim both. Left behind it would be
         // 176 MB the user was told they had freed.
-        config.context.getExternalFilesDir(null)?.let { dir ->
-            DownloadPlan.artifacts(config.selectedModelVariant(), includeEncoder = true)
-                .filter { it.phase == DownloadPhase.EMBEDDINGS }
-                .map { DownloadPlan.fileFor(dir, it) }
-                .forEach { encoderFile ->
-                    if (encoderFile.exists() && encoderFile.delete()) {
-                        Log.i(TAG, "deleteModelForUserOptOut: deleted ${encoderFile.name}")
-                    }
-                }
-        }
+        deleteEncoderFiles()
         encoderGaveUp = false
         clearReadyFlag()
         clearPaused()
@@ -967,6 +1135,7 @@ class ModelManager(private val config: MicroCoachingConfig) {
          */
         private const val KEY_DOWNLOAD_PAUSED = "download_paused"
         private const val KEY_DOWNLOAD_PAUSED_PROGRESS = "download_paused_progress"
+        private const val KEY_USER_CANCELLED = "download_user_cancelled"
 
         /**
          * Free space kept in reserve beyond the model's own size, so a download that just
